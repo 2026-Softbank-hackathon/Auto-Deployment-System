@@ -1,0 +1,55 @@
+$ir_version: "0.1.0"
+
+metadata:
+  name: blog-api
+  version: 2.1.0
+  description: Express + PostgreSQL 블로그 API
+  owner: camellia-team
+
+services:
+  api:
+    type: http
+    build:
+      context: .
+    command: ["node", "dist/index.js"]
+    port: 8080
+    health:
+      path: /healthz
+      expected_status: 200
+      timeout_seconds: 5
+    env:
+      - NODE_ENV
+      - DATABASE_URL
+    secrets:
+      - JWT_SECRET
+    expose: public
+    size: medium
+
+resources:
+  db:
+    type: postgres
+    version: "16"
+    plan: dev
+
+deploy:
+  profile: aws-ecs-basic
+  region: ap-northeast-2
+
+overrides:
+  aws-ecs-basic:
+    services:
+      api:
+        size: large
+
+expose:
+  domain: blog.example.com
+  tls: true
+  paths:
+    - path: /
+      service: api
+
+missing_resources_decisions:
+  - resource_name: db
+    decision: add_module
+    module_id: aws-rds-postgres-16
+    decided_at: "2026-09-30T03:00:00.000Z"

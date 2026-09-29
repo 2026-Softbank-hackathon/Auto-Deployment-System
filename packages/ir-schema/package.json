@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/schema.js",
-  "types": "dist/schema.d.ts",
+  "main": "src/schema.ts",
+  "types": "src/schema.ts",
   "exports": {
     ".": {
-      "types": "./dist/schema.d.ts",
-      "import": "./dist/schema.js"
+      "types": "./src/schema.ts",
+      "import": "./src/schema.ts"
     }
   },
   "scripts": {
@@ -19,6 +19,8 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

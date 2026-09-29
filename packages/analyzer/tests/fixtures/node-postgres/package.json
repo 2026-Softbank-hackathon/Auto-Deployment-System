@@ -1,0 +1,1 @@
+{"name":"node-postgres","version":"0.1.0","dependencies":{"express":"^4","pg":"^8"},"scripts":{"start":"node server.js"}}

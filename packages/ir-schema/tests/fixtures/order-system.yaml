@@ -1,0 +1,79 @@
+$ir_version: "0.1.0"
+
+metadata:
+  name: order-system
+  version: 0.5.0
+  description: 주문 처리 MSA — api 서버 + 비동기 주문 처리 워커
+  owner: camellia-team
+
+services:
+  api:
+    type: http
+    build:
+      dockerfile: ./services/api/Dockerfile
+      context: ./services/api
+    command: ["node", "dist/server.js"]
+    port: 3000
+    health:
+      path: /health
+      expected_status: 200
+      timeout_seconds: 3
+    env:
+      - NODE_ENV
+      - DATABASE_URL
+      - QUEUE_URL
+    secrets:
+      - API_KEY
+    expose: public
+    size: medium
+    depends_on: []
+
+  order-worker:
+    type: worker
+    build:
+      dockerfile: ./services/worker/Dockerfile
+      context: ./services/worker
+    command: ["node", "dist/worker.js"]
+    health:
+      path: /health
+      expected_status: 200
+      timeout_seconds: 5
+    env:
+      - NODE_ENV
+      - DATABASE_URL
+      - QUEUE_URL
+    expose: internal
+    size: small
+    depends_on:
+      - api
+
+resources:
+  db:
+    type: postgres
+    version: "16"
+    plan: prod
+
+deploy:
+  profile: aws-ecs-basic
+  region: ap-northeast-2
+
+overrides:
+  onprem-docker-basic:
+    services:
+      api:
+        size: small
+      order-worker:
+        size: small
+
+expose:
+  tls: true
+  paths:
+    - path: /api
+      service: api
+      port: 3000
+
+missing_resources_decisions:
+  - resource_name: db
+    decision: add_module
+    module_id: aws-rds-postgres-16
+    decided_at: "2026-09-30T04:00:00.000Z"

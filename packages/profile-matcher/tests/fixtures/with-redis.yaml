@@ -1,0 +1,17 @@
+$ir_version: "0.1.0"
+metadata:
+  name: with-redis-app
+  version: "1.0.0"
+  description: "HTTP 서비스 + redis 리소스 (aws-ecs-basic에 없음)"
+services:
+  api:
+    type: http
+    port: 3000
+    size: small
+    expose: public
+resources:
+  cache:
+    type: redis
+    plan: dev
+deploy:
+  profile: aws-ecs-basic

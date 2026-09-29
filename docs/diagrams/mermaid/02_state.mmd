@@ -1,0 +1,40 @@
+stateDiagram-v2
+state "접수" as RECV
+state "대기열" as QUEUE
+state "분석" as ANL
+state "코드 수정 승인 대기" as PAPPR
+state "빌드" as BUILD
+state "계획" as PLAN
+state "플랜 승인 대기" as PLAPPR
+state "프로비저닝" as PROV
+state "배포" as DEPLOY
+state "검증" as VERIFY
+state "진단" as DIAG
+state "롤백" as RB
+state "완료" as DONE
+state "실패" as FAIL
+state "취소" as CANCEL
+[*] --> RECV
+RECV --> QUEUE: 락 획득 실패
+QUEUE --> RECV: 락 해제
+RECV --> ANL: 락 획득
+ANL --> PAPPR
+PAPPR --> BUILD: 승인
+PAPPR --> CANCEL: 거부
+BUILD --> PLAN
+PLAN --> PLAPPR
+PLAPPR --> PROV: 승인
+PLAPPR --> CANCEL: 거부
+PROV --> DEPLOY
+DEPLOY --> VERIFY
+VERIFY --> DONE: 통과
+BUILD --> DIAG: 실패
+PROV --> DIAG: 실패
+DEPLOY --> DIAG: 실패
+VERIFY --> DIAG: 실패
+DIAG --> BUILD: 수정 승인 후 재시도
+DIAG --> RB: 재시도 한도 초과
+RB --> FAIL
+DONE --> [*]
+FAIL --> [*]
+CANCEL --> [*]

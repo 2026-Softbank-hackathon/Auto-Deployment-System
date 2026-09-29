@@ -1,0 +1,21 @@
+sequenceDiagram
+autonumber
+participant AG as 온프레미스 에이전트
+participant API as API 서버
+participant O as 오케스트레이터
+participant RG as 레지스트리
+participant K as k3s / Compose
+participant T as Cloudflare Tunnel
+AG->>API: 최초 등록 (1회용 토큰, 바깥 방향 연결만 사용)
+loop 주기적 확인 (롱 폴링)
+AG->>API: 할 일이 있는지 확인
+API-->>AG: 배포 작업 (IR, 이미지 태그, 비밀값 참조)
+end
+AG->>RG: 이미지 pull
+AG->>K: 서비스 · DB 컨테이너 적용
+AG->>T: 공개 URL 연결
+AG-->>API: 결과 · URL 보고
+API-->>O: 단계 완료 이벤트
+loop 배포 이후 계속
+AG-->>API: 로그 · 메트릭 요약 전송 (관측 게이트웨이로 전달)
+end

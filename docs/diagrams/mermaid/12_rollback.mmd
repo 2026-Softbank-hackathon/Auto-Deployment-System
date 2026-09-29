@@ -1,0 +1,22 @@
+sequenceDiagram
+autonumber
+actor U as 사용자
+participant C as 웹 대시보드
+participant A as API 서버
+participant O as 오케스트레이터
+participant PG as Postgres
+participant P as 프로비저닝 워커
+participant D as 데이터 플레인
+participant V as 검증 워커
+U->>C: 이력에서 이전 버전 선택 후 롤백
+C->>A: 롤백 요청
+A->>O: 롤백 배포 생성
+O->>PG: 환경 락 획득 · 대상 버전의 IR과 이미지 태그 조회
+O-->>C: 롤백 플랜 승인 요청 (운영 환경)
+U->>C: 승인
+O->>P: 이전 이미지로 롤아웃
+P->>D: 트래픽을 이전 버전으로 전환
+O->>V: 헬스체크
+V-->>O: 통과
+O->>PG: 이력 기록 · 락 해제
+O-->>C: 롤백 완료

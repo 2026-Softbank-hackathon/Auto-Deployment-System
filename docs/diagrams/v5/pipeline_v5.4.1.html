@@ -1,0 +1,479 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>배포 파이프라인 확대 · 소스 업로드 → AI 분석 → IR 추출 → 어댑터 연결 → 인프라 반영</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;700&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F6F8FA;--card:#FFFFFF;--line:#D5DBE3;--text:#1C2430;--muted:#5E6B7A;--edge:#7C8896;
+--cp-fill:#EFF6F2;--cp-line:#7DB596;--cp-text:#2F7A55;--pool:#9AA7B5;
+--ag-fill:#F3F0FD;--ag-line:#A99BE6;--async:#7B61D9;--prov:#D9731A;--user:#2F6FD1;
+--pg-f:#EEF3FB;--pg-l:#BCCDEA;--rd-f:#FCEFEE;--rd-l:#EBC0BB;--ob-f:#F2F4F6;--ob-l:#D2D8DF;--vt-f:#FBF4E6;--vt-l:#E4CC9C;--ai-f:#F3F0FD;--ai-l:#CFC5F1;--rg-f:#EEF6F1;--rg-l:#BCDAC8;
+--on:#5B6B7F;--obs:#1F9E89;--obs-f:#EAF6F4;--obs-l:#9FD3C8;--aws:#E07A1F;--gcp:#3B7BE0;--az:#1E8FD6;--strip:#FFFFFF;
+--gate:#C98A12;--gate-f:#FFF6E0;--gate-l:#E9C46A;--fail:#C0453A;--new:#2F7A55;--code-f:#1F2630;--code-t:#DCE3EA;--code-k:#8FC7A8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#12161C;--card:#1B212A;--line:#2E3845;--text:#E6EBF1;--muted:#9AA6B4;--edge:#8391A1;
+--cp-fill:#14231C;--cp-line:#4F8F6D;--cp-text:#7FC9A0;--pool:#566273;--ag-fill:#221D38;--ag-line:#6D5DC0;--async:#A08BF0;--prov:#F0913E;--user:#6FA2F0;
+--pg-f:#18222F;--pg-l:#34496A;--rd-f:#2A1A1A;--rd-l:#5C3531;--ob-f:#1D232B;--ob-l:#36404C;--vt-f:#2A2418;--vt-l:#5E4E2C;--ai-f:#221D38;--ai-l:#4C4285;--rg-f:#162520;--rg-l:#34594A;--strip:#1B212A;--obs:#4CC3AE;--obs-f:#15272A;--obs-l:#2F6B62;
+--gate:#E3A93A;--gate-f:#2A2414;--gate-l:#6B5424;--fail:#E0766B;--new:#4F8F6D;--code-f:#0E1217;--code-t:#DCE3EA;--code-k:#8FC7A8}}
+:root[data-theme="dark"]{--bg:#12161C;--card:#1B212A;--line:#2E3845;--text:#E6EBF1;--muted:#9AA6B4;--edge:#8391A1;
+--cp-fill:#14231C;--cp-line:#4F8F6D;--cp-text:#7FC9A0;--pool:#566273;--ag-fill:#221D38;--ag-line:#6D5DC0;--async:#A08BF0;--prov:#F0913E;--user:#6FA2F0;
+--pg-f:#18222F;--pg-l:#34496A;--rd-f:#2A1A1A;--rd-l:#5C3531;--ob-f:#1D232B;--ob-l:#36404C;--vt-f:#2A2418;--vt-l:#5E4E2C;--ai-f:#221D38;--ai-l:#4C4285;--rg-f:#162520;--rg-l:#34594A;--strip:#1B212A;--obs:#4CC3AE;--obs-f:#15272A;--obs-l:#2F6B62;
+--gate:#E3A93A;--gate-f:#2A2414;--gate-l:#6B5424;--fail:#E0766B;--new:#4F8F6D;--code-f:#0E1217;--code-t:#DCE3EA;--code-k:#8FC7A8}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans KR","Noto Sans CJK KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+.wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+svg{display:block;width:100%;min-width:1180px;margin:0 auto;height:auto;font-family:inherit}
+.bg{fill:var(--bg)}
+.card{fill:var(--card);stroke:var(--line);stroke-width:1}
+.agent{fill:var(--ag-fill);stroke:var(--ag-line);stroke-width:1.5}
+.st-pg{fill:var(--pg-f);stroke:var(--pg-l)}.st-rd{fill:var(--rd-f);stroke:var(--rd-l)}.st-ob{fill:var(--ob-f);stroke:var(--ob-l)}
+.st-vt{fill:var(--vt-f);stroke:var(--vt-l)}.st-ai{fill:var(--ai-f);stroke:var(--ai-l)}.st-rg{fill:var(--rg-f);stroke:var(--rg-l)}
+.cp{fill:var(--cp-fill);stroke:var(--cp-line);stroke-width:1.5;stroke-dasharray:7 6}
+.pool{fill:none;stroke:var(--pool);stroke-width:1.2;stroke-dasharray:5 5}
+.env{fill:var(--card);stroke-width:1.5}
+.env-on{stroke:var(--on)}.env-aws{stroke:var(--aws)}.env-gcp{stroke:var(--gcp)}.env-az{stroke:var(--az)}
+.bd-on{fill:var(--on)}.bd-aws{fill:var(--aws)}.bd-gcp{fill:var(--gcp)}.bd-az{fill:var(--az)}
+.dot-on{fill:var(--on)}.dot-aws{fill:var(--aws)}.dot-gcp{fill:var(--gcp)}.dot-az{fill:var(--az)}
+.strip{fill:var(--strip);stroke:var(--line)}
+.obsc{fill:var(--obs-f);stroke:var(--obs-l)}
+.gatec{fill:var(--gate-f);stroke:var(--gate-l);stroke-width:1.5}
+.failc{fill:var(--rd-f);stroke:var(--rd-l);stroke-width:1.2}
+.codec{fill:var(--code-f);stroke:none}
+.newb{fill:var(--new)}.p0b{fill:var(--new)}.p1b{fill:var(--gate)}.p2b{fill:#8A95A3}.optb{fill:var(--muted)}
+.optc{fill:var(--card);stroke:var(--pool);stroke-width:1.3;stroke-dasharray:6 4}
+.h1{font-size:34px;font-weight:700;fill:var(--text)}
+.h2{font-size:17px;fill:var(--muted)}
+.ttl{font-size:19px;font-weight:700;fill:var(--text)}
+.ttl-s{font-size:16px;font-weight:700;fill:var(--text)}
+.sub{font-size:14.5px;fill:var(--muted)}
+.subd{font-size:14.5px;fill:var(--text)}
+.tag{font-size:13px;fill:var(--muted);font-weight:700}
+.cpt{font-size:22px;font-weight:700;fill:var(--cp-text)}
+.pt{font-size:14.5px;font-weight:700;fill:var(--muted)}
+.stt{font-size:17px;font-weight:700;fill:var(--cp-text)}
+.lbl{font-size:13.5px;fill:var(--muted);font-weight:700}
+.leg{font-size:14.5px;fill:var(--muted)}
+.bdt{font-size:12.5px;font-weight:700;fill:#fff}
+.newt{font-size:11px;font-weight:700;fill:#fff;letter-spacing:.04em}
+.gatet{font-size:16px;font-weight:700;fill:var(--gate)}
+.failt{font-size:15px;font-weight:700;fill:var(--fail)}
+.code{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-t)}
+.codek{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-k)}
+.mono{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13px;fill:var(--muted)}
+.stn{font-size:15px;font-weight:700;fill:#fff}
+.e-api{stroke:var(--edge);stroke-width:1.5;fill:none}
+.e-async{stroke:var(--async);stroke-width:1.6;stroke-dasharray:6 4;fill:none}
+.e-prov{stroke:var(--prov);stroke-width:2;fill:none}
+.e-user{stroke:var(--user);stroke-width:2;fill:none}
+.e-obs{stroke:var(--obs);stroke-width:1.8;stroke-dasharray:3 3;fill:none}
+.e-gate{stroke:var(--gate);stroke-width:2;fill:none}
+.e-fail{stroke:var(--fail);stroke-width:1.8;stroke-dasharray:7 5;fill:none}
+.mk-e-obs{fill:var(--obs)}.mk-e-api{fill:var(--edge)}.mk-e-async{fill:var(--async)}.mk-e-prov{fill:var(--prov)}.mk-e-user{fill:var(--user)}.mk-e-gate{fill:var(--gate)}.mk-e-fail{fill:var(--fail)}
+</style></head><body><div class="wrap">
+<svg viewBox="0 0 2000 2401" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="dt dd">
+<title id="dt">배포 파이프라인 확대 · 소스 업로드 → AI 분석 → IR 추출 → 어댑터 연결 → 인프라 반영</title><desc id="dd">P0 핵심 흐름 5단계: 소스 입력, 감지와 IR 생성, 프로필 선택, 1회 빌드와 어댑터 연결, 두 환경 배포와 헬스체크</desc>
+<defs><marker id="m-e-api" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-api"/></marker><marker id="m-e-async" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-async"/></marker><marker id="m-e-prov" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-prov"/></marker><marker id="m-e-user" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-user"/></marker><marker id="m-e-obs" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-obs"/></marker><marker id="m-e-gate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-gate"/></marker><marker id="m-e-fail" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-fail"/></marker></defs>
+<rect width="2000" height="2401" class="bg"/>
+<rect x="48" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="436" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="824" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="1212" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="1600" y="256" width="348" height="1367" rx="16" class="pool"/>
+<text x="48" y="70" class="h1" text-anchor="start">배포 파이프라인 확대</text>
+<text x="48" y="106" class="h2" text-anchor="start">P0: 대상 선택 → 소스 입력 → IR 생성 → 프로필 대조 → 1회 빌드 → 두 환경 배포 · 헬스체크  |  v5.4.1</text>
+<line x1="1020" y1="50" x2="1070" y2="50" class="e-api"/>
+<text x="1086" y="55" class="leg" text-anchor="start">단계 내 흐름 · 산출물 전달</text>
+<line x1="1020" y1="84" x2="1070" y2="84" class="e-async"/>
+<text x="1086" y="89" class="leg" text-anchor="start">작업 큐 (Postgres SKIP LOCKED)</text>
+<path d="M1045 107 L1056 118 L1045 129 L1034 118 Z" class="gatec"/>
+<text x="1086" y="123" class="leg" text-anchor="start">사람 승인 게이트 (웹 · CLI)</text>
+<line x1="1350" y1="50" x2="1400" y2="50" class="e-prov"/>
+<text x="1416" y="55" class="leg" text-anchor="start">인프라 반영</text>
+<line x1="1350" y1="84" x2="1400" y2="84" class="e-fail"/>
+<text x="1416" y="89" class="leg" text-anchor="start">실패 → 진단 → 재시도</text>
+<rect x="1350" y="108" width="27" height="20" rx="10" class="p0b"/>
+<text x="1364" y="122.5" class="newt" text-anchor="middle">P0</text>
+<text x="1416" y="123" class="leg" text-anchor="start">데모 핵심 흐름</text>
+<rect x="1680" y="40" width="27" height="20" rx="10" class="p1b"/>
+<text x="1694" y="54.5" class="newt" text-anchor="middle">P1</text>
+<text x="1746" y="55" class="leg" text-anchor="start">P0 안정화 후</text>
+<rect x="1680" y="74" width="27" height="20" rx="10" class="p2b"/>
+<text x="1694" y="88.5" class="newt" text-anchor="middle">P2</text>
+<text x="1746" y="89" class="leg" text-anchor="start">시간 남으면</text>
+<polygon points="48,150 418,150 436,186.0 418,222 48,222" class="cp" style="stroke-dasharray:none"/>
+<circle cx="78" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="78" y="191.5" class="stn" text-anchor="middle">1</text>
+<text x="108" y="182" class="ttl" text-anchor="start">대상 선택 · 소스 입력</text>
+<text x="108" y="206" class="sub" text-anchor="start">웹 + API 서버</text>
+<polygon points="436,150 806,150 824,186.0 806,222 436,222 454,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="476" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="476" y="191.5" class="stn" text-anchor="middle">2</text>
+<text x="506" y="182" class="ttl" text-anchor="start">감지 · IR 생성</text>
+<text x="506" y="206" class="sub" text-anchor="start">분석 핸들러 + 사용자 + AI</text>
+<polygon points="824,150 1194,150 1212,186.0 1194,222 824,222 842,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="864" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="864" y="191.5" class="stn" text-anchor="middle">3</text>
+<text x="894" y="182" class="ttl" text-anchor="start">IR 검증 · 프로필 대조</text>
+<text x="894" y="206" class="sub" text-anchor="start">오케스트레이터 + 프로필</text>
+<polygon points="1212,150 1582,150 1600,186.0 1582,222 1212,222 1230,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="1252" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="1252" y="191.5" class="stn" text-anchor="middle">4</text>
+<text x="1282" y="182" class="ttl" text-anchor="start">빌드 · 어댑터 연결</text>
+<text x="1282" y="206" class="sub" text-anchor="start">빌드 · 프로비저닝 핸들러</text>
+<polygon points="1600,150 1948,150 1948,186.0 1948,222 1600,222 1618,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="1640" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="1640" y="191.5" class="stn" text-anchor="middle">5</text>
+<text x="1670" y="182" class="ttl" text-anchor="start">배포 · 검증</text>
+<text x="1670" y="206" class="sub" text-anchor="start">프로비저닝 · 검증 핸들러</text>
+<rect x="62" y="276" width="320" height="140" rx="12" class="card" />
+<text x="84" y="310" class="ttl-s" text-anchor="start" data-fit="370">배포 대상 선택 (필수)</text>
+<rect x="250.16000000000003" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="264" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="308" class="tag" text-anchor="end">USR</text>
+<text x="84" y="340" class="sub" text-anchor="start" data-fit="370">AWS · 온프레미스 중 1개 이상</text>
+<text x="84" y="365" class="sub" text-anchor="start" data-fit="370">기본값 없음 · 선택 전 진행 불가</text>
+<text x="84" y="390" class="sub" text-anchor="start" data-fit="370">선택 = 환경 프로필 확정</text>
+<rect x="62" y="450" width="320" height="140" rx="12" class="card" />
+<text x="84" y="484" class="ttl-s" text-anchor="start" data-fit="370">입력 채널</text>
+<rect x="161.2" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="175" y="482.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="482" class="tag" text-anchor="end">USR</text>
+<text x="84" y="514" class="sub" text-anchor="start" data-fit="370">웹: zip 업로드 (P0)</text>
+<text x="84" y="539" class="sub" text-anchor="start" data-fit="370">CLI · CI: softbank deploy (P1)</text>
+<text x="84" y="564" class="sub" text-anchor="start" data-fit="370">MCP: Claude Code 호출 (P2)</text>
+<rect x="62" y="624" width="320" height="190" rx="12" class="card" />
+<text x="84" y="658" class="ttl-s" text-anchor="start" data-fit="370">API 서버</text>
+<rect x="161.51999999999998" y="642" width="27" height="20" rx="10" class="p0b"/>
+<text x="175" y="656.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="656" class="tag" text-anchor="end">API</text>
+<text x="84" y="688" class="sub" text-anchor="start" data-fit="370">인증 · 크기 · 형식 검증</text>
+<text x="84" y="713" class="sub" text-anchor="start" data-fit="370">소스 zip → 오브젝트 스토리지</text>
+<text x="84" y="738" class="sub" text-anchor="start" data-fit="370">source_versions (sha256) 기록</text>
+<text x="84" y="763" class="sub" text-anchor="start" data-fit="370">deployments = received</text>
+<text x="84" y="788" class="sub" text-anchor="start" data-fit="370">+ analyze job (한 트랜잭션)</text>
+<rect x="62" y="848" width="320" height="140" rx="12" class="card" />
+<text x="84" y="882" class="ttl-s" text-anchor="start" data-fit="370">환경변수 · 시크릿 입력</text>
+<rect x="253.36" y="866" width="27" height="20" rx="10" class="p1b"/>
+<text x="267" y="880.5" class="newt" text-anchor="middle">P1</text>
+<text x="362" y="880" class="tag" text-anchor="end">SEC</text>
+<text x="84" y="912" class="sub" text-anchor="start" data-fit="370">값은 암호화 저장소로만</text>
+<text x="84" y="937" class="sub" text-anchor="start" data-fit="370">응답은 참조만: secret://…</text>
+<text x="84" y="962" class="sub" text-anchor="start" data-fit="370">AI에는 키 이름만 전달</text>
+<rect x="450" y="276" width="320" height="115" rx="12" class="card" />
+<text x="472" y="310" class="ttl-s" text-anchor="start" data-fit="758">소스 스테이징</text>
+<rect x="580.56" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="594" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="308" class="tag" text-anchor="end">ANL</text>
+<text x="472" y="340" class="sub" text-anchor="start" data-fit="758">stageSource(deploymentId)</text>
+<text x="472" y="365" class="sub" text-anchor="start" data-fit="758">배포별 소스 카피 · 원본 오염 없음</text>
+<rect x="450" y="425" width="320" height="140" rx="12" class="card" />
+<text x="472" y="459" class="ttl-s" text-anchor="start" data-fit="758">① 서비스 분리 · 규칙 감지</text>
+<rect x="666.0" y="443" width="27" height="20" rx="10" class="p0b"/>
+<text x="680" y="457.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="457" class="tag" text-anchor="end">ANL</text>
+<text x="472" y="489" class="sub" text-anchor="start" data-fit="758">폴더 · compose 기준 서비스 분리</text>
+<text x="472" y="514" class="sub" text-anchor="start" data-fit="758">서비스마다 실행 방식 (http · worker …)</text>
+<text x="472" y="539" class="sub" text-anchor="start" data-fit="758">포트 · 명령 · 헬스 경로 · env 이름</text>
+<rect x="450" y="599" width="320" height="115" rx="12" class="card" />
+<text x="472" y="633" class="ttl-s" text-anchor="start" data-fit="758">② 사용자 입력</text>
+<rect x="585.04" y="617" width="27" height="20" rx="10" class="p0b"/>
+<text x="599" y="631.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="631" class="tag" text-anchor="end">WEB</text>
+<text x="472" y="663" class="sub" text-anchor="start" data-fit="758">감지 못 한 칸 · 틀린 값 수정</text>
+<text x="472" y="688" class="sub" text-anchor="start" data-fit="758">공개 여부 · 크기 (small / medium)</text>
+<rect x="450" y="748" width="320" height="140" rx="12" class="agent" />
+<text x="472" y="782" class="ttl-s" text-anchor="start" data-fit="758">③ AI 빈칸 채우기</text>
+<rect x="610.64" y="766" width="27" height="20" rx="10" class="p0b"/>
+<text x="624" y="780.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="780" class="tag" text-anchor="end">AGT</text>
+<text x="472" y="812" class="sub" text-anchor="start" data-fit="758">남은 unknown만 tool_use</text>
+<text x="472" y="837" class="sub" text-anchor="start" data-fit="758">prompt caching · 시크릿 값 미전송</text>
+<text x="472" y="862" class="sub" text-anchor="start" data-fit="758">칸마다 출처 표시 (감지 · 입력 · AI)</text>
+<rect x="450" y="922" width="320" height="164" rx="12" class="gatec" />
+<path d="M478 938 L492 952 L478 966 L464 952 Z" style="fill:var(--gate)"/>
+<text x="478" y="957" class="stn" text-anchor="middle">1</text>
+<text x="504" y="958" class="gatet" text-anchor="start">승인 게이트 1 · patch (P1)</text>
+<text x="472" y="988" class="subd" text-anchor="start" data-fit="764">SQLite+Drizzle → Postgres (규칙)</text>
+<text x="472" y="1013" class="subd" text-anchor="start" data-fit="764">raw SQL은 위치 표시 + 경고</text>
+<text x="472" y="1038" class="subd" text-anchor="start" data-fit="764">Dockerfile 없음: AI 생성 (P0는 Railpack)</text>
+<text x="472" y="1063" class="subd" text-anchor="start" data-fit="764">diff 승인 → 배포본에만 적용</text>
+<rect x="838" y="276" width="320" height="381" rx="12" class="codec" />
+<text x="858" y="308" style="fill:var(--code-t);font-size:16px;font-weight:700">IR · 앱 요구사항만 (YAML)</text>
+<text x="858" y="340" xml:space="preserve" data-fit="1152"><tspan class="codek">name: </tspan><tspan class="code">todo-app</tspan><tspan class="codek">  version: </tspan><tspan class="code">1.2.0</tspan></text>
+<text x="858" y="361" xml:space="preserve" data-fit="1152"><tspan class="codek">services:</tspan></text>
+<text x="858" y="382" xml:space="preserve" data-fit="1152"><tspan class="codek">  api:</tspan></text>
+<text x="858" y="403" xml:space="preserve" data-fit="1152"><tspan class="codek">    type: </tspan><tspan class="code">http</tspan></text>
+<text x="858" y="424" xml:space="preserve" data-fit="1152"><tspan class="codek">    build: </tspan><tspan class="code">./Dockerfile</tspan></text>
+<text x="858" y="445" xml:space="preserve" data-fit="1152"><tspan class="codek">    command: </tspan><tspan class="code">[node, server.js]</tspan></text>
+<text x="858" y="466" xml:space="preserve" data-fit="1152"><tspan class="codek">    port: </tspan><tspan class="code">3000</tspan></text>
+<text x="858" y="487" xml:space="preserve" data-fit="1152"><tspan class="codek">    health: </tspan><tspan class="code">/health → 200</tspan></text>
+<text x="858" y="508" xml:space="preserve" data-fit="1152"><tspan class="codek">    env: </tspan><tspan class="code">[NODE_ENV]</tspan></text>
+<text x="858" y="529" xml:space="preserve" data-fit="1152"><tspan class="codek">    secrets: </tspan><tspan class="code">[JWT_SECRET]  # P1</tspan></text>
+<text x="858" y="550" xml:space="preserve" data-fit="1152"><tspan class="codek">    expose: </tspan><tspan class="code">public</tspan></text>
+<text x="858" y="571" xml:space="preserve" data-fit="1152"><tspan class="codek">    size: </tspan><tspan class="code">small</tspan></text>
+<text x="858" y="592" xml:space="preserve" data-fit="1152"><tspan class="codek">resources:</tspan></text>
+<text x="858" y="613" xml:space="preserve" data-fit="1152"><tspan class="codek">  db: </tspan><tspan class="code">postgres  # 애드온 (P1)</tspan></text>
+<text x="858" y="634" xml:space="preserve" data-fit="1152"><tspan class="codek">  cache: </tspan><tspan class="code">redis  # 프로필에 없음</tspan></text>
+<rect x="838" y="691" width="320" height="115" rx="12" class="card" />
+<text x="860" y="725" class="ttl-s" text-anchor="start" data-fit="1146">스키마 검증</text>
+<rect x="952.88" y="709" width="27" height="20" rx="10" class="p0b"/>
+<text x="966" y="723.5" class="newt" text-anchor="middle">P0</text>
+<text x="1138" y="723" class="tag" text-anchor="end">ORC</text>
+<text x="860" y="755" class="sub" text-anchor="start" data-fit="1146">IrSchema.parse() (Zod)</text>
+<text x="860" y="780" class="sub" text-anchor="start" data-fit="1146">ir_versions 저장 · IR diff 뷰</text>
+<rect x="838" y="840" width="320" height="134" rx="12" class="card" />
+<text x="860" y="874" class="ttl-s" text-anchor="start" data-fit="1152">선택한 프로필 (검증된 골격)</text>
+<rect x="860" y="892" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="884.25" y="910" class="bdt" text-anchor="middle">AWS</text>
+<text x="918" y="911" class="sub" text-anchor="start" data-fit="1152">aws-ecs-basic: VPC · ALB · ECS</text>
+<rect x="860" y="930" width="39.0" height="26" rx="6" class="bd-on" />
+<text x="879.5" y="948" class="bdt" text-anchor="middle">ON</text>
+<text x="918" y="949" class="sub" text-anchor="start" data-fit="1152">onprem-docker-basic: Docker</text>
+<rect x="838" y="1008" width="320" height="140" rx="12" class="card" />
+<text x="860" y="1042" class="ttl-s" text-anchor="start" data-fit="1146">capabilities 비교</text>
+<rect x="994.16" y="1026" width="27" height="20" rx="10" class="p0b"/>
+<text x="1008" y="1040.5" class="newt" text-anchor="middle">P0</text>
+<text x="1138" y="1040" class="tag" text-anchor="end">PRF</text>
+<text x="860" y="1072" class="sub" text-anchor="start" data-fit="1146">IR 서비스 유형 · 리소스 ↔ 프로필</text>
+<text x="860" y="1097" class="sub" text-anchor="start" data-fit="1146">http ✓ · postgres ✓ (P1 애드온)</text>
+<text x="860" y="1122" class="sub" text-anchor="start" data-fit="1146">redis ✕ → 빠진 요소로 표시</text>
+<rect x="838" y="1182" width="320" height="140" rx="12" class="card" />
+<text x="860" y="1216" class="ttl-s" text-anchor="start" data-fit="1146">빠진 요소 알림 · 결정</text>
+<rect x="1018.1600000000001" y="1200" width="27" height="20" rx="10" class="p0b"/>
+<text x="1032" y="1214.5" class="newt" text-anchor="middle">P0</text>
+<text x="1138" y="1214" class="tag" text-anchor="end">PRF</text>
+<text x="860" y="1246" class="sub" text-anchor="start" data-fit="1146">redis: 프로필에 없음 (먼저 알림)</text>
+<text x="860" y="1271" class="sub" text-anchor="start" data-fit="1146">[확장 모듈 추가] / [제외하고 진행]</text>
+<text x="860" y="1296" class="sub" text-anchor="start" data-fit="1146">결정은 IR에 기록 → 재질문 없음</text>
+<rect x="838" y="1356" width="320" height="114" rx="12" class="gatec" />
+<path d="M866 1372 L880 1386 L866 1400 L852 1386 Z" style="fill:var(--gate)"/>
+<text x="866" y="1391" class="stn" text-anchor="middle">2</text>
+<text x="892" y="1392" class="gatet" text-anchor="start">승인 게이트 2 · target</text>
+<text x="860" y="1422" class="subd" text-anchor="start" data-fit="1152">프로필 · 빠진 요소 결정 확정</text>
+<text x="860" y="1447" class="subd" text-anchor="start" data-fit="1152">확정 직후 env_lock 획득</text>
+<rect x="1226" y="276" width="320" height="140" rx="12" class="card" />
+<text x="1248" y="310" class="ttl-s" text-anchor="start" data-fit="1534">이미지 1회 빌드</text>
+<rect x="1369.68" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1383" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="308" class="tag" text-anchor="end">BLD</text>
+<text x="1248" y="340" class="sub" text-anchor="start" data-fit="1534">BuildKit · linux/amd64</text>
+<text x="1248" y="365" class="sub" text-anchor="start" data-fit="1534">Dockerfile 없으면 Railpack 빌드</text>
+<text x="1248" y="390" class="sub" text-anchor="start" data-fit="1534">ECR 푸시 → digest 하나 · 두 환경 공유</text>
+<rect x="1226" y="450" width="320" height="140" rx="12" class="card" />
+<text x="1248" y="484" class="ttl-s" text-anchor="start" data-fit="1534">어댑터 연결</text>
+<rect x="1340.88" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="1354" y="482.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="482" class="tag" text-anchor="end">PRV</text>
+<text x="1248" y="514" class="sub" text-anchor="start" data-fit="1534">IR 값 → 프로필 모듈 변수</text>
+<text x="1248" y="539" class="sub" text-anchor="start" data-fit="1534">port · health · size → 실행 사양</text>
+<text x="1248" y="564" class="sub" text-anchor="start" data-fit="1534">expose → ALB · Tunnel</text>
+<rect x="1226" y="624" width="320" height="192" rx="12" class="codec" />
+<text x="1246" y="656" style="fill:var(--code-t);font-size:16px;font-weight:700">확장 모듈 연결 (P1: 팀 애드온)</text>
+<text x="1246" y="688" xml:space="preserve" data-fit="1540"><tspan class="codek">module "addon_redis" {</tspan></text>
+<text x="1246" y="709" xml:space="preserve" data-fit="1540"><tspan class="codek">  source = </tspan><tspan class="code">./addons/redis (검증됨)</tspan></text>
+<text x="1246" y="730" xml:space="preserve" data-fit="1540"><tspan class="codek">  vpc_id = </tspan><tspan class="code">profile.vpc_id</tspan></text>
+<text x="1246" y="751" xml:space="preserve" data-fit="1540"><tspan class="codek">  subnet_ids = </tspan><tspan class="code">profile.subnets</tspan></text>
+<text x="1246" y="772" xml:space="preserve" data-fit="1540"><tspan class="codek">}</tspan></text>
+<text x="1246" y="793" xml:space="preserve" data-fit="1540"><tspan class="code"># 출력 redis_url → 앱 env REDIS_URL</tspan></text>
+<rect x="1226" y="850" width="320" height="165" rx="12" class="card" />
+<text x="1248" y="884" class="ttl-s" text-anchor="start" data-fit="1534">모듈 출처 · 우선순위</text>
+<rect x="1401.68" y="868" width="27" height="20" rx="10" class="p1b"/>
+<text x="1415" y="882.5" class="newt" text-anchor="middle">P1</text>
+<text x="1526" y="882" class="tag" text-anchor="end">PRV</text>
+<text x="1248" y="914" class="sub" text-anchor="start" data-fit="1534">P1 ① 팀 애드온 (검증됨 · AI 없음)</text>
+<text x="1248" y="939" class="sub" text-anchor="start" data-fit="1534">P2 ② Registry 허용 목록 · AI는 입력값만</text>
+<text x="1248" y="964" class="sub" text-anchor="start" data-fit="1534">P2 ③ 사용자 정의 모듈</text>
+<text x="1248" y="989" class="sub" text-anchor="start" data-fit="1534">P2 ④ AI 생성 (최후) · ②~④ 검증 안 됨</text>
+<rect x="1226" y="1049" width="320" height="134" rx="12" class="card" />
+<text x="1248" y="1083" class="ttl-s" text-anchor="start" data-fit="1540">프로필 → 실행 도구</text>
+<rect x="1248" y="1101" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="1272.25" y="1119" class="bdt" text-anchor="middle">AWS</text>
+<text x="1306" y="1120" class="sub" text-anchor="start" data-fit="1540">Terraform 모듈 (ECS · ALB)</text>
+<rect x="1248" y="1139" width="39.0" height="26" rx="6" class="bd-on" />
+<text x="1267.5" y="1157" class="bdt" text-anchor="middle">ON</text>
+<text x="1306" y="1158" class="sub" text-anchor="start" data-fit="1540">Compose 렌더 → 에이전트</text>
+<rect x="1226" y="1217" width="320" height="140" rx="12" class="card" />
+<text x="1248" y="1251" class="ttl-s" text-anchor="start" data-fit="1534">plan()</text>
+<rect x="1306.0" y="1235" width="27" height="20" rx="10" class="p0b"/>
+<text x="1320" y="1249.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="1249" class="tag" text-anchor="end">PRV</text>
+<text x="1248" y="1281" class="sub" text-anchor="start" data-fit="1534">스택별 S3 state key</text>
+<text x="1248" y="1306" class="sub" text-anchor="start" data-fit="1534">init -backend-config · plan -out</text>
+<text x="1248" y="1331" class="sub" text-anchor="start" data-fit="1534">(P2) 사용자 모듈: validate 먼저</text>
+<rect x="1226" y="1391" width="320" height="114" rx="12" class="gatec" />
+<path d="M1254 1407 L1268 1421 L1254 1435 L1240 1421 Z" style="fill:var(--gate)"/>
+<text x="1254" y="1426" class="stn" text-anchor="middle">3</text>
+<text x="1280" y="1427" class="gatet" text-anchor="start">승인 게이트 3 · plan</text>
+<text x="1248" y="1457" class="subd" text-anchor="start" data-fit="1540">골격 + 확장 모듈 리소스를 한 번에 확인</text>
+<text x="1248" y="1482" class="subd" text-anchor="start" data-fit="1540">Plan: 9 to add · 0 change · 0 destroy</text>
+<rect x="1614" y="276" width="320" height="140" rx="12" class="card" />
+<text x="1636" y="310" class="ttl-s" text-anchor="start" data-fit="1922">apply</text>
+<rect x="1685.36" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1699" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="308" class="tag" text-anchor="end">PRV</text>
+<text x="1636" y="340" class="sub" text-anchor="start" data-fit="1922">terraform apply plan.bin (S3 락)</text>
+<text x="1636" y="365" class="sub" text-anchor="start" data-fit="1922">온프레미스: 에이전트 롱 폴링 수신</text>
+<text x="1636" y="390" class="sub" text-anchor="start" data-fit="1922">두 환경 모두 같은 digest pull</text>
+<rect x="1614" y="450" width="320" height="172" rx="12" class="card" />
+<text x="1636" y="484" class="ttl-s" text-anchor="start" data-fit="1928">롤아웃</text>
+<rect x="1636" y="502" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="1660.25" y="520" class="bdt" text-anchor="middle">AWS</text>
+<text x="1694" y="521" class="sub" text-anchor="start" data-fit="1928">P0: ECS 롤링 + 서킷 브레이커</text>
+<rect x="1636" y="540" width="39.0" height="26" rx="6" class="bd-on" />
+<text x="1655.5" y="558" class="bdt" text-anchor="middle">ON</text>
+<text x="1694" y="559" class="sub" text-anchor="start" data-fit="1928">P0: 헬스 게이트 교체</text>
+<rect x="1636" y="578" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="1660.25" y="596" class="bdt" text-anchor="middle">AWS</text>
+<text x="1694" y="597" class="sub" text-anchor="start" data-fit="1928">P2: blue/green · 카나리</text>
+<rect x="1614" y="656" width="320" height="140" rx="12" class="card" />
+<text x="1636" y="690" class="ttl-s" text-anchor="start" data-fit="1922">DB 바인딩</text>
+<rect x="1718.64" y="674" width="27" height="20" rx="10" class="p1b"/>
+<text x="1732" y="688.5" class="newt" text-anchor="middle">P1</text>
+<text x="1914" y="688" class="tag" text-anchor="end">PRV</text>
+<text x="1636" y="720" class="sub" text-anchor="start" data-fit="1922">RDS · Postgres 컨테이너</text>
+<text x="1636" y="745" class="sub" text-anchor="start" data-fit="1922">DATABASE_URL 하나로 주입</text>
+<text x="1636" y="770" class="sub" text-anchor="start" data-fit="1922">마이그레이션 명령 선실행</text>
+<rect x="1614" y="830" width="320" height="115" rx="12" class="card" />
+<text x="1636" y="864" class="ttl-s" text-anchor="start" data-fit="1922">헬스체크</text>
+<rect x="1708.72" y="848" width="27" height="20" rx="10" class="p0b"/>
+<text x="1722" y="862.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="862" class="tag" text-anchor="end">VRF</text>
+<text x="1636" y="894" class="sub" text-anchor="start" data-fit="1922">/health → 200 연속 3회</text>
+<text x="1636" y="919" class="sub" text-anchor="start" data-fit="1922">P1: 스모크 · P2: k6 · 카나리</text>
+<rect x="1614" y="979" width="320" height="115" rx="12" class="st-rg" />
+<text x="1636" y="1013" class="ttl-s" text-anchor="start" data-fit="1922">완료</text>
+<rect x="1677.36" y="997" width="27" height="20" rx="10" class="p0b"/>
+<text x="1691" y="1011.5" class="newt" text-anchor="middle">P0</text>
+<text x="1636" y="1043" class="sub" text-anchor="start" data-fit="1922">AWS URL + 온프레미스 URL</text>
+<text x="1636" y="1068" class="sub" text-anchor="start" data-fit="1922">env_lock 해제 · succeeded</text>
+<rect x="1614" y="1128" width="320" height="140" rx="12" class="optc" />
+<text x="1636" y="1162" class="ttl-s" text-anchor="start" data-fit="1922">환경 전환</text>
+<rect x="1713.2" y="1146" width="27" height="20" rx="10" class="p2b"/>
+<text x="1727" y="1160.5" class="newt" text-anchor="middle">P2</text>
+<text x="1914" y="1160" class="tag" text-anchor="end">SW</text>
+<text x="1636" y="1192" class="sub" text-anchor="start" data-fit="1922">고정 도메인 → 스위치 대상 변경</text>
+<text x="1636" y="1217" class="sub" text-anchor="start" data-fit="1922">장애 감지 시 자동 (상태 없는 앱)</text>
+<text x="1636" y="1242" class="sub" text-anchor="start" data-fit="1922">옛 환경 정리 · 이력 기록</text>
+<path d="M222 418 L222 446" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 592 L222 620" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 816 L222 844" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 990 L222 1541" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 393 L610 421" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 567 L610 595" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 716 L610 744" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 890 L610 918" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 1088 L610 1541" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 659 L998 687" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 808 L998 836" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 976 L998 1004" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 1150 L998 1178" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 1324 L998 1352" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 1472 L998 1541" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 418 L1386 446" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 592 L1386 620" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 818 L1386 846" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 1017 L1386 1045" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 1185 L1386 1213" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 1359 L1386 1387" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 1507 L1386 1541" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 418 L1774 446" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 624 L1774 652" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 798 L1774 826" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 947 L1774 975" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 1096 L1774 1124" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 1270 L1774 1541" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="62" y="1545" width="320" height="58" rx="10" class="st-pg" />
+<text x="82" y="1569" class="lbl" text-anchor="start">산출물</text>
+<text x="82" y="1591" class="subd" text-anchor="start" data-fit="374">source_version · deployment #42</text>
+<path d="M382 1574 L446 1574" class="e-async" marker-end="url(#m-e-async)"/>
+<rect x="450" y="1545" width="320" height="58" rx="10" class="st-pg" />
+<text x="470" y="1569" class="lbl" text-anchor="start">산출물</text>
+<text x="470" y="1591" class="subd" text-anchor="start" data-fit="762">IR 초안 (감지 + 입력 + AI)</text>
+<path d="M770 1574 L834 1574" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="838" y="1545" width="320" height="58" rx="10" class="st-pg" />
+<text x="858" y="1569" class="lbl" text-anchor="start">산출물</text>
+<text x="858" y="1591" class="subd" text-anchor="start" data-fit="1150">검증된 IR · 확정 프로필</text>
+<path d="M1158 1574 L1222 1574" class="e-async" marker-end="url(#m-e-async)"/>
+<rect x="1226" y="1545" width="320" height="58" rx="10" class="st-pg" />
+<text x="1246" y="1569" class="lbl" text-anchor="start">산출물</text>
+<text x="1246" y="1591" class="subd" text-anchor="start" data-fit="1538">image digest · 승인된 plan</text>
+<path d="M1546 1574 L1610 1574" class="e-prov" marker-end="url(#m-e-prov)"/>
+<rect x="1614" y="1545" width="320" height="58" rx="10" class="st-pg" />
+<text x="1634" y="1569" class="lbl" text-anchor="start">결과</text>
+<text x="1634" y="1591" class="subd" text-anchor="start" data-fit="1926">두 환경 URL · (P2) 고정 도메인</text>
+<text x="416" y="1535" class="lbl" text-anchor="middle">큐</text>
+<text x="1192" y="1535" class="lbl" text-anchor="middle">큐</text>
+<rect x="436" y="1659" width="1512" height="118" rx="14" class="failc" />
+<text x="462" y="1695" class="failt" text-anchor="start">실패 경로 · 어느 단계든</text>
+<text x="462" y="1725" class="subd" text-anchor="start" data-fit="1928">P0: 실패 단계에서 멈추고 로그 + 다음 행동(hint) 표시 · AWS는 ECS 서킷 브레이커가 이전 버전으로 자동 롤백 · 락은 lease 만료로 해제</text>
+<text x="462" y="1753" class="sub" text-anchor="start" data-fit="1928">P1: AI 진단 (로그 꼬리 + 설정 파일, 시크릿 값 제외) → 패치 초안 → 승인 → 새 source_version으로 재시도 (최대 3회) → 초과 시 failed</text>
+<path d="M1132 1625 L1132 1655" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M1520 1625 L1520 1655" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M1908 1625 L1908 1655" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M476 1657 L476 1607" class="e-fail" marker-end="url(#m-e-fail)"/>
+<text x="488" y="1647" class="failt" text-anchor="start">재시도</text>
+<rect x="48" y="1817" width="1904" height="200" rx="14" class="strip" />
+<text x="72" y="1851" class="stt" text-anchor="start">오케스트레이터 상태</text>
+<text x="242.7" y="1851" class="sub" text-anchor="start">16상태 중 정상 경로 · 각 전이는 Postgres 한 트랜잭션</text>
+<rect x="62" y="1875" width="87.2" height="24" rx="12" class="st-ob" />
+<text x="73" y="1892" class="mono" text-anchor="start" data-fit="396">received</text>
+<rect x="450" y="1875" width="95.10000000000001" height="24" rx="12" class="st-ob" />
+<text x="461" y="1892" class="mono" text-anchor="start" data-fit="784">analyzing</text>
+<rect x="450" y="1907" width="245.20000000000002" height="24" rx="12" class="st-ob" />
+<text x="461" y="1924" class="mono" text-anchor="start" data-fit="784">(P1) awaiting_patch_approval</text>
+<rect x="838" y="1875" width="245.20000000000002" height="24" rx="12" class="st-ob" />
+<text x="849" y="1892" class="mono" text-anchor="start" data-fit="1172">awaiting_target_confirmation</text>
+<rect x="838" y="1907" width="71.4" height="24" rx="12" class="st-ob" />
+<text x="849" y="1924" class="mono" text-anchor="start" data-fit="1172">queued</text>
+<rect x="1226" y="1875" width="87.2" height="24" rx="12" class="st-ob" />
+<text x="1237" y="1892" class="mono" text-anchor="start" data-fit="1560">building</text>
+<rect x="1226" y="1907" width="87.2" height="24" rx="12" class="st-ob" />
+<text x="1237" y="1924" class="mono" text-anchor="start" data-fit="1560">planning</text>
+<rect x="1226" y="1939" width="197.8" height="24" rx="12" class="st-ob" />
+<text x="1237" y="1956" class="mono" text-anchor="start" data-fit="1560">awaiting_plan_approval</text>
+<rect x="1614" y="1875" width="118.80000000000001" height="24" rx="12" class="st-ob" />
+<text x="1625" y="1892" class="mono" text-anchor="start" data-fit="1948">provisioning</text>
+<rect x="1614" y="1907" width="95.10000000000001" height="24" rx="12" class="st-ob" />
+<text x="1625" y="1924" class="mono" text-anchor="start" data-fit="1948">deploying</text>
+<rect x="1614" y="1939" width="95.10000000000001" height="24" rx="12" class="st-ob" />
+<text x="1625" y="1956" class="mono" text-anchor="start" data-fit="1948">verifying</text>
+<rect x="1614" y="1971" width="95.10000000000001" height="24" rx="12" class="st-ob" />
+<text x="1625" y="1988" class="mono" text-anchor="start" data-fit="1948">succeeded</text>
+<rect x="48" y="2037" width="1904" height="168" rx="14" class="strip" />
+<text x="72" y="2071" class="stt" text-anchor="start">Postgres 기록</text>
+<text x="201.56" y="2071" class="sub" text-anchor="start">쓰기 소유 컴포넌트만 해당 테이블에 기록</text>
+<text x="62" y="2112" class="mono" text-anchor="start" data-fit="396">deployments</text>
+<text x="62" y="2144" class="mono" text-anchor="start" data-fit="396">source_versions</text>
+<text x="62" y="2176" class="mono" text-anchor="start" data-fit="396">jobs</text>
+<text x="450" y="2112" class="mono" text-anchor="start" data-fit="784">analysis_reports</text>
+<text x="450" y="2144" class="mono" text-anchor="start" data-fit="784">ai_usage</text>
+<text x="450" y="2176" class="mono" text-anchor="start" data-fit="784">(P1) patches</text>
+<text x="838" y="2112" class="mono" text-anchor="start" data-fit="1172">ir_versions</text>
+<text x="838" y="2144" class="mono" text-anchor="start" data-fit="1172">approvals</text>
+<text x="838" y="2176" class="mono" text-anchor="start" data-fit="1172">env_locks</text>
+<text x="1226" y="2112" class="mono" text-anchor="start" data-fit="1560">deployment_services (digest)</text>
+<text x="1226" y="2144" class="mono" text-anchor="start" data-fit="1560">infra_plans</text>
+<text x="1226" y="2176" class="mono" text-anchor="start" data-fit="1560">iac_stacks</text>
+<text x="1614" y="2112" class="mono" text-anchor="start" data-fit="1948">provisioned_resources</text>
+<text x="1614" y="2144" class="mono" text-anchor="start" data-fit="1948">deployment_steps</text>
+<text x="1614" y="2176" class="mono" text-anchor="start" data-fit="1948">deployments.public_url</text>
+<rect x="48" y="2225" width="1904" height="136" rx="14" class="strip" />
+<text x="72" y="2259" class="stt" text-anchor="start">SSE 이벤트</text>
+<text x="176.39999999999998" y="2259" class="sub" text-anchor="start">P0: API 메모리 → 웹 · (P1) Redis Streams</text>
+<rect x="62" y="2283" width="126.7" height="24" rx="12" class="st-ob" />
+<text x="73" y="2300" class="mono" text-anchor="start" data-fit="396">state_changed</text>
+<rect x="450" y="2283" width="158.3" height="24" rx="12" class="st-ob" />
+<text x="461" y="2300" class="mono" text-anchor="start" data-fit="784">analysis.progress</text>
+<rect x="450" y="2315" width="166.20000000000002" height="24" rx="12" class="st-ob" />
+<text x="461" y="2332" class="mono" text-anchor="start" data-fit="784">approval_requested</text>
+<rect x="838" y="2283" width="166.20000000000002" height="24" rx="12" class="st-ob" />
+<text x="849" y="2300" class="mono" text-anchor="start" data-fit="1172">approval_requested</text>
+<rect x="838" y="2315" width="118.80000000000001" height="24" rx="12" class="st-ob" />
+<text x="849" y="2332" class="mono" text-anchor="start" data-fit="1172">lock.changed</text>
+<rect x="1226" y="2283" width="134.60000000000002" height="24" rx="12" class="st-ob" />
+<text x="1237" y="2300" class="mono" text-anchor="start" data-fit="1560">step_completed</text>
+<rect x="1226" y="2315" width="166.20000000000002" height="24" rx="12" class="st-ob" />
+<text x="1237" y="2332" class="mono" text-anchor="start" data-fit="1560">approval_requested</text>
+<rect x="1614" y="2283" width="134.60000000000002" height="24" rx="12" class="st-ob" />
+<text x="1625" y="2300" class="mono" text-anchor="start" data-fit="1948">step_completed</text>
+<rect x="1614" y="2315" width="126.7" height="24" rx="12" class="st-ob" />
+<text x="1625" y="2332" class="mono" text-anchor="start" data-fit="1948">state_changed</text>
+</svg></div></body></html>

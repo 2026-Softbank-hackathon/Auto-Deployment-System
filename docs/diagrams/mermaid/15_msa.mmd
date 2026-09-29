@@ -1,0 +1,17 @@
+sequenceDiagram
+autonumber
+participant O as 오케스트레이터
+participant P as 프로비저닝 워커
+participant D as 데이터 플레인
+participant V as 검증 워커
+O->>O: 서비스 의존 그래프로 배포 순서 결정
+P->>D: 1단계 공유 리소스 (DB · 큐)
+P->>D: 2단계 의존 없는 서비스 (user-service)
+O->>V: 헬스체크
+V-->>O: 통과
+P->>D: 3단계 의존 서비스 (order-service) + 서비스 디스커버리 등록
+O->>V: 헬스체크 · 서비스 간 호출 확인
+V-->>O: 통과
+P->>D: 4단계 외부 진입점 (gateway) 공개
+O->>V: 스모크 테스트
+V-->>O: 통과

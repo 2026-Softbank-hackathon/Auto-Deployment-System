@@ -1,0 +1,14 @@
+flowchart TD
+APP["앱 (OTel SDK 주입)"] --> COL["환경별 수집기"]
+COL --> B1["AWS: CloudWatch · X-Ray"]
+COL --> B2["GCP: Cloud Logging · Trace"]
+COL --> B3["Azure: Azure Monitor"]
+COL --> B4["온프레미스: Loki · Prometheus · Tempo"]
+COL --> PY["프로파일: Pyroscope (전 환경 공통)"]
+B1 --> GW["관측 게이트웨이 (조회 어댑터)"]
+B2 --> GW
+B3 --> GW
+B4 -- "에이전트 중계" --> GW
+PY --> GW
+GW --> DASH["웹 대시보드"]
+GW --> AGT["AI 에이전트 (장애 진단)"]

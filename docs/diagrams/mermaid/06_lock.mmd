@@ -1,0 +1,22 @@
+sequenceDiagram
+autonumber
+actor A as 팀원 A
+actor B as 팀원 B
+participant API as API 서버
+participant O as 오케스트레이터
+participant PG as Postgres
+participant S as IaC state 저장소
+A->>API: GCP 운영 환경 배포
+API->>O: 배포 생성
+O->>PG: 환경 락 획득 (GCP 운영)
+PG-->>O: 성공
+B->>API: 같은 환경 배포
+API->>O: 배포 생성
+O->>PG: 환경 락 획득 시도
+PG-->>O: 이미 사용 중
+O-->>B: 대기열 등록 (순번 1)
+O->>S: IaC state 잠금 후 적용
+S-->>O: 적용 완료 · 잠금 해제
+O->>PG: 환경 락 해제
+O->>PG: 대기열 다음 배포에 락 부여
+O-->>B: 팀원 B 배포 시작

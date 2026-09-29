@@ -1,8 +1,8 @@
 # 열린 항목 · 리스크 (2026-09-30 갱신)
 구버전(9/26, 문서 불일치 A-1~A-7 등): `reference/open-items_v1_2026-09-26.md`. v5에서 상당수 해소(큐 Postgres, 락 시점 등), architecture.md(v4) 자체는 미수정.
 
-## A. 결정 대기 (→ decisions.md "미결" Q-01~Q-08)
-- [ ] Q-01 백엔드 구조: API 서버 + Postgres vs 서버리스 (API 명세 전제, 가장 급함)
+## A. 결정 대기 (→ decisions.md "미결" Q-02~Q-08)
+- [x] ~~Q-01 백엔드 구조: API 서버 + Postgres vs 서버리스~~ → **D-52·D-53 확정** (TS + ECS Fargate, 2026-09-30 새벽 이정 판단, 근거 `.omc/specs/deep-interview-backend-decisions.md`)
 - [ ] Q-02 운영진 답변 → 사용자 계정 유지 / PaaS 전환
 - [ ] Q-03 P1 DB: 앱별 DB vs 공용 RDS + 스키마 분리
 - [ ] Q-04 비용 엔진 P1 vs P2 (CST-03 M, "비용 효율성")

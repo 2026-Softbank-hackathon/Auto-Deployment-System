@@ -109,7 +109,18 @@ export async function handleAnalyze(
     );
 
     // 7. ir_versions INSERT
+    // target_profile을 IR deploy.profile에 반영 (분석기 기본값 "aws-ecs-basic" 덮어쓰기)
     const irJson = analysis.ai?.ir_after ?? analysis.ir_draft;
+    const targetProfileRes = await pool.query<{ target_profile: string | null }>(
+      "SELECT target_profile FROM deployments WHERE id = $1",
+      [deployment_id]
+    );
+    const targetProfile = targetProfileRes.rows[0]?.target_profile;
+    if (targetProfile && irJson && typeof irJson === "object" && irJson !== null) {
+      const ir = irJson as Record<string, unknown>;
+      const deploy = (ir["deploy"] ?? {}) as Record<string, unknown>;
+      ir["deploy"] = { ...deploy, profile: targetProfile };
+    }
     const source =
       analysis.ai != null && !analysis.ai.skipped ? "ai_filled" : "analyzer";
 

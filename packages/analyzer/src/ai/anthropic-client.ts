@@ -21,7 +21,7 @@ export async function createClient(opts: ClientOptions = {}): Promise<AnthropicL
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   return new Anthropic({
     apiKey: opts.apiKey ?? process.env["ANTHROPIC_API_KEY"],
-  }) as AnthropicLike;
+  }) as unknown as AnthropicLike;
 }
 
 /**

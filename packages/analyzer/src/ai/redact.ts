@@ -18,7 +18,7 @@ const REDACTED = "[REDACTED]";
  * redact 규칙 목록.
  * 각 규칙은 { pattern, replacement } 형태.
  */
-const REDACT_RULES: Array<{ pattern: RegExp; replacement: string }> = [
+const REDACT_RULES: Array<{ pattern: RegExp; replacement: string | ((match: string) => string) }> = [
   // AWS Access Key ID (AKIA + 16 alphanumeric)
   {
     pattern: /\bAKIA[A-Z0-9]{16}\b/g,
@@ -56,7 +56,11 @@ const REDACT_RULES: Array<{ pattern: RegExp; replacement: string }> = [
 export function redact(input: string): string {
   let result = input;
   for (const rule of REDACT_RULES) {
-    result = result.replace(rule.pattern, rule.replacement as string);
+    if (typeof rule.replacement === "string") {
+      result = result.replace(rule.pattern, rule.replacement);
+    } else {
+      result = result.replace(rule.pattern, rule.replacement);
+    }
   }
   return result;
 }

@@ -1,16 +1,23 @@
 /**
  * tests/e2e/fixtures/create-sample-zip.ts
  *
- * sample-express.zip 픽스처를 Node.js 내장 모듈만으로 생성한다.
+ * E2E 테스트용 fixture zip 파일을 Node.js 내장 모듈만으로 생성한다.
  * ZIP local file header + central directory 포맷을 직접 작성한다 (DEFLATE 없이 store 모드).
  *
- * Express Hello World: package.json + server.js + Dockerfile
+ * 4개의 fixture 함수를 export 한다:
+ *   1. createSampleExpressZipBuffer  — Express + Dockerfile
+ *   2. createSamplePythonFastapiZipBuffer — FastAPI (Dockerfile 없음, Railpack fallback 감지)
+ *   3. createSampleNodePostgresZipBuffer  — Express + pg + .env.example + Dockerfile
+ *   4. createSampleMsaZipBuffer           — 다중 서비스 (services/api + services/worker)
+ *
+ * 하위 호환:
+ *   createSampleZipBuffer  — createSampleExpressZipBuffer 의 alias (기존 테스트 호환)
+ *   createSampleZip        — ZIP_PATH 로 파일 저장 (기존 코드 호환)
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import * as path from "node:path";
-import { createHash } from "node:crypto";
 
 const FIXTURE_DIR = path.join(
   path.dirname(new URL(import.meta.url).pathname),
@@ -33,7 +40,6 @@ function u32LE(n: number): Buffer {
 }
 
 function crc32(buf: Buffer): number {
-  // standard CRC-32 table
   const table = crc32Table();
   let crc = 0xffffffff;
   for (let i = 0; i < buf.length; i++) {
@@ -137,69 +143,212 @@ function buildZip(entries: ZipEntry[]): Buffer {
   return Buffer.concat([...localHeaders, centralData, eocd]);
 }
 
-// ── file contents ─────────────────────────────────────────────────────────────
+// ── 1. Express + Dockerfile ───────────────────────────────────────────────────
 
-const PACKAGE_JSON = Buffer.from(
+const EXPRESS_PACKAGE_JSON = Buffer.from(
   JSON.stringify(
     {
-      name: "sample-express",
+      name: "express-basic",
       version: "1.0.0",
-      description: "Express Hello World",
-      main: "server.js",
+      dependencies: { express: "^4" },
       scripts: { start: "node server.js" },
-      dependencies: { express: "^4.18.0" },
     },
     null,
     2
   )
 );
 
-const SERVER_JS = Buffer.from(
-  `const express = require('express');
+const EXPRESS_SERVER_JS = Buffer.from(
+  `const express = require("express");
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-app.get('/', (_req, res) => res.send('Hello World'));
-
-app.listen(PORT, () => {
-  // server started
-});
+app.get("/health", (req, res) => res.send("ok"));
+app.listen(3000);
 `
 );
 
-const DOCKERFILE = Buffer.from(
+const EXPRESS_DOCKERFILE = Buffer.from(
   `FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci
 COPY . .
 EXPOSE 3000
 CMD ["node", "server.js"]
 `
 );
 
-// ── public API ────────────────────────────────────────────────────────────────
+/**
+ * Express Hello World (package.json + server.js + Dockerfile)
+ */
+export function createSampleExpressZipBuffer(): Buffer {
+  return buildZip([
+    { name: "package.json", data: EXPRESS_PACKAGE_JSON },
+    { name: "server.js", data: EXPRESS_SERVER_JS },
+    { name: "Dockerfile", data: EXPRESS_DOCKERFILE },
+  ]);
+}
+
+// ── 2. Python FastAPI (Dockerfile 없음) ───────────────────────────────────────
+
+const FASTAPI_REQUIREMENTS_TXT = Buffer.from(`fastapi\nuvicorn\n`);
+
+const FASTAPI_MAIN_PY = Buffer.from(
+  `from fastapi import FastAPI
+import uvicorn
+app = FastAPI()
+@app.get("/health")
+def health(): return {"ok": True}
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+`
+);
+
+/**
+ * FastAPI 앱 (requirements.txt + main.py, Dockerfile 없음 — Railpack fallback 감지 확인 목적)
+ */
+export function createSamplePythonFastapiZipBuffer(): Buffer {
+  return buildZip([
+    { name: "requirements.txt", data: FASTAPI_REQUIREMENTS_TXT },
+    { name: "main.py", data: FASTAPI_MAIN_PY },
+  ]);
+}
+
+// ── 3. Node + PostgreSQL ──────────────────────────────────────────────────────
+
+const NODE_PG_PACKAGE_JSON = Buffer.from(
+  JSON.stringify(
+    {
+      name: "node-postgres",
+      version: "0.1.0",
+      dependencies: { express: "^4", pg: "^8" },
+    },
+    null,
+    2
+  )
+);
+
+const NODE_PG_SERVER_JS = Buffer.from(
+  `const express = require("express");
+const { Pool } = require("pg");
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const app = express();
+app.get("/health", (req, res) => res.send("ok"));
+app.listen(8080);
+`
+);
+
+const NODE_PG_ENV_EXAMPLE = Buffer.from(
+  `DATABASE_URL=postgres://user:pass@host:5432/db\nNODE_ENV=production\n`
+);
+
+const NODE_PG_DOCKERFILE = Buffer.from(
+  `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+EXPOSE 8080
+CMD ["node", "server.js"]
+`
+);
+
+/**
+ * Express + pg (package.json + server.js + .env.example + Dockerfile)
+ */
+export function createSampleNodePostgresZipBuffer(): Buffer {
+  return buildZip([
+    { name: "package.json", data: NODE_PG_PACKAGE_JSON },
+    { name: "server.js", data: NODE_PG_SERVER_JS },
+    { name: ".env.example", data: NODE_PG_ENV_EXAMPLE },
+    { name: "Dockerfile", data: NODE_PG_DOCKERFILE },
+  ]);
+}
+
+// ── 4. MSA (services/api + services/worker, 루트 package.json 없음) ───────────
+
+const MSA_API_PACKAGE_JSON = Buffer.from(
+  JSON.stringify(
+    { name: "msa-api", dependencies: { express: "^4" } },
+    null,
+    2
+  )
+);
+
+const MSA_API_SERVER_JS = Buffer.from(
+  `const express = require("express");
+const app = express();
+app.get("/health", (req, res) => res.send("ok"));
+app.listen(3000);
+`
+);
+
+const MSA_API_DOCKERFILE = Buffer.from(
+  `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]
+`
+);
+
+const MSA_WORKER_PACKAGE_JSON = Buffer.from(
+  JSON.stringify(
+    { name: "msa-worker", dependencies: {} },
+    null,
+    2
+  )
+);
+
+const MSA_WORKER_JS = Buffer.from(
+  `setInterval(() => {
+  process.stdout.write("worker tick\\n");
+}, 1000);
+`
+);
+
+const MSA_WORKER_DOCKERFILE = Buffer.from(
+  `FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+CMD ["node", "worker.js"]
+`
+);
+
+/**
+ * MSA mono-repo: services/api + services/worker (루트 package.json 없음)
+ */
+export function createSampleMsaZipBuffer(): Buffer {
+  return buildZip([
+    { name: "services/api/package.json", data: MSA_API_PACKAGE_JSON },
+    { name: "services/api/server.js", data: MSA_API_SERVER_JS },
+    { name: "services/api/Dockerfile", data: MSA_API_DOCKERFILE },
+    { name: "services/worker/package.json", data: MSA_WORKER_PACKAGE_JSON },
+    { name: "services/worker/worker.js", data: MSA_WORKER_JS },
+    { name: "services/worker/Dockerfile", data: MSA_WORKER_DOCKERFILE },
+  ]);
+}
+
+// ── 하위 호환 alias ────────────────────────────────────────────────────────────
+
+/**
+ * @deprecated createSampleExpressZipBuffer 를 사용하세요.
+ * 기존 upload-to-ir.test.ts 호환을 위해 유지.
+ */
+export const createSampleZipBuffer = createSampleExpressZipBuffer;
+
+// ── createSampleZip (파일 저장, 기존 코드 호환) ───────────────────────────────
 
 export async function createSampleZip(): Promise<string> {
   if (existsSync(ZIP_PATH)) return ZIP_PATH;
 
   await mkdir(FIXTURE_DIR, { recursive: true });
 
-  const zip = buildZip([
-    { name: "package.json", data: PACKAGE_JSON },
-    { name: "server.js", data: SERVER_JS },
-    { name: "Dockerfile", data: DOCKERFILE },
-  ]);
+  const zip = createSampleExpressZipBuffer();
 
   await writeFile(ZIP_PATH, zip);
   return ZIP_PATH;
-}
-
-export function createSampleZipBuffer(): Buffer {
-  return buildZip([
-    { name: "package.json", data: PACKAGE_JSON },
-    { name: "server.js", data: SERVER_JS },
-    { name: "Dockerfile", data: DOCKERFILE },
-  ]);
 }

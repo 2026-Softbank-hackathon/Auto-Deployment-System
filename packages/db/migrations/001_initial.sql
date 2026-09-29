@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS approvals (
   decision TEXT,       -- null=pending, 'approve' | 'reject'
   note TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  decided_at TIMESTAMPTZ
+  decided_at TIMESTAMPTZ,
+  UNIQUE (deployment_id, gate)
 );
 
 -- deployment_steps (per-step logs)

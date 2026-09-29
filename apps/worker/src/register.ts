@@ -13,6 +13,18 @@ import { handleProvision, type ProvisionJobPayload } from "./handlers/provision.
 import { handleVerify, type VerifyJobPayload } from "./handlers/verify.js";
 
 export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void> {
+  // pg-boss v10 breaking change: send/work 이전에 큐를 명시적으로 생성해야 함.
+  // 이미 존재하면 no-op으로 처리.
+  for (const q of ["analyze", "build", "provision", "verify"]) {
+    try {
+      await boss.createQueue(q);
+    } catch (e) {
+      // pg-boss는 이미 존재하는 큐 생성 시 duplicate 에러를 냄 - 무시
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/already exists|duplicate/i.test(msg)) throw e;
+    }
+  }
+
   await boss.work("analyze", async (jobs) => {
     for (const job of jobs) {
       try {

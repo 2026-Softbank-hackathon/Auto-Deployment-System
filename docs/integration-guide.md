@@ -1,8 +1,21 @@
-# 통합 가이드 — 이정용
+# 통합 가이드 — 이정용 (v2)
 
-> 작성일: 2026-09-30  
+> 최초 작성: 2026-09-30 (v1)  
+> v2 갱신: 2026-09-30 — packages/db·storage·profiles·profile-matcher, apps/api·worker, docker-compose, Notion DB 링크 추가  
 > 대상: 이정 (백엔드, Terraform·AWS 경험, TypeScript 처음)  
 > 목적: 자고 일어나서 30분 안에 리포 상태 파악 + 팀원 통합 지점 이해
+
+---
+
+## 노션 DB · 핵심 링크
+
+| 이름 | URL | 설명 |
+|------|-----|------|
+| 기능 명세 DB (119 rows) | https://app.notion.com/p/a321b75796b7482bbe62720b64bb827d | 기능 요구사항 전체 |
+| API 명세 DB (48 rows) | https://app.notion.com/p/69fa1d6026f14ff99b6224a9e6971c99 | 엔드포인트 48개 상세 |
+| 팀 홈 | https://www.notion.so/6958bee9ada483d1815c01c831afcb3a | 노션 워크스페이스 진입 |
+| 아키텍처 v5.4.1 절충안 | https://www.notion.so/3ea8bee9ada480d68879ed5059f8acb3 | 채택된 v5.4.1 |
+| 09/30 새벽 회의록 | https://www.notion.so/3ea8bee9ada480549dd9f14b965aba36 | D-52·D-53·Q-01 close 결정 |
 
 ---
 
@@ -19,6 +32,8 @@
 - 팀원 담당 파트 내부 (빌드·프로비저닝·프론트 상세)
 - 최종 Terraform 배포 스크립트
 - DB 스키마 상세 (별도 `docs/erd/`)
+
+> v2 추가: `packages/db`, `packages/storage`, `packages/profiles`, `packages/profile-matcher`, `apps/api`, `apps/worker` 구조와 통합 지점이 이 문서에 포함됨.
 
 ---
 
@@ -483,28 +498,74 @@ Auto-Deployment-System/
 │   │   └── tests/
 │   │       ├── fixtures/      # todo-app.yaml, blog-api.yaml, order-system.yaml
 │   │       └── schema.test.ts
-│   └── analyzer/              # 소스 → IR 분석기
+│   ├── analyzer/              # 소스 → IR 분석기
+│   │   ├── src/
+│   │   │   ├── index.ts       # analyze(), analyzeWithAI() 진입점
+│   │   │   ├── stager.ts      # 경로 검증 + unzip
+│   │   │   ├── service-splitter.ts
+│   │   │   ├── ir-builder.ts
+│   │   │   ├── types.ts
+│   │   │   ├── detectors/     # nodejs·python·docker·database·env
+│   │   │   └── ai/            # fillUnresolved (Anthropic API)
+│   │   └── tests/
+│   ├── db/                    # ★ v2 신규 — Postgres 스키마·마이그레이션·pg-boss 초기화
+│   │   ├── src/
+│   │   │   ├── index.ts       # createPool, createPgBoss, getEnv
+│   │   │   ├── schema.ts      # Zod 테이블 스키마 8종
+│   │   │   ├── migrate.ts     # 마이그레이션 실행기 (node migrate)
+│   │   │   └── migrations.ts
+│   │   ├── migrations/        # SQL 파일 (순차 적용)
+│   │   └── tests/             # 29 tests (schema.test.ts, migrate.test.ts)
+│   ├── storage/               # ★ v2 신규 — 파일 저장소 추상화
+│   │   ├── src/
+│   │   │   ├── index.ts       # createStorage()
+│   │   │   ├── local.ts       # LocalStorage (파일시스템)
+│   │   │   └── types.ts       # Storage 인터페이스
+│   │   └── tests/             # 9 tests
+│   ├── profiles/              # ★ v2 신규 — 배포 프로필 정의 2종
+│   │   ├── src/
+│   │   │   ├── index.ts       # PROFILES 맵, getProfile()
+│   │   │   ├── aws-ecs-basic.ts
+│   │   │   ├── onprem-docker-basic.ts
+│   │   │   └── types.ts       # Profile, ProfileCapabilities 스키마
+│   │   └── tests/             # 11 tests
+│   └── profile-matcher/       # ★ v2 신규 — IR ↔ 프로필 대조
 │       ├── src/
-│       │   ├── index.ts       # analyze(), analyzeWithAI() 진입점
-│       │   ├── stager.ts      # 경로 검증
-│       │   ├── service-splitter.ts  # 서비스 경계 감지
-│       │   ├── ir-builder.ts  # ServiceCandidate → IR 조립
-│       │   ├── types.ts       # 공용 타입 정의
-│       │   ├── detectors/     # 언어/프레임워크 감지기 5종
-│       │   └── ai/            # AI 빈칸 채우기 (P1)
-│       └── tests/
-│           ├── fixtures/      # node-http, node-postgres (실제 소스 샘플)
-│           └── ai/
-├── apps/                      # 아직 비어 있음 (apps/api 예정)
-├── docs/                      # 아키텍처·스펙·결정 문서
+│       │   └── index.ts       # matchProfile(), matchProfileById()
+│       └── tests/             # 14 tests
+├── apps/
+│   ├── api/                   # ★ v2 신규 — Fastify API 서버
+│   │   ├── src/
+│   │   │   ├── main.ts        # 진입점
+│   │   │   ├── server.ts      # buildServer() 팩토리
+│   │   │   ├── config.ts
+│   │   │   ├── plugins/       # request-id·error-handler·auth·multipart·sse-broker·pg-listener
+│   │   │   ├── routes/        # projects·deployments·events·ir·missing·approvals
+│   │   │   └── services/      # ProjectService·DeploymentService·IrService·ApprovalService
+│   │   └── tests/             # 16 tests (server.test.ts, pg-listener.test.ts)
+│   └── worker/                # ★ v2 신규 — pg-boss consumer
+│       ├── src/
+│       │   ├── main.ts        # 진입점 (pg-boss.start + registerAll)
+│       │   ├── deps.ts        # WorkerDeps 타입
+│       │   ├── notifier.ts    # pg_notify 래퍼
+│       │   ├── register.ts    # 핸들러 등록
+│       │   ├── state-machine.ts
+│       │   └── handlers/      # analyze·build·provision·verify
+│       └── tests/             # 16 tests (analyze-handler.test.ts, state-machine.test.ts)
+├── docs/
 │   ├── architecture-v5.md
 │   ├── decisions.md
 │   ├── api-spec-v0.md
-│   └── ir-schema-v0.md
+│   ├── api-spec-v1.md         # ★ v2 신규 — 48 엔드포인트 (v0 확장)
+│   ├── ir-schema-v0.md
+│   ├── measurement-2026-09-30.md  # ★ v2 신규 — 실제 AI 호출 측정
+│   └── diagrams/usecase/      # ★ v2 신규 — 담당자별·전체 유즈케이스 6종
+├── docker-compose.yml         # ★ v2 신규 — Postgres 16 컨테이너 (5433 포트)
+├── .env.example               # ★ v2 신규
 ├── credentials/               # gitignore — AWS 키 등
 ├── .omc/                      # gitignore — AI 도구 상태
 ├── pnpm-workspace.yaml
-└── package.json               # workspace 루트 (빌드 스크립트 없음)
+└── package.json               # workspace 루트 (db:up/migrate/reset, dev, dev:api, dev:worker)
 ```
 
 **담당 구분**
@@ -513,11 +574,277 @@ Auto-Deployment-System/
 |-----------|-----------|-----------|
 | `packages/ir-schema/` | 스키마 수정·확장 | - |
 | `packages/analyzer/` | 감지 로직·AI fill | - |
-| `apps/api/` | Fastify API 서버 (예정) | - |
-| Terraform 모듈 | 작업 연결 (예정) | 은영 (빌드·프로비저닝) |
-| VERIFY handler | - | 민서 |
+| `packages/db/` | 스키마·마이그레이션 | - |
+| `packages/storage/` | 로컬 스토리지 | - |
+| `packages/profiles/` | 프로필 정의 | 은영 (Terraform 모듈 ref) |
+| `packages/profile-matcher/` | IR ↔ 프로필 대조 | - |
+| `apps/api/` | Fastify API 서버 | - |
+| `apps/worker/` | analyze 핸들러 | 은영 (build·provision), 민서 (verify) |
+| Terraform 모듈 | 연결 예정 | 은영 (빌드·프로비저닝) |
 | 프론트엔드 | `packages/contracts` (예정) | 민성 |
 | Loki·메트릭 | - | 서현·우진 (P2) |
+
+---
+
+---
+
+## 2.5 새로 추가된 패키지·앱 (v2)
+
+### 2.5.1 packages/db — Postgres 스키마 + 마이그레이션 + pg-boss
+
+**역할**: DB 연결 팩토리, Zod 테이블 스키마 타입, SQL 마이그레이션 실행기.  
+다른 패키지·앱은 이 패키지에서 `createPool`, `createPgBoss`, 각 테이블 타입을 import한다.
+
+**테이블 8종** (`packages/db/src/schema.ts`)
+
+| 테이블 | 핵심 필드 |
+|--------|-----------|
+| `projects` | id, name, description |
+| `deployments` | id, project_id, status(15종), target_profile, public_url |
+| `source_versions` | id, deployment_id, sha256, storage_key, size_bytes |
+| `analysis_reports` | deployment_id, services_json, ir_valid, ir_errors_json |
+| `ir_versions` | deployment_id, ir_json, source(analyzer/ai_filled/user_edited) |
+| `env_locks` | env_key, deployment_id, lease_expires_at |
+| `approvals` | deployment_id, gate(patch/target/plan), decision(approve/reject) |
+| `deployment_steps` | deployment_id, step_name, status, duration_ms |
+| `ai_usage` | deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, estimated_cost_usd |
+
+**DeploymentStatus 15종** (상태 머신)
+
+```
+received → analyzing → awaiting_target_confirmation → target_confirmed
+→ awaiting_plan_approval → plan_approved → provisioning → building
+→ deploying → verifying → awaiting_patch_approval → patching
+→ succeeded | failed | cancelled | rolled_back
+```
+
+**주요 export** (`packages/db/src/index.ts`)
+
+```typescript
+import { createPool, createPgBoss, getEnv } from "@camellia/db";
+import type { Deployment, DeploymentStatus } from "@camellia/db";
+
+const { databaseUrl } = getEnv();          // DATABASE_URL 없으면 throw
+const pool = createPool(databaseUrl);      // pg.Pool 반환
+const boss = createPgBoss(databaseUrl);    // PgBoss 반환
+```
+
+**마이그레이션 실행**
+
+```bash
+# DB 컨테이너 올리기
+pnpm db:up
+
+# SQL 파일 순차 적용 (schema_migrations 테이블로 중복 방지)
+pnpm db:migrate
+
+# 초기화 (볼륨 삭제 후 재시작)
+pnpm db:reset
+```
+
+마이그레이션 실행기(`packages/db/src/migrate.ts`)는 `migrations/` 폴더의 `.sql` 파일을 이름순으로 읽어 `schema_migrations` 테이블에 없는 것만 트랜잭션으로 적용한다.
+
+---
+
+### 2.5.2 packages/storage — 파일 저장소 추상화
+
+**역할**: 소스 zip 업로드·다운로드를 추상화. 현재 구현은 `LocalStorage`(파일시스템). 나중에 S3/MinIO로 교체해도 인터페이스가 동일하다.
+
+**Storage 인터페이스** (`packages/storage/src/types.ts`)
+
+```typescript
+interface Storage {
+  put(key: string, buffer: Buffer, contentType?: string): Promise<void>;
+  get(key: string): Promise<Buffer>;
+  exists(key: string): Promise<boolean>;
+  delete(key: string): Promise<void>;
+  presignUrl(key: string, opts?: { expiresInSeconds?: number }): Promise<string>;
+  listKeys(prefix: string): Promise<string[]>;
+}
+```
+
+**생성**
+
+```typescript
+import { createStorage } from "@camellia/storage";
+
+const storage = createStorage({
+  rootDir: process.env["STORAGE_ROOT"],     // 저장 루트 디렉터리
+  publicBaseUrl: "http://localhost:3000/storage",
+});
+// presignUrl은 <publicBaseUrl>/<key> 형태의 URL을 반환한다.
+```
+
+`LocalStorage`는 `..` 포함 key를 path traversal로 탐지해 에러를 던진다.
+
+---
+
+### 2.5.3 packages/profiles — 배포 프로필 정의
+
+**역할**: 각 배포 환경(AWS ECS, 온프레미스)의 capabilities를 정의. analyzer의 `ir-builder.ts`가 기본값 `"aws-ecs-basic"`을 넣고, worker의 analyze 핸들러가 `target_profile`로 덮어쓴다.
+
+**현재 프로필 2종**
+
+| 프로필 ID | cloud | 최대 서비스 | resource_types | 설명 |
+|-----------|-------|------------|----------------|------|
+| `aws-ecs-basic` | aws | 10 | postgres | ECS Fargate + ALB (D-53) |
+| `onprem-docker-basic` | onprem | 5 | postgres | Intel Mac VM + Docker Compose + Cloudflare Tunnel |
+
+```typescript
+import { getProfile, PROFILES } from "@camellia/profiles";
+
+const profile = getProfile("aws-ecs-basic");  // Profile | null
+// profile.capabilities.service_types → ["http", "worker", "job"]
+// profile.capabilities.sizes         → ["small", "medium", "large"]
+// profile.default_region              → "ap-northeast-2"
+```
+
+**은영 TODO**: `terraform_module_ref` 필드에 실제 Terraform 모듈 경로를 채워야 한다.
+
+---
+
+### 2.5.4 packages/profile-matcher — IR ↔ 프로필 대조
+
+**역할**: IR이 선택된 프로필과 호환되는지 5가지 규칙으로 대조한다. `missing_resources`와 `warnings` 목록을 반환한다.
+
+**대조 규칙 5종**
+
+| 규칙 | 내용 | 실패 시 |
+|------|------|---------|
+| 1 | IR.resources의 type이 `capabilities.resource_types`에 포함 | `missing_resources`에 추가 |
+| 2 | services의 type이 `capabilities.service_types`에 포함 | `warnings` 추가 |
+| 3 | services의 size가 `capabilities.sizes`에 포함 | `warnings` 추가 |
+| 4 | expose "public"/"internal"이 프로필에서 지원 | `warnings` 추가 |
+| 5 | 서비스 수가 `max_services` 이하 | `warnings` 추가 |
+
+`compatible = missing_resources 0개 AND "critical_" 접두사 warning 0개`.
+
+```typescript
+import { matchProfileById } from "@camellia/profile-matcher";
+import type { Ir } from "@camellia/ir-schema";
+
+const result = matchProfileById(ir, "aws-ecs-basic");
+// result.compatible           → true/false
+// result.missing_resources    → []
+// result.warnings             → []
+```
+
+---
+
+### 2.5.5 apps/api — Fastify API 서버
+
+**결정 근거**: D-52 (TS + Fastify + pg-boss), D-53 (ECS Fargate)
+
+**아키텍처**
+
+```
+main.ts
+  └─ buildServer(opts: { pool, boss, storage, apiKey, ... })
+       ├─ plugins: request-id · error-handler · auth · multipart · sse-broker · pg-listener
+       ├─ services: ProjectService · DeploymentService · IrService · ApprovalService
+       └─ routes (prefix /api/v1):
+            ├─ /projects             → CRUD
+            ├─ /deployments          → 목록·생성·상태
+            ├─ /deployments/:id/events (SSE)
+            ├─ /deployments/:id/ir   → IR 조회·수정
+            ├─ /deployments/:id/missing
+            └─ /deployments/:id/approvals
+```
+
+**SSE 브로커** (`apps/api/src/plugins/sse-broker.ts`)
+
+배포 ID별 EventEmitter + 최근 100개 이벤트 버퍼를 관리한다. `Last-Event-Id` 헤더로 재연결 시 버퍼에서 누락 이벤트를 재전송한다.
+
+```typescript
+// 이벤트 발행 (worker → pg_notify → pg-listener → sseBroker.publish)
+sseBroker.publish(deploymentId, { event: "state_changed", data: { status: "analyzing" } });
+
+// 이벤트 구독 (SSE route)
+const unsub = sseBroker.subscribe(deploymentId, (evt) => {
+  reply.raw.write(formatSseMessage(evt));
+});
+```
+
+**pg-listener** (`apps/api/src/plugins/pg-listener.ts`)
+
+worker가 `pg_notify("deployment_events", JSON)` 하면 API 프로세스가 `LISTEN deployment_events`로 받아서 SSE로 relay한다.
+
+```
+worker process → pg_notify → Postgres → pg-listener → SseBroker → SSE clients
+```
+
+**의존성 주입 패턴**: `buildServer(opts)`에 `pool`, `boss`, `storage`를 주입한다. 테스트에서 mock DB/storage를 주입해 실제 Postgres 없이 테스트 가능하다.
+
+**실행**
+
+```bash
+# DB 필요 없어도 서버는 뜸 (warn 로그 출력)
+pnpm dev:api
+# 또는 둘 다
+pnpm dev
+```
+
+---
+
+### 2.5.6 apps/worker — pg-boss consumer
+
+**역할**: Fastify API가 enqueue한 job을 소비하는 별도 프로세스. 현재 핸들러: `analyze` (구현 완료), `build`·`provision`·`verify` (stub).
+
+**초기화 흐름** (`apps/worker/src/main.ts`)
+
+```
+DATABASE_URL, STORAGE_ROOT_DIR 환경변수 확인
+  ↓
+createPool + createPgBoss + LocalStorage 생성
+  ↓
+boss.start()
+  ↓
+registerAll(boss, deps)   ← 모든 핸들러 등록
+  ↓
+SIGINT/SIGTERM → boss.stop() + pool.end()
+```
+
+**analyze 핸들러 흐름** (`apps/worker/src/handlers/analyze.ts`)
+
+```
+job.data: { deployment_id, source_storage_key, sha256 }
+  ↓
+1. received → analyzing 전이 + pg_notify
+  ↓
+2. storage.get(source_storage_key) → Buffer
+  ↓
+3. 임시 파일 저장 → stage(tmpZip, { mode: "unzip" })
+  ↓
+4. analyzeWithAI(staged.resolvedPath, { apiKey, onUsage })
+     └─ onUsage: ai_usage 테이블에 INSERT
+  ↓
+5. analysis_reports INSERT
+  ↓
+6. ir_versions INSERT
+     └─ target_profile로 deploy.profile 덮어쓰기 ← 버그 픽스 (하드코딩 제거)
+  ↓
+7. analyzing → awaiting_target_confirmation 전이 + pg_notify
+```
+
+**버그 픽스 (v2)**: 이전에 `deploy.profile`이 `"aws-ecs-basic"`으로 하드코딩됐었다. 현재는 DB의 `deployments.target_profile`을 조회해서 덮어쓴다 (`apps/worker/src/handlers/analyze.ts:126-133`).
+
+```typescript
+// 수정 후 (analyze.ts:126)
+const targetProfileRes = await pool.query<{ target_profile: string | null }>(
+  "SELECT target_profile FROM deployments WHERE id = $1",
+  [deployment_id]
+);
+const targetProfile = targetProfileRes.rows[0]?.target_profile;
+if (targetProfile && irJson && ...) {
+  ir["deploy"] = { ...deploy, profile: targetProfile };
+}
+```
+
+**실행**
+
+```bash
+pnpm dev:worker
+```
 
 ---
 
@@ -965,38 +1292,173 @@ P2 범위. 메트릭 + Loki 로그 (D-45). 현재는 미착수. 향후 `apps/api
 
 ---
 
+---
+
+## 4.5 새 통합 지점 상세 (v2)
+
+### 4.5.1 API → worker (pg-boss job)
+
+`DeploymentService`가 소스 업로드 후 `analyze` job을 enqueue한다. worker가 이를 소비한다.
+
+```typescript
+// apps/api/src/services/deployment-service.ts (개념)
+await boss.send("analyze", {
+  deployment_id: dep.id,
+  source_storage_key: storageKey,
+  sha256,
+  source_version_id: svId,
+});
+```
+
+worker는 `registerAll(boss, deps)`에서 `boss.work("analyze", handler)`로 등록한다.
+
+---
+
+### 4.5.2 worker → API (pg_notify → SSE)
+
+worker가 상태 전이 후 `pg_notify("deployment_events", JSON)`를 호출한다.
+
+```
+worker: notifier.notify(deployment_id, "state_changed", { status })
+  → pool.query("SELECT pg_notify('deployment_events', $1)", [JSON.stringify({...})])
+  → Postgres NOTIFY
+  → API pg-listener client receives notification
+  → sseBroker.publish(deploymentId, { event, data })
+  → SSE clients receive event
+```
+
+프론트(민성)는 `GET /api/v1/deployments/:id/events` SSE로 실시간 상태를 받는다.
+
+---
+
+### 4.5.3 IR에 target_profile 적용 흐름
+
+```
+POST /api/v1/deployments (body: { target_profile: "aws-ecs-basic" })
+  → deployments 테이블에 target_profile 저장
+  → boss.send("analyze", { deployment_id, ... })
+  → worker handleAnalyze()
+       → analyzeWithAI() → ir_draft (deploy.profile = "aws-ecs-basic" 기본값)
+       → SELECT target_profile FROM deployments WHERE id = $1
+       → ir["deploy"]["profile"] = targetProfile  ← 덮어쓰기
+       → INSERT ir_versions (ir_json = 덮어쓴 IR)
+```
+
+즉, analyzer가 도출한 IR의 `deploy.profile`은 항상 worker에서 `target_profile`로 최종 확정된다.
+
+---
+
+### 4.5.4 은영과의 인터페이스 (v2 업데이트)
+
+은영의 `build`·`provision` 핸들러는 `apps/worker/src/handlers/build.ts`, `provision.ts`에 stub으로 있다. 은영이 구현할 때 필요한 데이터:
+
+```typescript
+// ir_versions 테이블에서 최신 IR 조회
+const row = await pool.query(
+  "SELECT ir_json FROM ir_versions WHERE deployment_id=$1 ORDER BY id DESC LIMIT 1",
+  [deployment_id]
+);
+const ir: Partial<Ir> = row.rows[0].ir_json;
+
+// 은영이 읽는 것
+ir.deploy?.profile         // "aws-ecs-basic" | "onprem-docker-basic"
+ir.services["api"].build   // { dockerfile, context }
+ir.services["api"].size    // "small"|"medium"|"large"
+ir.resources?.["db"]?.type // "postgres"
+```
+
+프로필 capabilities는 `getProfile(ir.deploy.profile)` 로 확인한다 (`@camellia/profiles`).
+
+---
+
+### 4.5.5 민서와의 인터페이스 (v2 업데이트)
+
+`apps/worker/src/handlers/verify.ts` stub. 민서가 구현할 때:
+
+```typescript
+// verify handler가 사용하는 것
+ir.services["api"].port       // 헬스체크 포트
+ir.services["api"].health     // { path, expected_status, timeout_seconds }
+ir.services["api"].expose     // "public" → ALB URL, "internal" → 내부 DNS
+```
+
+Q-01 (VERIFY digest 확인 범위 A vs B)은 2026-09-30 회의에서 **close** 됐다. 민서와 직접 sync 필요.
+
+---
+
+### 4.5.6 민성과의 인터페이스 (v2 업데이트)
+
+`docs/api-spec-v1.md`에 48개 엔드포인트 전체 명세가 있다. v0의 12개에서 확장됨. 민성이 주로 쓰는 엔드포인트는 변경 없음:
+
+| 엔드포인트 | 용도 |
+|-----------|------|
+| `POST /api/v1/deployments` | 배포 시작 (target_profile 포함) |
+| `GET /api/v1/deployments/:id/events` (SSE) | 실시간 진행 상태 |
+| `GET /api/v1/deployments/:id/ir` | IR 확인 |
+| `PATCH /api/v1/deployments/:id/ir` | IR 수정 (user_edited source) |
+| `POST /api/v1/deployments/:id/approvals` | 승인 게이트 (target/plan/patch) |
+
+SSE 이벤트 형식은 `docs/api-spec-v1.md` §SSE 참조.
+
+---
+
 ## 5. 실행·디버그 치트시트
 
 ```bash
 # 의존성 설치
 pnpm install
 
-# 전체 테스트
+# ── DB 관련 (v2 신규) ─────────────────────────────────────────────
+# Postgres 컨테이너 올리기 (5433 포트)
+pnpm db:up
+
+# SQL 마이그레이션 적용
+pnpm db:migrate
+
+# 컨테이너 + 볼륨 초기화
+pnpm db:reset
+
+# Postgres 로그 확인
+pnpm db:logs
+
+# ── 개발 서버 (v2 신규) ───────────────────────────────────────────
+# API + worker 동시 실행 (concurrently)
+pnpm dev
+
+# API만
+pnpm dev:api
+
+# worker만
+pnpm dev:worker
+
+# ── 테스트 ────────────────────────────────────────────────────────
+# 전체 패키지 테스트
 pnpm -r --if-present test
 
-# analyzer 테스트
+# 패키지별
 pnpm --filter @camellia/analyzer test
+pnpm --filter @camellia/db test
+pnpm --filter @camellia/storage test
+pnpm --filter @camellia/profiles test
+pnpm --filter @camellia/profile-matcher test
+pnpm --filter @camellia/api test
+pnpm --filter @camellia/worker test
 
-# 타입 체크
+# ── 타입 체크 ──────────────────────────────────────────────────────
 pnpm --filter @camellia/analyzer typecheck
+pnpm --filter @camellia/ir-schema typecheck
 
-# 의존성 추가
+# ── 의존성 추가 ────────────────────────────────────────────────────
 pnpm add fast-glob --filter @camellia/analyzer
 pnpm add -D @types/node --filter @camellia/analyzer
 
-# 최근 커밋 확인
+# ── git ────────────────────────────────────────────────────────────
 git log --oneline -10
-
-# 작업한 파일 확인
 git status --short
-
-# 직전 커밋과 diff
 git diff HEAD~1
-
-# 특정 파일 히스토리
 git log --oneline packages/analyzer/src/index.ts
 
-# AWS 프로파일 확인
+# ── AWS ────────────────────────────────────────────────────────────
 aws sts get-caller-identity --profile camellia
 ```
 
@@ -1063,18 +1525,149 @@ npx tsc --noEmit
    ```
    새로운 D-XX 결정이 있으면 내 코드에 영향 여부 파악.
 
-6. **타입 체크**
+6. **DB 상태 확인** (v2 신규)
+   ```bash
+   # 컨테이너 떠있는지 확인
+   docker ps | grep camellia-postgres
+   # 안 떠있으면
+   pnpm db:up && pnpm db:migrate
+   ```
+
+7. **타입 체크**
    ```bash
    pnpm --filter @camellia/analyzer typecheck
    pnpm --filter @camellia/ir-schema typecheck
    ```
    TS 에러가 있으면 어떤 파일 몇 번 줄인지 확인.
 
-7. **오늘 할 일 확인**
+8. **오늘 할 일 확인**
    ```bash
    cat docs/todo-jeong.md
    ```
    가장 번호 작은 미완성 태스크부터 시작.
+
+---
+
+---
+
+## 6.5 실행 시나리오 확장 (v2)
+
+### 6.5.1 로컬 풀스택 실행 (docker compose + API + worker)
+
+```bash
+# 1. DB 올리기
+pnpm db:up
+# Postgres 16 컨테이너, 5433 포트, 볼륨 camellia-postgres-data
+
+# 2. .env 준비 (.env.example 복사)
+cp .env.example .env
+# DATABASE_URL=postgres://camellia:camellia@localhost:5433/camellia
+# STORAGE_ROOT=./storage
+# ANTHROPIC_API_KEY=sk-ant-...  (선택)
+
+# 3. 마이그레이션
+pnpm db:migrate
+
+# 4. API + worker 동시 실행
+pnpm dev
+# API  → http://localhost:3000
+# worker → pg-boss consumer (별도 프로세스)
+```
+
+헬스 체크:
+```bash
+curl http://localhost:3000/health
+# {"status":"ok"}
+```
+
+---
+
+### 6.5.2 두 target_profile 시나리오
+
+**AWS ECS (기본)**
+
+```bash
+curl -X POST http://localhost:3000/api/v1/deployments \
+  -H "Content-Type: multipart/form-data" \
+  -F "source=@myapp.zip" \
+  -F "target_profile=aws-ecs-basic"
+# → deployment_id: 1
+# → status: received → analyzing → awaiting_target_confirmation
+```
+
+worker의 analyze 핸들러가 `target_profile="aws-ecs-basic"`을 IR `deploy.profile`에 반영한다.
+
+**온프레미스 Docker**
+
+```bash
+curl -X POST http://localhost:3000/api/v1/deployments \
+  -H "Content-Type: multipart/form-data" \
+  -F "source=@myapp.zip" \
+  -F "target_profile=onprem-docker-basic"
+```
+
+`onprem-docker-basic` 프로필은 `max_services=5`, `cloud=onprem`. profile-matcher가 IR과 대조해서 `compatible` 여부를 판단한다.
+
+**프로필 capabilities 차이**
+
+| 항목 | aws-ecs-basic | onprem-docker-basic |
+|------|--------------|---------------------|
+| cloud | aws | onprem |
+| max_services | 10 | 5 |
+| sizes | small/medium/large | small/medium |
+| default_region | ap-northeast-2 | local |
+
+---
+
+### 6.5.3 SSE 실시간 이벤트 수신
+
+```bash
+# 배포 ID 1의 이벤트 스트림 구독
+curl -N http://localhost:3000/api/v1/deployments/1/events \
+  -H "Accept: text/event-stream"
+```
+
+수신되는 이벤트 예시:
+```
+id: evt_a1b2c3d4e5f6g7h8
+event: state_changed
+data: {"status":"analyzing"}
+
+id: evt_b2c3d4e5f6g7h8i9
+event: analysis.progress
+data: {"step":"detecting"}
+
+id: evt_c3d4e5f6g7h8i9j0
+event: state_changed
+data: {"status":"awaiting_target_confirmation"}
+
+id: evt_d4e5f6g7h8i9j0k1
+event: approval_requested
+data: {"gate":"target"}
+```
+
+재연결 시 `Last-Event-Id` 헤더를 보내면 SseBroker 버퍼(최근 100개)에서 누락 이벤트를 재전송한다.
+
+---
+
+### 6.5.4 실제 AI 호출 측정 결과 요약
+
+`docs/measurement-2026-09-30.md` 전체 내용. 2026-09-29T23:52:10 KST 측정.
+
+| Fixture | zip 크기 | 총 시간 | 입력 tokens | 비용 USD | IR valid |
+|---------|---------|---------|------------|---------|---------|
+| Express | 0.7 KB | 4.10s | 1,306 | $0.0244 | ✓ |
+| Python FastAPI | 0.4 KB | 4.07s | 1,315 | $0.0245 | ✓ |
+| Node + Postgres | 0.9 KB | 4.07s | 1,376 | $0.0254 | ✓ |
+| MSA (2 서비스) | 1.3 KB | 4.07s | 1,469 | $0.0283 | ✓ |
+| **합계** | | **4.08s 평균** | **5,466** | **$0.1027** | **4/4** |
+
+- AI 호출 1회당 평균 **$0.0257** (하루 100회 → ~$2.57)
+- 모든 fixture에서 `ir_valid: true`
+- 캐시 미사용 (첫 측정) — 반복 호출 시 `cache_read_input_tokens` 증가로 비용 절감 가능
+- 모델: claude-opus-4-5 (측정 시점)
+
+상세 IR JSON 결과는 `docs/measurement-2026-09-30.md` 참조.
 
 ---
 
@@ -1161,6 +1754,7 @@ ESM의 장점:
 
 ## 변경 이력
 
-| 날짜 | 내용 |
-|------|------|
-| 2026-09-30 | 초안 작성 (이정용, 리포 상태 기준) |
+| 날짜 | 버전 | 내용 |
+|------|------|------|
+| 2026-09-30 | v1 | 초안 작성 (이정용) — ir-schema·analyzer·통합 지점·TS 기초 |
+| 2026-09-30 | v2 | packages/db·storage·profiles·profile-matcher 추가; apps/api·worker 추가; docker-compose·.env.example; 루트 scripts(db:up/migrate/reset, dev); 노션 DB 링크; 결정 D-52·D-53·Q-01 close; 버그픽스(analyze.ts deploy.profile 하드코딩); §2.5·§4.5·§6.5 신규 섹션; §6 step 6(DB 상태) 추가 |

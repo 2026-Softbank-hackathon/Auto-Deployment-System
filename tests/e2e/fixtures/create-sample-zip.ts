@@ -11,19 +11,8 @@
  *   4. createSampleMsaZipBuffer           — 다중 서비스 (services/api + services/worker)
  *
  * 하위 호환:
- *   createSampleZipBuffer  — createSampleExpressZipBuffer 의 alias (기존 테스트 호환)
- *   createSampleZip        — ZIP_PATH 로 파일 저장 (기존 코드 호환)
+ *   createSampleZipBuffer  — createSampleExpressZipBuffer 의 alias (upload-to-ir.test.ts 호환)
  */
-
-import { writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import * as path from "node:path";
-
-const FIXTURE_DIR = path.join(
-  path.dirname(new URL(import.meta.url).pathname),
-  "."
-);
-export const ZIP_PATH = path.join(FIXTURE_DIR, "sample-express.zip");
 
 // ── ZIP builder (store mode, no compression) ──────────────────────────────────
 
@@ -177,9 +166,6 @@ CMD ["node", "server.js"]
 `
 );
 
-/**
- * Express Hello World (package.json + server.js + Dockerfile)
- */
 export function createSampleExpressZipBuffer(): Buffer {
   return buildZip([
     { name: "package.json", data: EXPRESS_PACKAGE_JSON },
@@ -203,9 +189,6 @@ if __name__ == "__main__":
 `
 );
 
-/**
- * FastAPI 앱 (requirements.txt + main.py, Dockerfile 없음 — Railpack fallback 감지 확인 목적)
- */
 export function createSamplePythonFastapiZipBuffer(): Buffer {
   return buildZip([
     { name: "requirements.txt", data: FASTAPI_REQUIREMENTS_TXT },
@@ -252,9 +235,6 @@ CMD ["node", "server.js"]
 `
 );
 
-/**
- * Express + pg (package.json + server.js + .env.example + Dockerfile)
- */
 export function createSampleNodePostgresZipBuffer(): Buffer {
   return buildZip([
     { name: "package.json", data: NODE_PG_PACKAGE_JSON },
@@ -318,9 +298,6 @@ CMD ["node", "worker.js"]
 `
 );
 
-/**
- * MSA mono-repo: services/api + services/worker (루트 package.json 없음)
- */
 export function createSampleMsaZipBuffer(): Buffer {
   return buildZip([
     { name: "services/api/package.json", data: MSA_API_PACKAGE_JSON },
@@ -332,23 +309,6 @@ export function createSampleMsaZipBuffer(): Buffer {
   ]);
 }
 
-// ── 하위 호환 alias ────────────────────────────────────────────────────────────
+// ── 하위 호환 alias (upload-to-ir.test.ts) ────────────────────────────────────
 
-/**
- * @deprecated createSampleExpressZipBuffer 를 사용하세요.
- * 기존 upload-to-ir.test.ts 호환을 위해 유지.
- */
 export const createSampleZipBuffer = createSampleExpressZipBuffer;
-
-// ── createSampleZip (파일 저장, 기존 코드 호환) ───────────────────────────────
-
-export async function createSampleZip(): Promise<string> {
-  if (existsSync(ZIP_PATH)) return ZIP_PATH;
-
-  await mkdir(FIXTURE_DIR, { recursive: true });
-
-  const zip = createSampleExpressZipBuffer();
-
-  await writeFile(ZIP_PATH, zip);
-  return ZIP_PATH;
-}

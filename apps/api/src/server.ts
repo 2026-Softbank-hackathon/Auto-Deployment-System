@@ -14,6 +14,7 @@ import errorHandlerPlugin from "./plugins/error-handler.js";
 import authPlugin from "./plugins/auth.js";
 import multipartPlugin from "./plugins/multipart.js";
 import sseBrokerPlugin from "./plugins/sse-broker.js";
+import { startPgListener } from "./plugins/pg-listener.js";
 
 import { ProjectService } from "./services/project-service.js";
 import { DeploymentService } from "./services/deployment-service.js";
@@ -35,6 +36,10 @@ export interface BuildServerOptions {
   nodeEnv?: string;
   logLevel?: string;
   logger?: boolean;
+  /** Postgres LISTEN 채널. 제공 시 pg-listener를 시작한다. 기본값 "deployment_events" */
+  pgListenChannel?: string;
+  /** pg-listener를 명시적으로 비활성화하려면 false로 설정. 기본값 true */
+  enablePgListener?: boolean;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -68,6 +73,45 @@ export async function buildServer(opts: BuildServerOptions) {
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);
   const sseBroker = fastify.sseBroker;
+
+  // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
+  if (opts.enablePgListener !== false) {
+    let unsubscribePg: (() => Promise<void>) | undefined;
+
+    fastify.addHook("onReady", async () => {
+      try {
+        unsubscribePg = await startPgListener(opts.pool, {
+          channel: opts.pgListenChannel ?? "deployment_events",
+          onNotification: (raw) => {
+            if (
+              raw === null ||
+              typeof raw !== "object" ||
+              Array.isArray(raw)
+            ) {
+              return;
+            }
+            const msg = raw as Record<string, unknown>;
+            const deploymentId = String(msg["deployment_id"] ?? "");
+            const event = String(msg["event"] ?? "");
+            const payload = msg["payload"] ?? {};
+            if (!deploymentId || !event) return;
+            sseBroker.publish(deploymentId, { event, data: payload });
+          },
+        });
+        fastify.log.info({ channel: opts.pgListenChannel ?? "deployment_events" }, "pg-listener started");
+      } catch (err) {
+        // LISTEN 실패는 치명적이지 않다 — SSE 실시간 업데이트만 안 됨
+        fastify.log.warn({ err }, "pg-listener failed to start; SSE relay disabled");
+      }
+    });
+
+    fastify.addHook("onClose", async () => {
+      if (unsubscribePg) {
+        await unsubscribePg().catch(() => {});
+        fastify.log.info("pg-listener stopped");
+      }
+    });
+  }
 
   // ── health check ───────────────────────────────────────────────────────────
   fastify.get("/health", async () => ({ status: "ok" }));

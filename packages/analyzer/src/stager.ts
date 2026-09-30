@@ -2,40 +2,172 @@
  * packages/analyzer/src/stager.ts
  *
  * 소스 경로 검증 및 스캔 준비.
- * P0: 로컬 디렉터리를 dry-run 모드로 검사 (실제 복사/zip 해제는 P1).
+ * dry-run: 로컬 디렉터리 경로 검증만 수행.
+ * unzip: .zip 파일을 임시 폴더(또는 지정 폴더)에 해제.
  */
 
-import { stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, rm, stat } from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { pipeline } from "node:stream/promises";
+
+import * as unzipper from "unzipper";
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+export type StageOptions = {
+  /** 동작 모드. 기본값 "dry-run" (기존 동작 유지). */
+  mode?: "dry-run" | "unzip";
+  /**
+   * unzip 모드 전용 — 해제 대상 폴더.
+   * 미지정 시 os.tmpdir() 아래 랜덤 폴더를 생성한다.
+   */
+  destDir?: string;
+};
 
 export type StageResult = {
-  /** 정규화된 절대 경로 */
+  /** dry-run: 입력 경로 그대로. unzip: 해제된 폴더 경로. */
   resolvedPath: string;
-  /** 디렉터리 여부 */
+  /** unzip 시 원본 zip 파일의 sha256 hex digest. */
+  sha256?: string;
+  /** unzip 시 원본 zip 파일 크기 (bytes). */
+  sizeBytes?: number;
+  /** unzip 시 임시 폴더를 삭제하는 정리 함수. */
+  cleanup?: () => Promise<void>;
+  /** 기존 호환 필드 */
   isDirectory: boolean;
 };
 
-/**
- * sourcePath 가 존재하는 디렉터리인지 확인하고 정규화된 경로를 반환한다.
- * P0에서는 로컬 디렉터리만 지원한다. zip/URL은 P1.
- *
- * @throws Error — 경로가 존재하지 않거나 디렉터리가 아닌 경우
- */
-export async function stage(sourcePath: string): Promise<StageResult> {
-  const resolvedPath = resolve(sourcePath);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-  let stats;
+/** 파일을 스트리밍해서 sha256 hex digest를 계산한다. */
+async function computeSha256(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  const readable = createReadStream(filePath);
+  await pipeline(readable, async function* (source) {
+    for await (const chunk of source) {
+      hash.update(chunk as Buffer);
+      yield chunk as Buffer;
+    }
+  });
+  return hash.digest("hex");
+}
+
+/** zip 엔트리의 정규화 경로가 destDir 안에 있는지 검사한다 (zip slip 방지). */
+function isSafeEntry(entryPath: string, destDir: string): boolean {
+  if (entryPath.includes("..")) return false;
+  const normalized = path.normalize(path.join(destDir, entryPath));
+  const normalizedDest = path.normalize(destDir);
+  return (
+    normalized === normalizedDest ||
+    normalized.startsWith(normalizedDest + path.sep)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Core
+// ---------------------------------------------------------------------------
+
+/**
+ * sourcePath를 스테이지한다.
+ *
+ * - dry-run (기본): 경로 존재 확인 후 resolvedPath 반환.
+ * - unzip: .zip 파일을 destDir(또는 임시 폴더)에 해제하고 결과 반환.
+ *
+ * @throws Error — 경로가 존재하지 않거나 unzip 모드에서 파일이 아닌 경우
+ */
+export async function stage(
+  sourcePath: string,
+  opts: StageOptions = {}
+): Promise<StageResult> {
+  const mode = opts.mode ?? "dry-run";
+  const resolvedSource = path.resolve(sourcePath);
+
+  let stats: Awaited<ReturnType<typeof stat>>;
   try {
-    stats = await stat(resolvedPath);
+    stats = await stat(resolvedSource);
   } catch {
-    throw new Error(`analyzer: sourcePath not found: ${resolvedPath}`);
+    throw new Error(`analyzer: sourcePath not found: ${resolvedSource}`);
   }
 
-  if (!stats.isDirectory()) {
+  // dry-run: 디렉터리만 허용 (기존 동작 유지)
+  if (mode === "dry-run") {
+    if (!stats.isDirectory()) {
+      throw new Error(
+        `analyzer: sourcePath must be a directory (use mode="unzip" for zip files): ${resolvedSource}`
+      );
+    }
+    return { resolvedPath: resolvedSource, isDirectory: true };
+  }
+
+  // unzip mode
+  if (!stats.isFile()) {
     throw new Error(
-      `analyzer: sourcePath must be a directory (zip support is P1): ${resolvedPath}`
+      `analyzer: unzip mode requires a file path, got: ${resolvedSource}`
     );
   }
 
-  return { resolvedPath, isDirectory: true };
+  // sha256 + size (스트리밍, 대용량 대응)
+  const [sha256, sizeBytes] = await Promise.all([
+    computeSha256(resolvedSource),
+    Promise.resolve(stats.size),
+  ]);
+
+  const sha256Short = sha256.slice(0, 12);
+  const destDir =
+    opts.destDir ?? path.join(os.tmpdir(), `camellia-stage-${sha256Short}`);
+
+  await mkdir(destDir, { recursive: true });
+
+  // unzipper.Open.file(): 중앙 디렉터리를 먼저 읽어 엔트리 목록 취득
+  // → Parse 스트림보다 안정적이고 랜덤 접근이 가능하다.
+  const directory = await unzipper.Open.file(resolvedSource);
+
+  await Promise.all(
+    directory.files.map(async (file) => {
+      const entryPath = file.path;
+
+      // zip slip 방지: ".." 포함 또는 destDir 탈출 경로는 skip
+      if (!isSafeEntry(entryPath, destDir)) {
+        process.stderr.write(`[stager] skip unsafe zip entry: ${entryPath}\n`);
+        return;
+      }
+
+      const fullPath = path.join(destDir, entryPath);
+
+      if (file.type === "Directory") {
+        await mkdir(fullPath, { recursive: true });
+        return;
+      }
+
+      await mkdir(path.dirname(fullPath), { recursive: true });
+
+      await new Promise<void>((resolve, reject) => {
+        const readStream = file.stream();
+        const writeStream = createWriteStream(fullPath);
+        readStream.pipe(writeStream);
+        writeStream.on("finish", resolve);
+        writeStream.on("error", reject);
+        readStream.on("error", reject);
+      });
+    })
+  );
+
+  const cleanup = async (): Promise<void> => {
+    await rm(destDir, { recursive: true, force: true });
+  };
+
+  return {
+    resolvedPath: destDir,
+    isDirectory: true,
+    sha256,
+    sizeBytes,
+    cleanup,
+  };
 }

@@ -14,15 +14,18 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@camellia/ir-schema": "workspace:*",
     "fast-glob": "^3.3.2",
+    "unzipper": "^0.12.3",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/unzipper": "^0.10.10",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

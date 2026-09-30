@@ -182,7 +182,7 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
 function parseRequirementsTxt(content: string): string[] {
   return content
     .split("\n")
-    .map((line) => line.trim().split(/[>=<!;\[]/)[0].trim())
+    .map((line) => line.trim().split(/[>=<!;[]/)[0].trim())
     .filter((p) => p.length > 0 && !p.startsWith("#"));
 }
 

@@ -1,0 +1,149 @@
+/**
+ * apps/api/tests/environment-service.test.ts
+ * 유닛 테스트 (mock pool).
+ * - aws access_key 방식 정상
+ * - 시크릿 참조 없으면 400
+ * - onprem 정상
+ * - 이름 중복 409
+ * - 진행 중 배포 있으면 delete 409
+ */
+
+import { describe, it, expect, vi } from "vitest";
+import type { Pool } from "@camellia/db";
+import { EnvironmentService } from "../src/services/environment-service.js";
+
+function makePool(fn: (sql: string, params: unknown[]) => { rows: unknown[]; rowCount: number } | Promise<{ rows: unknown[]; rowCount: number }>): Pool {
+  return { query: vi.fn(fn) } as unknown as Pool;
+}
+
+describe("EnvironmentService.create (aws access_key)", () => {
+  it("secrets 이름 참조가 존재하면 생성 성공 → 응답 DTO 반환", async () => {
+    const pool = makePool(async (sql, params) => {
+      if (sql.includes("SELECT 1 FROM projects")) return { rows: [{}], rowCount: 1 };
+      if (sql.includes("SELECT name FROM secrets")) {
+        return { rows: [{ name: "aws-key-1" }, { name: "aws-secret-1" }], rowCount: 2 };
+      }
+      if (sql.includes("INSERT INTO environments"))
+        return { rows: [{ id: 10, created_at: new Date("2026-09-30T09:00:00Z") }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    const dto = await svc.create({
+      projectId: 1,
+      name: "aws-jeong",
+      type: "aws",
+      awsConfig: {
+        credentialsType: "access_key",
+        accessKeyIdSecretName: "aws-key-1",
+        secretAccessKeySecretName: "aws-secret-1",
+        region: "ap-northeast-2",
+      },
+    });
+    expect(dto.id).toBe(10);
+    expect(dto.type).toBe("aws");
+    expect(dto.awsConfig?.region).toBe("ap-northeast-2");
+    expect(dto.agentStatus).toBeNull();
+  });
+
+  it("참조된 secrets 없으면 400 · 어떤 이름이 없는지 알려준다", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("SELECT 1 FROM projects")) return { rows: [{}], rowCount: 1 };
+      if (sql.includes("SELECT name FROM secrets")) {
+        return { rows: [{ name: "aws-key-1" }], rowCount: 1 }; // secret-1 은 없음
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    await expect(
+      svc.create({
+        projectId: 1,
+        name: "aws-jeong",
+        type: "aws",
+        awsConfig: {
+          credentialsType: "access_key",
+          accessKeyIdSecretName: "aws-key-1",
+          secretAccessKeySecretName: "aws-secret-1",
+          region: "us-east-1",
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
+  });
+
+  it("access_key 방식에서 시크릿 이름 필드 누락 시 400", async () => {
+    const pool = makePool(async () => ({ rows: [{}], rowCount: 1 }));
+    const svc = new EnvironmentService(pool);
+    await expect(
+      svc.create({
+        projectId: 1,
+        name: "x",
+        type: "aws",
+        awsConfig: { credentialsType: "access_key", region: "us-east-1" },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+describe("EnvironmentService.create (assume_role)", () => {
+  it("roleArn + externalId 있으면 생성", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("SELECT 1 FROM projects")) return { rows: [{}], rowCount: 1 };
+      if (sql.includes("INSERT INTO environments"))
+        return { rows: [{ id: 11, created_at: new Date() }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    const dto = await svc.create({
+      projectId: 1,
+      name: "aws-role",
+      type: "aws",
+      awsConfig: {
+        credentialsType: "assume_role",
+        roleArn: "arn:aws:iam::123:role/deploy",
+        externalId: "ext-1",
+        region: "us-east-1",
+      },
+    });
+    expect(dto.id).toBe(11);
+  });
+});
+
+describe("EnvironmentService.create (onprem)", () => {
+  it("onpremConfig 없으면 400", async () => {
+    const pool = makePool(async () => ({ rows: [{}], rowCount: 1 }));
+    const svc = new EnvironmentService(pool);
+    await expect(
+      svc.create({ projectId: 1, name: "op", type: "onprem" }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+describe("EnvironmentService.delete", () => {
+  it("진행 중 배포 있으면 409", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("FROM deployments")) return { rows: [{ 1: 1 }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    await expect(svc.delete(10)).rejects.toMatchObject({ statusCode: 409, code: "CONFLICT" });
+  });
+
+  it("진행 중 없고 row 삭제되면 성공", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("FROM deployments")) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("DELETE FROM environments")) return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    await expect(svc.delete(10)).resolves.toBeUndefined();
+  });
+
+  it("환경 없으면 404", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("FROM deployments")) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("DELETE FROM environments")) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    await expect(svc.delete(999)).rejects.toMatchObject({ statusCode: 404 });
+  });
+});

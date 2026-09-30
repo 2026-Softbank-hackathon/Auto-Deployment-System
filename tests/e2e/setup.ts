@@ -20,8 +20,12 @@ const pg = require("pg") as typeof import("pg");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export const E2E_DATABASE_URL = "postgres://camellia:camellia@localhost:5432/camellia_e2e";
-const ADMIN_DATABASE_URL = "postgres://camellia:camellia@localhost:5432/camellia";
+// 환경변수 DATABASE_URL이 있으면 그걸 admin/base URL로 사용 (host/port/user 재활용)
+// 없으면 5432 로컬 기본값
+const BASE_URL = process.env["DATABASE_URL"] ?? "postgres://camellia:camellia@localhost:5432/camellia";
+const ADMIN_DATABASE_URL = BASE_URL;
+// e2e DB는 base URL의 DB 이름만 camellia_e2e로 교체
+export const E2E_DATABASE_URL = BASE_URL.replace(/\/[^/?]+(\?|$)/, "/camellia_e2e$1");
 
 const MIGRATIONS_DIR = join(__dirname, "../../packages/db/migrations");
 

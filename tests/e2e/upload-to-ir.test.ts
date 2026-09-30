@@ -31,7 +31,10 @@ import * as fs from "node:fs/promises";
 
 const skipE2e = process.env["SKIP_E2E"] === "true";
 
-const E2E_DATABASE_URL = "postgres://camellia:camellia@localhost:5432/camellia_e2e";
+// setup.ts에서 이미 process.env.DATABASE_URL을 e2e DB로 오버라이드했음. env 우선.
+const E2E_DATABASE_URL =
+  process.env["DATABASE_URL"] ??
+  "postgres://camellia:camellia@localhost:5432/camellia_e2e";
 
 // ── describe block ────────────────────────────────────────────────────────────
 
@@ -190,7 +193,8 @@ describe.skipIf(skipE2e)("e2e: upload → analyze → IR → approve", () => {
       expect(hasBuild).toBe(true);
     }
 
-    expect(body.version).toBeGreaterThan(0);
+    // Postgres BIGINT는 pg 라이브러리가 안전을 위해 string으로 반환 → Number 변환
+    expect(Number(body.version)).toBeGreaterThan(0);
   });
 
   // ── Test 4: target approve → queued ──────────────────────────────────────

@@ -6,10 +6,10 @@ const MAX_ATTEMPTS = 8;
 const RETRY_INTERVAL_MS = 5_000;
 
 export const VerifyJobPayloadSchema = z.object({
-  jobId: z.string().min(1),
+  jobId: z.string().min(1).max(200),
   attempt: z.number().int().min(1),
   deploymentId: z.number().int().positive(),
-  environmentId: z.string().min(1),
+  environmentId: z.string().min(1).max(100),
   environmentType: z.enum(["aws", "onprem"]),
   serviceId: z.string().min(1),
   targetUrl: z.string().url(),
@@ -23,28 +23,30 @@ export const VerifyJobPayloadSchema = z.object({
 
 export type VerifyJobPayload = z.infer<typeof VerifyJobPayloadSchema>;
 
-export type HealthCheckAttempt = {
-  attempt: number;
-  timestamp: string;
-  statusCode?: number;
-  latencyMs?: number;
-  passed: boolean;
-  error?: string;
-};
+export const HealthCheckAttemptSchema = z.object({
+  attempt: z.number().int().min(1),
+  timestamp: z.string().datetime(),
+  statusCode: z.number().int().min(100).max(599).optional(),
+  latencyMs: z.number().int().nonnegative().optional(),
+  passed: z.boolean(),
+  error: z.string().min(1).optional(),
+});
+export type HealthCheckAttempt = z.infer<typeof HealthCheckAttemptSchema>;
 
-export type VerifyResult = {
-  deploymentId: number;
-  environmentId: string;
-  status: "passed" | "failed";
-  targetUrl: string;
-  checks: HealthCheckAttempt[];
-  consecutivePassed: number;
-  requiredPasses: typeof REQUIRED_PASSES;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  failureReason?: string;
-};
+export const VerifyResultSchema = z.object({
+  deploymentId: z.number().int().nonnegative(),
+  environmentId: z.string(),
+  status: z.enum(["passed", "failed"]),
+  targetUrl: z.string(),
+  checks: z.array(HealthCheckAttemptSchema),
+  consecutivePassed: z.number().int().nonnegative(),
+  requiredPasses: z.literal(REQUIRED_PASSES),
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime(),
+  durationMs: z.number().int().nonnegative(),
+  failureReason: z.string().min(1).optional(),
+});
+export type VerifyResult = z.infer<typeof VerifyResultSchema>;
 
 export type VerifyRuntime = {
   sleep: (milliseconds: number) => Promise<void>;
@@ -245,6 +247,9 @@ function buildHealthUrl(targetUrl: string, healthPath: string): string {
   }
   if (!healthPath.startsWith("/") || healthPath.startsWith("//")) {
     throw new Error("health path must be origin-relative");
+  }
+  if (healthPath.includes("?") || healthPath.includes("#")) {
+    throw new Error("health path query and fragment are not allowed");
   }
 
   const healthUrl = new URL(healthPath, base);

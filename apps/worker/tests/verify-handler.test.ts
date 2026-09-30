@@ -240,11 +240,15 @@ describe("handleVerify", () => {
     );
   });
 
-  it("절대 URL 형태의 health path로 origin을 변경하지 못하게 거부함", async () => {
+  it.each([
+    ["origin을 변경하는 경로", "//attacker.example/health"],
+    ["query를 포함한 경로", "/health?token=secret"],
+    ["fragment를 포함한 경로", "/health#internal"],
+  ])("%s를 요청 전에 거부함", async (_name, healthPath) => {
     const target = await startStatusServer([200]);
     const payload = makePayload(target.targetUrl, {
       health: {
-        path: "//attacker.example/health",
+        path: healthPath,
         expectedStatus: 200,
         timeoutMs: 3_000,
       },

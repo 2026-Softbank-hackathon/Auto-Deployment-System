@@ -128,6 +128,7 @@ export const DeploymentStepSchema = z.object({
   id: z.number().int().positive(),
   deployment_id: z.number().int().positive(),
   step_name: z.string().min(1),
+  job_id: z.string().min(1).nullable(),
   status: StepStatus,
   started_at: z.date(),
   finished_at: z.date().nullable(),

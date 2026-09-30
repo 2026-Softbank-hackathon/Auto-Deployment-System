@@ -199,6 +199,7 @@ async function executeHealthCheck(
   }, timeoutMs);
   const cancelRequest = () => controller.abort();
   externalSignal?.addEventListener("abort", cancelRequest, { once: true });
+  if (externalSignal?.aborted) controller.abort();
 
   try {
     const response = await fetch(targetUrl, {

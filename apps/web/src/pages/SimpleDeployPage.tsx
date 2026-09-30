@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { createDeployment, createProject } from '../api/deployment-api';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
-import { StatusTape } from '../components/ui/StatusTape';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
@@ -40,7 +39,6 @@ export function SimpleDeployPage({ onStarted }: { onStarted: (deploymentId: stri
   return <>
     <div className="page-head">
       <div><h1>{t.deploy.title}</h1><p>{t.deploy.description}</p></div>
-      <StatusTape>SOURCE · ZIP</StatusTape>
     </div>
     <section className="deploy-card" aria-label={t.deploy.cardLabel}>
       <PipelineRail sourceReady={Boolean(file)} />

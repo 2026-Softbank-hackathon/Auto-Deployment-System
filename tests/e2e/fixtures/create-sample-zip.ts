@@ -10,9 +10,14 @@
  *   3. createSampleNodePostgresZipBuffer  — Express + pg + .env.example + Dockerfile
  *   4. createSampleMsaZipBuffer           — 다중 서비스 (services/api + services/worker)
  *
+ * 실제 샘플 앱 디렉터리(apps/samples/*)는 createZipFromDir 로 zip 한다.
+ *
  * 하위 호환:
  *   createSampleZipBuffer  — createSampleExpressZipBuffer 의 alias (upload-to-ir.test.ts 호환)
  */
+
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // ── ZIP builder (store mode, no compression) ──────────────────────────────────
 
@@ -307,6 +312,25 @@ export function createSampleMsaZipBuffer(): Buffer {
     { name: "services/worker/worker.js", data: MSA_WORKER_JS },
     { name: "services/worker/Dockerfile", data: MSA_WORKER_DOCKERFILE },
   ]);
+}
+
+// ── 5. 실제 샘플 앱 디렉터리 (apps/samples/*) ─────────────────────────────────
+
+/** README 의 업로드용 zip 과 같게 node_modules · dist · .env 는 제외한다. */
+const DIR_ZIP_EXCLUDES = new Set(["node_modules", "dist", ".env"]);
+
+export function createZipFromDir(dir: string): Buffer {
+  const entries: ZipEntry[] = [];
+  const walk = (rel: string): void => {
+    for (const d of readdirSync(join(dir, rel), { withFileTypes: true })) {
+      if (DIR_ZIP_EXCLUDES.has(d.name)) continue;
+      const childRel = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) walk(childRel);
+      else if (d.isFile()) entries.push({ name: childRel, data: readFileSync(join(dir, childRel)) });
+    }
+  };
+  walk("");
+  return buildZip(entries);
 }
 
 // ── 하위 호환 alias (upload-to-ir.test.ts) ────────────────────────────────────

@@ -1,0 +1,13 @@
+$ir_version: "0.1.0"
+metadata:
+  name: simple-http-app
+  version: "1.0.0"
+  description: "단순 HTTP 서비스 1개, 리소스 없음"
+services:
+  api:
+    type: http
+    port: 3000
+    size: small
+    expose: public
+deploy:
+  profile: aws-ecs-basic

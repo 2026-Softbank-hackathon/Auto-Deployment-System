@@ -208,7 +208,7 @@ describe("deployments 응답 계약", () => {
 
     const form = new FormData();
     form.append("project_id", "1");
-    form.append("target", "aws-ecs-basic");
+    form.append("target", "aws");
     form.append("source", Buffer.from("PK fake zip"), { filename: "app.zip", contentType: "application/zip" });
 
     const res = await server.inject({

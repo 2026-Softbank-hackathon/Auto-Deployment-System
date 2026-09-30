@@ -4,13 +4,13 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
-import { TARGET_PROFILES } from "@camellia/contracts";
+import { TARGET_VENDORS, type TargetVendor } from "@camellia/contracts";
 import { DeploymentService } from "../services/deployment-service.js";
+import { resolveProfile } from "../services/profile-resolver.js";
 import { idParams } from "../plugins/swagger.js";
 
-const VALID_PROFILES = new Set<string>(TARGET_PROFILES);
+const VALID_VENDORS = new Set<string>(TARGET_VENDORS);
 
 const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentService }> = async (
   fastify,
@@ -30,7 +30,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
         properties: {
           source: { type: "string", format: "binary", description: "소스 zip (최대 100MB)" },
           project_id: { type: "integer", minimum: 1 },
-          target: { type: "string", enum: [...VALID_PROFILES] },
+          target: { type: "string", enum: [...VALID_VENDORS] },
         },
       },
     },
@@ -61,31 +61,32 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       throw new ApiError(413, "FILE_TOO_LARGE", "zip 파일 크기가 100MB를 초과합니다.", "zip 파일 최대 크기는 100MB입니다.");
     }
 
-    // Validate target profile
+    // Validate target vendor
     const target = rawTarget ?? "";
-    if (!VALID_PROFILES.has(target)) {
+    if (!VALID_VENDORS.has(target)) {
       throw new ApiError(
         400,
         "VALIDATION_ERROR",
-        `target은 ${[...VALID_PROFILES].join(" 또는 ")} 중 하나여야 합니다.`,
-        "올바른 target 프로필을 지정하세요."
+        "target 은 aws 또는 onprem 이어야 합니다.",
+        "올바른 target 벤더를 지정하세요."
       );
     }
 
-    // project_id: optional — TODO auto-create if missing (P1)
+    // project_id: required
     const projectIdNum = rawProjectId ? Number(rawProjectId) : null;
     if (projectIdNum !== null && (!Number.isFinite(projectIdNum) || projectIdNum <= 0)) {
       throw new ApiError(400, "VALIDATION_ERROR", "project_id는 양수 정수여야 합니다.");
     }
-
-    // For now project_id is required until auto-create is implemented
     if (projectIdNum === null) {
       throw new ApiError(400, "VALIDATION_ERROR", "project_id 필드가 필요합니다.", "POST /projects 로 프로젝트를 먼저 생성하세요.");
     }
 
+    // vendor → profile ID 매핑
+    const resolvedProfileId = resolveProfile(target as TargetVendor);
+
     const result = await svc.create({
       projectId: projectIdNum,
-      targetProfile: target,
+      targetProfile: resolvedProfileId,
       fileBuffer,
     });
 

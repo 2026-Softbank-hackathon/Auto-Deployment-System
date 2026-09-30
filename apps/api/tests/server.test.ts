@@ -155,17 +155,18 @@ describe("GET /api/v1/projects", () => {
 // ── 3. POST /deployments multipart ───────────────────────────────────────────
 
 describe("POST /api/v1/deployments", () => {
-  it("accepts multipart zip and returns 202 with deploymentId", async () => {
-    // DB: deployments insert
+  function setupDeploymentMocks() {
     mockPool.on(/INSERT INTO deployments/, () => ({ rows: [{ id: 42 }] }));
-    // DB: source_versions insert
     mockPool.on(/INSERT INTO source_versions/, () => ({ rows: [{ id: 1 }] }));
-    // DB: client query (BEGIN/COMMIT)
     mockPool.on(/BEGIN|COMMIT|ROLLBACK/, () => ({ rows: [] }));
+  }
+
+  it("accepts multipart zip and returns 202 with deploymentId", async () => {
+    setupDeploymentMocks();
 
     const form = new FormData();
     form.append("project_id", "1");
-    form.append("target", "aws-ecs-basic");
+    form.append("target", "aws");
     form.append("source", Buffer.from("PK fake zip content"), {
       filename: "app.zip",
       contentType: "application/zip",
@@ -186,6 +187,73 @@ describe("POST /api/v1/deployments", () => {
     expect(mockBoss.sentJobs).toHaveLength(1);
     expect(mockBoss.sentJobs[0]!.name).toBe("analyze");
   });
+
+  it("vendor aws → DB target_profile = aws-ecs-basic", async () => {
+    let capturedProfile: string | undefined;
+    // MockPool 은 첫 매치 핸들러가 이기니 setup 전에 등록해야 캡처가 뜬다.
+    mockPool.on(/INSERT INTO deployments/, (params) => {
+      capturedProfile = params[1] as string;
+      return { rows: [{ id: 1 }] };
+    });
+    setupDeploymentMocks();
+
+    const form = new FormData();
+    form.append("project_id", "1");
+    form.append("target", "aws");
+    form.append("source", Buffer.from("PK fake zip"), { filename: "app.zip", contentType: "application/zip" });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/deployments",
+      headers: form.getHeaders(),
+      payload: form.getBuffer(),
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(capturedProfile).toBe("aws-ecs-basic");
+  });
+
+  it("vendor onprem → DB target_profile = onprem-docker-basic", async () => {
+    let capturedProfile: string | undefined;
+    mockPool.on(/INSERT INTO deployments/, (params) => {
+      capturedProfile = params[1] as string;
+      return { rows: [{ id: 2 }] };
+    });
+    setupDeploymentMocks();
+
+    const form = new FormData();
+    form.append("project_id", "1");
+    form.append("target", "onprem");
+    form.append("source", Buffer.from("PK fake zip"), { filename: "app.zip", contentType: "application/zip" });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/deployments",
+      headers: form.getHeaders(),
+      payload: form.getBuffer(),
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(capturedProfile).toBe("onprem-docker-basic");
+  });
+
+  it("구 profile ID (aws-ecs-basic) 를 target 으로 보내면 400 VALIDATION_ERROR", async () => {
+    const form = new FormData();
+    form.append("project_id", "1");
+    form.append("target", "aws-ecs-basic");
+    form.append("source", Buffer.from("PK fake zip"), { filename: "app.zip", contentType: "application/zip" });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/deployments",
+      headers: form.getHeaders(),
+      payload: form.getBuffer(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe("VALIDATION_ERROR");
+  });
+
 });
 
 // ── 4. GET /deployments/:id ───────────────────────────────────────────────────

@@ -1,0 +1,8 @@
+#!/bin/sh
+# git pull --rebase · git rebase 후: lockfile이 바뀌었으면 pnpm install
+# (amend는 제외. stdin의 재작성 목록은 내 커밋만 담고 upstream 변경은 없으므로
+#  rebase 시작 전 HEAD인 ORIG_HEAD와 비교)
+cat >/dev/null
+[ "$1" = "rebase" ] || exit 0
+sh "$(dirname "$0")/lib/pnpm-install-if-changed.sh" ORIG_HEAD HEAD
+exit 0

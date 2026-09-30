@@ -1,0 +1,8 @@
+#!/bin/sh
+# git checkout/switch <branch> 후: lockfile이 바뀌었으면 pnpm install
+# $1 이전 HEAD, $2 새 HEAD, $3 1=브랜치 체크아웃 / 0=파일 체크아웃
+[ "$3" = "1" ] || exit 0
+# 최초 clone · worktree add (이전 HEAD가 전부 0)은 제외
+case "$1" in *[!0]*) ;; *) exit 0 ;; esac
+sh "$(dirname "$0")/lib/pnpm-install-if-changed.sh" "$1" "$2"
+exit 0

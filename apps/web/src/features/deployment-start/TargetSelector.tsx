@@ -1,0 +1,3 @@
+export type P0Target = 'aws' | 'onprem';
+const targets = [{ id: 'aws', code: 'AWS', name: 'AWS ECS', description: '검증된 클라우드 프로필' }, { id: 'onprem', code: 'ON', name: 'ON-PREM', description: 'Docker Compose + Tunnel' }] as const;
+export function TargetSelector({ value, onChange }: { value: P0Target | null; onChange: (value: P0Target) => void }) { return <section className="panel"><h2>배포 대상 선택</h2><p>기본값은 없습니다. P0에서는 AWS ECS와 On-Prem만 선택할 수 있습니다.</p><div className="targets">{targets.map((t) => <button className={value === t.id ? 'selected' : ''} onClick={() => onChange(t.id)} key={t.id}><code>{t.code}</code><strong>{t.name}</strong><small>{t.description}</small></button>)}</div></section>; }

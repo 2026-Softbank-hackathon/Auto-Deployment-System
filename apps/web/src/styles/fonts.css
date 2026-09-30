@@ -1,0 +1,10 @@
+/* 데모 현장 네트워크 대비 — 폰트는 @fontsource로 로컬 번들한다 (DESIGN_SPEC §4). */
+@import "@fontsource/jua/400.css";
+/* Noto Sans는 가변 폰트 — 400/500/700을 파일 하나로 처리해 @font-face 선언이 1/3로 준다. */
+@import "@fontsource-variable/noto-sans-kr/index.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+/* 일본어 모드 — 본문 Noto Sans JP, 제목·키캡은 Jua와 비슷한 둥근 글꼴. unicode-range 분할이라 쓰는 글자 구간만 내려받는다. */
+@import "@fontsource-variable/noto-sans-jp/index.css";
+@import "@fontsource/m-plus-rounded-1c/700.css";

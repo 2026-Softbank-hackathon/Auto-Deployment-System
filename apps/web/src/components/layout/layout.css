@@ -55,6 +55,5 @@
   .app-header { padding: 0 16px; }
   .app-header__title { display: none; }
   .app-header__controls { width: 100%; justify-content: flex-end; }
-  .language-toggle__option { min-width: 56px; }
   .content { padding: 24px 16px 48px; gap: 20px; }
 }

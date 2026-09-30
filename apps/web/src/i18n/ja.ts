@@ -6,6 +6,7 @@ export const ja: Messages = {
   header: {
     titles: { dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ', progress: 'デプロイ進行', result: 'デプロイ結果' },
     language: '言語',
+    sound: { label: 'サウンド', on: 'オン', off: 'オフ' },
   },
   nav: { label: 'メインメニュー', dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ!' },
   stages: { source: 'ソースアップロード', analyze: 'AI分析', deploy: 'デプロイ', verify: '検証', done: '完了' },

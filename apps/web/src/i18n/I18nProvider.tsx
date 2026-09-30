@@ -1,16 +1,24 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { DeploymentApiError } from '../api/deployment-api';
 import { ja } from './ja';
 import { ko, type Messages } from './ko';
+import { preloadLanguageFonts, runLanguageTransition } from './language-transition';
 
 export type Language = 'ko' | 'ja';
 
 const dictionaries: Record<Language, Messages> = { ko, ja };
 const storageKey = 'camellia.language';
 
-interface I18nContextValue { language: Language; setLanguage: (language: Language) => void; t: Messages }
+interface I18nContextValue {
+  language: Language;
+  /** 방금 고른 언어. 글꼴을 받는 동안에도 토글이 바로 반응하도록 language보다 먼저 바뀐다. */
+  selectedLanguage: Language;
+  setLanguage: (language: Language) => void;
+  t: Messages;
+}
 
-const I18nContext = createContext<I18nContextValue>({ language: 'ko', setLanguage: () => {}, t: ko });
+const I18nContext = createContext<I18nContextValue>({ language: 'ko', selectedLanguage: 'ko', setLanguage: () => {}, t: ko });
 
 /** 처음 접속하면 한국어. 사용자가 바꾼 언어만 저장한다. */
 function readPreference(): Language {
@@ -19,16 +27,29 @@ function readPreference(): Language {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(readPreference);
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
+  const requested = useRef<Language>(language);
 
+  /** 글꼴을 먼저 받아 두고, 화면 전체를 교차 전환하면서 언어를 바꾼다. */
   const setLanguage = useCallback((next: Language) => {
-    setLanguageState(next);
+    if (next === requested.current) return;
+    requested.current = next;
+    setSelectedLanguage(next);
     try { window.localStorage.setItem(storageKey, next); } catch { /* 저장 불가 환경에서는 이번 세션에만 적용 */ }
+    void preloadLanguageFonts(next, dictionaries[next]).then(() => {
+      if (requested.current !== next) return; // 기다리는 사이 다른 언어를 눌렀으면 그쪽만 반영
+      runLanguageTransition(() => {
+        // 전환 스냅샷이 새 언어 화면을 찍도록 DOM과 문서 언어를 동기로 바꾼다.
+        flushSync(() => setLanguageState(next));
+        document.documentElement.lang = next;
+      });
+    });
   }, []);
 
   // 스크린리더 발음과 언어별 폰트(:lang)를 위해 문서 언어도 함께 바꾼다.
   useEffect(() => { document.documentElement.lang = language; }, [language]);
 
-  const value = useMemo(() => ({ language, setLanguage, t: dictionaries[language] }), [language, setLanguage]);
+  const value = useMemo(() => ({ language, selectedLanguage, setLanguage, t: dictionaries[language] }), [language, selectedLanguage, setLanguage]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

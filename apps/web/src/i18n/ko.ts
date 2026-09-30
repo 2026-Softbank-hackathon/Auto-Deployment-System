@@ -4,6 +4,7 @@ export const ko = {
   header: {
     titles: { dashboard: '대시보드', deploy: '간단 배포', progress: '배포 진행', result: '배포 결과' },
     language: '언어',
+    sound: { label: '사운드', on: '켬', off: '끔' },
   },
   nav: { label: '메인 메뉴', dashboard: '대시보드', deploy: '간단 배포!' },
   stages: { source: '소스 업로드', analyze: 'AI 분석', deploy: '배포', verify: '검증', done: '완료' },

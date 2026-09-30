@@ -27,8 +27,10 @@ import { DiagnosisService } from "./services/diagnosis-service.js";
 import { AiUsageService } from "./services/ai-usage-service.js";
 import { SecretService } from "./services/secret-service.js";
 import { EnvironmentService } from "./services/environment-service.js";
+import { EnvVarService } from "./services/env-var-service.js";
 
 import projectsRoutes from "./routes/projects.js";
+import projectEnvRoutes from "./routes/project-env.js";
 import deploymentsRoutes from "./routes/deployments.js";
 import deploymentEventsRoutes from "./routes/deployment-events.js";
 import deploymentIrRoutes from "./routes/deployment-ir.js";
@@ -96,6 +98,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const secretMasterKey = opts.secretMasterKey ?? (await import("node:crypto")).randomBytes(32);
   const secretService = new SecretService(opts.pool, secretMasterKey);
   const environmentService = new EnvironmentService(opts.pool);
+  const envVarService = new EnvVarService(opts.pool);
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -145,6 +148,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(projectsRoutes, {
       prefix: "/projects",
       projectService,
+    });
+
+    v1.register(projectEnvRoutes, {
+      prefix: "/projects",
+      envVarService,
     });
 
     v1.register(deploymentsRoutes, {

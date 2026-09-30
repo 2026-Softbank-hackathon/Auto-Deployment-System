@@ -1,0 +1,35 @@
+$ir_version: "0.1.0"
+
+metadata:
+  name: todo-app
+  version: 1.0.0
+  description: Node.js 기반 할일 관리 앱
+  owner: camellia-team
+
+services:
+  api:
+    type: http
+    build:
+      dockerfile: ./Dockerfile
+      context: .
+    command: ["node", "server.js"]
+    port: 3000
+    health:
+      path: /health
+      expected_status: 200
+      timeout_seconds: 3
+    env:
+      - NODE_ENV
+    expose: public
+    size: small
+
+deploy:
+  profile: onprem-docker-basic
+  region: local
+
+expose:
+  tls: true
+  paths:
+    - path: /
+      service: api
+      port: 3000

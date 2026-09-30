@@ -10,7 +10,8 @@ import type { WorkerDeps } from "./deps.js";
 import { handleAnalyze, type AnalyzeJobPayload } from "./handlers/analyze.js";
 import { handleBuild, type BuildJobPayload } from "./handlers/build.js";
 import { handleProvision, type ProvisionJobPayload } from "./handlers/provision.js";
-import { handleVerify, type VerifyJobPayload } from "./handlers/verify.js";
+import type { VerifyJobPayload } from "./handlers/verify.js";
+import { runVerifyJob } from "./verify-orchestrator.js";
 
 export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void> {
   // pg-boss v10 breaking change: send/work 이전에 큐를 명시적으로 생성해야 함.
@@ -62,7 +63,7 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
   await boss.work("verify", async (jobs) => {
     for (const job of jobs) {
       try {
-        await handleVerify(job as { data: VerifyJobPayload }, deps);
+        await runVerifyJob(job as { data: VerifyJobPayload }, deps);
       } catch (e) {
         deps.log?.error({ err: e, jobId: job.id }, "verify job failed");
         throw e;

@@ -6,6 +6,9 @@ Thumbs.db
 .omc/
 .claude/settings.local.json
 
+# Local Codex instructions
+AGENTS.md
+
 # Node
 node_modules/
 npm-debug.log*

@@ -16,7 +16,8 @@
     "db:migrate": "pnpm --filter @camellia/db migrate",
     "dev": "concurrently 'pnpm --filter @camellia/api dev' 'pnpm --filter @camellia/worker dev'",
     "dev:api": "pnpm --filter @camellia/api dev",
-    "dev:worker": "pnpm --filter @camellia/worker dev"
+    "dev:worker": "pnpm --filter @camellia/worker dev",
+    "prepare": "git config core.hooksPath .githooks || exit 0"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

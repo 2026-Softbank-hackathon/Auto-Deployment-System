@@ -1,0 +1,4 @@
+#!/bin/sh
+# git pull(merge · fast-forward) · git merge 후: lockfile이 바뀌었으면 pnpm install
+sh "$(dirname "$0")/lib/pnpm-install-if-changed.sh" ORIG_HEAD HEAD
+exit 0

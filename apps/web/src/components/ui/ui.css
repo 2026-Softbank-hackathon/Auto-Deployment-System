@@ -1,0 +1,121 @@
+/* 공통 컴포넌트 — 색은 styles/tokens.css 변수만 참조한다. */
+
+/* Keycap */
+.keycap {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  border: 0; border-radius: 12px; text-decoration: none; white-space: nowrap;
+  font-family: var(--font-body); font-weight: 700;
+  transition: transform var(--dur-tap) var(--ease-roll), box-shadow var(--dur-tap) var(--ease-roll), background-color var(--dur-quick);
+}
+.keycap--md { min-height: 44px; padding: 0 16px; font-size: 14px; }
+.keycap--lg { min-height: 56px; padding: 0 26px; border-radius: var(--radius-key); font-family: var(--font-display); font-size: 19px; font-weight: 400; }
+
+.keycap--primary { background: var(--ink); color: var(--on-ink); box-shadow: 0 4px 0 var(--ink-deep); }
+.keycap--lg.keycap--primary { box-shadow: 0 5px 0 var(--ink-deep); }
+.keycap--primary:hover { color: var(--on-ink); transform: translateY(-1px); box-shadow: 0 6px 0 var(--ink-deep); }
+.keycap--primary:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink-deep); }
+
+.keycap--secondary { background: var(--surface); color: var(--ink); border: var(--border); box-shadow: var(--shadow-rest); }
+.keycap--secondary:hover { color: var(--ink); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
+.keycap--secondary:active { transform: translateY(2px); box-shadow: var(--shadow-press); }
+
+.keycap--ghost { background: transparent; color: var(--ink-soft); font-weight: 400; }
+.keycap--ghost:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--brass); }
+
+.keycap:disabled, .keycap:disabled:hover, .keycap:disabled:active {
+  background: var(--line); color: var(--ink-soft); box-shadow: 0 4px 0 var(--line-strong); transform: none;
+}
+.keycap--ghost:disabled { background: transparent; box-shadow: none; }
+
+/* DeployKeycap */
+.deploy-keycap.keycap--lg { min-height: 60px; padding: 0 28px 0 12px; gap: 14px; font-size: 20px; }
+.deploy-keycap.keycap--md { padding-left: 10px; }
+.deploy-keycap__well {
+  display: flex; justify-content: center; flex-shrink: 0; overflow: hidden;
+  width: 40px; height: 40px; border-radius: 50%; background: var(--ink-deep);
+}
+.deploy-keycap.keycap--md .deploy-keycap__well { width: 34px; height: 34px; }
+.deploy-keycap__well .koro { margin-top: 12px; transition: margin-top var(--dur-roll) var(--ease-roll); }
+.deploy-keycap:hover .deploy-keycap__well .koro { margin-top: 9px; }
+.deploy-keycap:disabled .deploy-keycap__well { background: var(--well-disabled); }
+.deploy-keycap:disabled .deploy-keycap__well .koro { margin-top: 14px; }
+.deploy-keycap--busy:disabled, .deploy-keycap--busy:disabled:hover {
+  background: var(--ink); color: var(--on-ink); box-shadow: 0 1px 0 var(--ink-deep); transform: translateY(3px); cursor: progress;
+}
+.deploy-keycap--busy:disabled .deploy-keycap__well { background: var(--ink-deep); }
+.deploy-keycap--busy:disabled .deploy-keycap__well .koro { margin-top: 9px; }
+
+/* Koro */
+.koro { display: block; flex-shrink: 0; overflow: visible; }
+.koro__body { fill: var(--koro); }
+.koro__shine { fill: none; stroke: var(--surface); stroke-opacity: .45; stroke-width: 4; stroke-linecap: round; }
+.koro__eye { fill: var(--surface); }
+.koro__pupil { fill: var(--ink); }
+.koro__stroke { fill: none; stroke: var(--surface); stroke-width: 3.5; stroke-linecap: round; }
+.koro__sweat { fill: var(--koro-tint); }
+
+/* Marble */
+.marble { display: inline-block; flex-shrink: 0; border-radius: 50%; box-shadow: inset -3px -3px 0 var(--marble-shade); }
+.marble--running { background: var(--koro); }
+.marble--success { background: var(--moss); }
+.marble--failed { background: var(--brick); }
+.marble--waiting { background: var(--pebble); }
+
+/* StatusTape */
+.status-tape {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px;
+  background: var(--ink); color: var(--on-ink); border-radius: var(--radius-tape);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600; line-height: 1.4;
+  letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+}
+.status-tape__dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.status-tape__dot--running { background: var(--koro-on-dark); }
+.status-tape__dot--success { background: var(--moss-on-dark); }
+.status-tape__dot--failed { background: var(--brick-on-dark); }
+.status-tape__dot--waiting { background: var(--pebble); }
+
+/* GadgetIcon */
+.gadget-icon { display: block; flex-shrink: 0; }
+
+/* Rail */
+.rail { position: relative; }
+.rail__track, .rail__fill { position: absolute; border-radius: 2px; pointer-events: none; }
+.rail__track { background: var(--line); }
+.rail__fill { background: var(--brass); transition: width var(--dur-roll) var(--ease-roll), height var(--dur-roll) var(--ease-roll); }
+.rail--horizontal .rail__track,
+.rail--horizontal .rail__fill { top: var(--rail-y, 50%); height: 3px; margin-top: -1.5px; left: var(--rail-start, 0px); }
+.rail--horizontal .rail__track { right: var(--rail-end, 0px); }
+.rail--horizontal .rail__fill { width: calc((100% - var(--rail-start, 0px) - var(--rail-end, 0px)) * var(--rail-progress)); }
+.rail--vertical .rail__track,
+.rail--vertical .rail__fill { left: var(--rail-x, 11px); width: 2px; top: var(--rail-start, 0px); }
+.rail--vertical .rail__track { bottom: var(--rail-end, 0px); }
+.rail--vertical .rail__fill { height: calc((100% - var(--rail-start, 0px) - var(--rail-end, 0px)) * var(--rail-progress)); }
+
+.rail-stop { display: block; width: 11px; height: 11px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line); }
+.rail-stop--done { border-color: var(--brass); }
+.rail-stop--failed { border-color: var(--brick); }
+
+/* SoundToggle */
+.sound-toggle {
+  display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px;
+  background: var(--surface); color: var(--ink); border: var(--border); border-radius: var(--radius-input);
+  box-shadow: 0 2px 0 var(--line);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .06em;
+  transition: transform var(--dur-tap), box-shadow var(--dur-tap);
+}
+.sound-toggle:active { transform: translateY(2px); box-shadow: 0 0 0 var(--line); }
+.sound-toggle[aria-checked="false"] { color: var(--ink-soft); }
+
+/* LanguageToggle */
+.language-toggle {
+  display: inline-flex; height: 44px; padding: 3px; gap: 2px;
+  background: var(--surface); border: var(--border); border-radius: var(--radius-input); box-shadow: 0 2px 0 var(--line);
+}
+.language-toggle__option {
+  min-width: 64px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-soft);
+  font-size: 13px; font-weight: 500; transition: background-color var(--dur-quick), color var(--dur-quick);
+}
+.language-toggle__option:hover { color: var(--ink); }
+.language-toggle__option[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); font-weight: 700; }
+.language-toggle__option:lang(ko) { font-family: "Noto Sans KR Variable", sans-serif; }
+.language-toggle__option:lang(ja) { font-family: "Noto Sans JP Variable", sans-serif; }

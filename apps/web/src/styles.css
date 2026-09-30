@@ -1,0 +1,90 @@
+/*
+ * 공유 페이지 스타일 + 진행/결과 화면(04·06·07 시안 적용 전)의 기존 클래스.
+ * 기존 마크업은 그대로 두고 새 토큰으로만 다시 칠한다.
+ */
+
+/* page head (모든 화면 공통) */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.page-head > div { display: flex; flex-direction: column; gap: 10px; }
+.page-head p { color: var(--ink-soft); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: var(--ink); color: var(--on-ink); border-radius: var(--radius-tape);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .08em; white-space: nowrap;
+}
+.chip.result-success::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--moss-on-dark); }
+
+/* card */
+.panel {
+  display: flex; flex-direction: column; gap: 20px; padding: 32px 36px;
+  background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest);
+}
+.panel h2 { font-size: 24px; }
+.panel p { color: var(--ink-soft); }
+.panel.success { border-color: var(--moss); }
+.panel.failure { border-color: var(--brick); }
+.panel-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.panel-title > div { display: flex; flex-direction: column; gap: 8px; }
+
+/* 기존 버튼 클래스 → 키캡 모양 */
+.primary, .secondary {
+  display: inline-flex; align-items: center; justify-content: center; align-self: flex-start;
+  min-height: 44px; padding: 0 18px; border-radius: 12px;
+  font-family: var(--font-body); font-size: 14px; font-weight: 700; text-decoration: none;
+  transition: transform var(--dur-tap) var(--ease-roll), box-shadow var(--dur-tap) var(--ease-roll);
+}
+.primary { background: var(--ink); color: var(--on-ink); border: 0; box-shadow: 0 4px 0 var(--ink-deep); }
+.primary:hover { color: var(--on-ink); }
+.primary:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink-deep); }
+.primary:disabled { background: var(--line); color: var(--ink-soft); box-shadow: 0 4px 0 var(--line-strong); transform: none; }
+.secondary { background: var(--surface); color: var(--ink); border: var(--border); box-shadow: var(--shadow-rest); }
+.secondary:active { transform: translateY(2px); box-shadow: var(--shadow-press); }
+.compact { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.open-url { margin: 4px 0 8px; }
+.page-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+
+/* 알림 */
+.notice {
+  padding: 14px 16px; border-radius: var(--radius-input);
+  background: var(--paper-sunken); border: var(--border); border-left: 4px solid var(--brass); color: var(--ink);
+}
+.notice.error { border-left-color: var(--brick); }
+.notice.error strong { color: var(--brick-text); }
+
+/* 단계 표시 */
+.steps { display: flex; list-style: none; padding: 0; margin: 0; }
+.steps li {
+  flex: 1; padding-top: 10px; border-top: 3px solid var(--line);
+  color: var(--ink-soft); font-family: var(--font-mono); font-size: 13px;
+}
+.steps li.done { border-color: var(--brass); color: var(--ink); }
+.steps em { font-style: normal; margin-left: 8px; font-family: var(--font-body); }
+
+/* 최근 업데이트 · 기술 세부 */
+.activity { display: flex; flex-direction: column; gap: 8px; padding-top: 20px; border-top: var(--border); }
+.activity ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.activity li { display: flex; justify-content: space-between; gap: 12px; }
+.activity time { color: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; }
+.technical-details { color: var(--ink-soft); }
+.technical-details summary { cursor: pointer; font-weight: 500; }
+.technical-details summary:hover { color: var(--ink); }
+.technical-details button { margin: 16px 0; }
+.technical-details pre {
+  max-height: 260px; overflow: auto; padding: 16px; white-space: pre-wrap;
+  background: var(--paper-sunken); color: var(--ink); border-radius: var(--radius-input); font-size: 13px;
+}
+
+/* 분석 요약 */
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.summary-grid div { display: grid; gap: 6px; padding: 12px 14px; border: var(--border); border-radius: var(--radius-input); }
+.summary-grid small, .muted-copy { color: var(--ink-soft); }
+
+@media (max-width: 760px) {
+  .panel { padding: 24px 20px; }
+  .steps { overflow-x: auto; }
+  .steps li { min-width: 88px; }
+  .panel-title { flex-direction: column; align-items: stretch; }
+  .activity li { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

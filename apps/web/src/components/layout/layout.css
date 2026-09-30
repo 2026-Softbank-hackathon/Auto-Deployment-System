@@ -1,0 +1,60 @@
+/* 앱 셸 — 레일 사이드바 + 헤더 (mockups 01~05 공통) */
+.shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+
+.sidebar {
+  display: flex; flex-direction: column; gap: 48px; padding: 32px 28px;
+  background: var(--paper-side); border-right: var(--border);
+}
+.sidebar__brand { display: flex; flex-direction: column; gap: 10px; }
+.sidebar__brand-row { display: flex; align-items: center; gap: 12px; }
+.sidebar__name { font-family: var(--font-display); font-size: 26px; line-height: 1; }
+.sidebar__version {
+  padding: 2px 6px; border-radius: 3px; background: var(--ink); color: var(--on-ink);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600; line-height: 1.4;
+}
+.sidebar__tagline { font-size: 12px; line-height: 1.4; letter-spacing: .02em; color: var(--ink-soft); }
+
+.brand-mark { flex-shrink: 0; }
+.brand-mark__base { fill: var(--ink-deep); }
+.brand-mark__cap { fill: var(--ink); }
+.brand-mark__marble { fill: var(--koro); }
+.brand-mark__shine { fill: var(--surface); opacity: .5; }
+
+.sidebar__rail { display: flex; flex-direction: column; gap: 4px; --rail-x: 11px; --rail-start: 20px; --rail-end: 20px; }
+.sidebar__link {
+  position: relative; display: flex; align-items: center; gap: 14px; min-height: 48px;
+  color: var(--ink-soft); font-size: 16px; font-weight: 500; text-decoration: none;
+}
+.sidebar__link:hover { color: var(--ink); }
+.sidebar__link[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.sidebar__stop { display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; }
+.sidebar__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--paper-side); border: 2px solid var(--line-muted); }
+.sidebar__link:hover .sidebar__dot { border-color: var(--brass); }
+
+.app-body { display: flex; flex-direction: column; min-width: 0; }
+.app-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  height: 64px; flex-shrink: 0; padding: 0 48px;
+  background: var(--paper); border-bottom: var(--border);
+}
+.app-header__title { font-size: 14px; font-weight: 700; }
+.app-header__controls { display: flex; align-items: center; gap: 10px; }
+
+.content {
+  display: flex; flex-direction: column; gap: 28px;
+  width: 100%; max-width: 1180px; padding: 40px 48px 64px;
+}
+
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px; border-right: 0; border-bottom: var(--border); }
+  .sidebar__tagline { display: none; }
+  .sidebar__rail { flex-direction: row; gap: 16px; }
+  .sidebar__rail .rail__track, .sidebar__rail .rail__fill { display: none; }
+  .sidebar__link { min-height: 44px; gap: 8px; font-size: 15px; }
+  .app-header { padding: 0 16px; }
+  .app-header__title { display: none; }
+  .app-header__controls { width: 100%; justify-content: flex-end; }
+  .language-toggle__option { min-width: 56px; }
+  .content { padding: 24px 16px 48px; gap: 20px; }
+}

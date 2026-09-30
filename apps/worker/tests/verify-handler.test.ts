@@ -10,6 +10,7 @@ import type { WorkerDeps } from "../src/deps.js";
 const activeServers: Server[] = [];
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(
     activeServers.splice(0).map(
       (server) =>
@@ -214,6 +215,29 @@ describe("handleVerify", () => {
     expect(result.checks).toHaveLength(8);
     expect(result.checks.every((check) => check.passed === false)).toBe(true);
     expect(result.checks.every((check) => check.error?.includes("timeout"))).toBe(true);
+  });
+
+  it.each([
+    ["DNS 실패", "ENOTFOUND", "dns_error"],
+    ["연결 거부", "ECONNREFUSED", "connection_refused"],
+    ["TLS 실패", "CERT_HAS_EXPIRED", "tls_error"],
+  ])("%s를 분류 가능한 오류로 기록함", async (_name, code, expectedError) => {
+    const fetchError = Object.assign(new TypeError("fetch failed"), {
+      cause: { code },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(fetchError)));
+
+    const result = await handleVerify(
+      { data: makePayload("https://example.com") },
+      makeDeps(),
+      makeRuntime(),
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.checks).toHaveLength(8);
+    expect(result.checks.every((check) => check.error === expectedError)).toBe(
+      true,
+    );
   });
 
   it("절대 URL 형태의 health path로 origin을 변경하지 못하게 거부함", async () => {

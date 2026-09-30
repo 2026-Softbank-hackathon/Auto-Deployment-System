@@ -195,7 +195,7 @@ function extractDockerComposeServiceNames(yaml: string): string[] {
     if (!inServices) continue;
 
     // 2-space indent service name: "  <name>:"
-    const match = /^  ([a-zA-Z0-9_-]+)\s*:/.exec(line);
+    const match = /^ {2}([a-zA-Z0-9_-]+)\s*:/.exec(line);
     if (match) {
       names.push(match[1]);
     }

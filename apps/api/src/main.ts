@@ -16,8 +16,8 @@ async function main() {
   const storage = createStorage({ rootDir: config.STORAGE_ROOT_DIR });
 
   // DB: 연결 실패해도 서버는 뜨되 warn 로그 출력
-  let pool = createPool(config.DATABASE_URL ?? "postgresql://localhost/camellia_dev");
-  let boss = createPgBoss(config.DATABASE_URL ?? "postgresql://localhost/camellia_dev");
+  const pool = createPool(config.DATABASE_URL ?? "postgresql://localhost/camellia_dev");
+  const boss = createPgBoss(config.DATABASE_URL ?? "postgresql://localhost/camellia_dev");
 
   const server = await buildServer({
     pool,

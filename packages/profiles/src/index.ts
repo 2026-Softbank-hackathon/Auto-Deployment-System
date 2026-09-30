@@ -24,6 +24,17 @@ export const PROFILES: Record<string, Profile> = {
   [onpremDockerBasic.id]: onpremDockerBasic,
 };
 
+const DEFAULT_PROFILE_IDS = {
+  aws: awsEcsBasic.id,
+  onprem: onpremDockerBasic.id,
+} as const;
+
+export type DefaultProfileVendor = keyof typeof DEFAULT_PROFILE_IDS;
+
+export function defaultProfileFor(vendor: DefaultProfileVendor): string {
+  return DEFAULT_PROFILE_IDS[vendor];
+}
+
 export function getProfile(id: string): Profile | null {
   return PROFILES[id] ?? null;
 }

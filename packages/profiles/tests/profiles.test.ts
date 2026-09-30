@@ -3,6 +3,7 @@ import {
   ProfileSchema,
   awsEcsBasic,
   onpremDockerBasic,
+  defaultProfileFor,
   getProfile,
   PROFILES,
 } from "../src/index.js";
@@ -65,6 +66,16 @@ describe("getProfile", () => {
 
   it("returns null for unknown id", () => {
     expect(getProfile("does-not-exist")).toBeNull();
+  });
+});
+
+describe("defaultProfileFor", () => {
+  it("returns the P0 AWS default profile", () => {
+    expect(defaultProfileFor("aws")).toBe("aws-ecs-basic");
+  });
+
+  it("returns the P0 On-Prem default profile", () => {
+    expect(defaultProfileFor("onprem")).toBe("onprem-docker-basic");
   });
 });
 

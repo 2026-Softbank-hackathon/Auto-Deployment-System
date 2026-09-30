@@ -11,6 +11,8 @@ const ConfigSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   DATABASE_URL: z.string().optional(),
   API_KEY: z.string().optional(),
+  /** AES-256-GCM 마스터 키 (base64 인코딩된 32바이트). 미설정 시 dev/test 에서만 랜덤 fallback. */
+  SECRET_MASTER_KEY: z.string().optional(),
   STORAGE_ROOT_DIR: z.string().default("/tmp/camellia-storage"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
 });

@@ -25,6 +25,8 @@ import { LogService } from "./services/log-service.js";
 import { DeploymentHealthService } from "./services/deployment-health-service.js";
 import { DiagnosisService } from "./services/diagnosis-service.js";
 import { AiUsageService } from "./services/ai-usage-service.js";
+import { SecretService } from "./services/secret-service.js";
+import { EnvironmentService } from "./services/environment-service.js";
 
 import projectsRoutes from "./routes/projects.js";
 import deploymentsRoutes from "./routes/deployments.js";
@@ -37,6 +39,8 @@ import deploymentLogsRoutes from "./routes/deployment-logs.js";
 import deploymentHealthRoutes from "./routes/deployment-health.js";
 import deploymentDiagnosisRoutes from "./routes/deployment-diagnosis.js";
 import deploymentAiUsageRoutes from "./routes/deployment-ai-usage.js";
+import secretsRoutes from "./routes/secrets.js";
+import environmentsRoutes from "./routes/environments.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -50,6 +54,8 @@ export interface BuildServerOptions {
   pgListenChannel?: string;
   /** pg-listener를 명시적으로 비활성화하려면 false로 설정. 기본값 true */
   enablePgListener?: boolean;
+  /** AES-256-GCM 마스터 키 (32바이트). 없으면 dev/test 랜덤 생성 (production 부팅 시 config 에서 강제). */
+  secretMasterKey?: Buffer;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -87,6 +93,9 @@ export async function buildServer(opts: BuildServerOptions) {
   const deploymentHealthService = new DeploymentHealthService(opts.pool);
   const diagnosisService = new DiagnosisService(opts.pool);
   const aiUsageService = new AiUsageService(opts.pool);
+  const secretMasterKey = opts.secretMasterKey ?? (await import("node:crypto")).randomBytes(32);
+  const secretService = new SecretService(opts.pool, secretMasterKey);
+  const environmentService = new EnvironmentService(opts.pool);
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -190,6 +199,16 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(deploymentAiUsageRoutes, {
       prefix: "/deployments",
       aiUsageService,
+    });
+
+    v1.register(secretsRoutes, {
+      prefix: "/secrets",
+      secretService,
+    });
+
+    v1.register(environmentsRoutes, {
+      prefix: "/environments",
+      environmentService,
     });
   }, { prefix: "/api/v1" });
 

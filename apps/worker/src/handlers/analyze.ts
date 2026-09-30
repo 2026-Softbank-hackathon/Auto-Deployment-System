@@ -39,11 +39,48 @@ async function writeTmpFile(buf: Buffer, filename: string): Promise<string> {
   return tmpPath;
 }
 
+/** ANL-08: 같은 sha256 으로 이미 완료된 다른 배포의 분석 결과가 있으면 반환. */
+type CachedAnalysis = {
+  source_version_id: number;
+  services_json: unknown;
+  resources_json: unknown;
+  warnings_json: unknown;
+  unresolved_json: unknown;
+  ir_valid: boolean;
+  ir_errors_json: unknown | null;
+  ir_json: unknown | null;
+};
+
+async function lookupAnalysisCache(
+  pool: WorkerDeps["pool"],
+  sha256: string,
+  currentDeploymentId: number
+): Promise<CachedAnalysis | null> {
+  const res = await pool.query<CachedAnalysis>(
+    `SELECT sv.id AS source_version_id,
+            ar.services_json, ar.resources_json, ar.warnings_json,
+            ar.unresolved_json, ar.ir_valid, ar.ir_errors_json,
+            iv.ir_json
+     FROM source_versions sv
+     JOIN analysis_reports ar ON ar.source_version_id = sv.id
+     LEFT JOIN LATERAL (
+       SELECT ir_json FROM ir_versions
+       WHERE deployment_id = ar.deployment_id
+       ORDER BY id DESC LIMIT 1
+     ) iv ON true
+     WHERE sv.sha256 = $1 AND sv.deployment_id <> $2
+     ORDER BY ar.id DESC
+     LIMIT 1`,
+    [sha256, currentDeploymentId]
+  );
+  return res.rows[0] ?? null;
+}
+
 export async function handleAnalyze(
   job: { data: AnalyzeJobPayload },
   deps: WorkerDeps
 ): Promise<void> {
-  const { deployment_id, source_storage_key, sha256 } = job.data;
+  const { deployment_id, source_storage_key, sha256, source_version_id } = job.data;
   const { pool, storage, notifier, log } = deps;
 
   log?.info({ deployment_id, source_storage_key }, "analyze job started");
@@ -52,7 +89,69 @@ export async function handleAnalyze(
   await transitionTo(pool, deployment_id, "analyzing");
   await notifier?.notify(deployment_id, "state_changed", { status: "analyzing" });
 
-  // 2. 소스 zip 취득
+  // 2. ANL-08 캐시 조회: 같은 sha256 을 가진 기존 배포의 분석 결과 재사용
+  const cached = await lookupAnalysisCache(pool, sha256, deployment_id);
+  if (cached) {
+    log?.info(
+      { deployment_id, cached_source_version: cached.source_version_id },
+      "analyze cache hit — skipping analyzer + AI"
+    );
+    await notifier?.notify(deployment_id, "analysis.progress", {
+      step: "cache_hit",
+      cached_source_version_id: cached.source_version_id,
+    });
+
+    // analysis_reports 복사 (source_version_id 는 이번 배포 것)
+    await pool.query(
+      `INSERT INTO analysis_reports(deployment_id, source_version_id, services_json, resources_json, warnings_json, unresolved_json, ir_valid, ir_errors_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        deployment_id,
+        source_version_id ?? null,
+        JSON.stringify(cached.services_json),
+        JSON.stringify(cached.resources_json),
+        JSON.stringify(cached.warnings_json),
+        JSON.stringify(cached.unresolved_json),
+        cached.ir_valid,
+        cached.ir_errors_json != null ? JSON.stringify(cached.ir_errors_json) : null,
+      ]
+    );
+
+    // ir_versions 복사 — 이번 배포의 target_profile 로 deploy.profile 덮어쓰기
+    let irJson = cached.ir_json as Record<string, unknown> | null;
+    if (irJson) {
+      const targetProfileRes = await pool.query<{ target_profile: string | null }>(
+        "SELECT target_profile FROM deployments WHERE id = $1",
+        [deployment_id]
+      );
+      const targetProfile = targetProfileRes.rows[0]?.target_profile;
+      if (targetProfile) {
+        const deploy = (irJson["deploy"] ?? {}) as Record<string, unknown>;
+        irJson = { ...irJson, deploy: { ...deploy, profile: targetProfile } };
+      }
+      await pool.query(
+        `INSERT INTO ir_versions(deployment_id, ir_json, source) VALUES ($1,$2,$3)`,
+        [deployment_id, JSON.stringify(irJson), "analyzer_cache"]
+      );
+    }
+
+    // analyzing → awaiting_target_confirmation
+    await transitionTo(pool, deployment_id, "awaiting_target_confirmation");
+    await notifier?.notify(deployment_id, "analysis.progress", {
+      step: "complete",
+      ir_valid: cached.ir_valid,
+      from_cache: true,
+    });
+    await notifier?.notify(deployment_id, "state_changed", {
+      status: "awaiting_target_confirmation",
+    });
+    await notifier?.notify(deployment_id, "approval_requested", { gate: "target" });
+
+    log?.info({ deployment_id }, "analyze job succeeded (cache hit)");
+    return;
+  }
+
+  // 3. 소스 zip 취득
   const zipBuffer = await storage.get(source_storage_key);
 
   // 3. 임시 파일에 저장 (stage는 파일 경로를 필요로 한다)

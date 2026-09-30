@@ -18,6 +18,7 @@ import { detectPython } from "./detectors/python.js";
 import { detectDocker } from "./detectors/docker.js";
 import { detectDatabase } from "./detectors/database.js";
 import { detectEnvNames } from "./detectors/env.js";
+import { checkRisks } from "./risk-checker.js";
 import { buildIr } from "./ir-builder.js";
 import type {
   AnalysisResult,
@@ -93,11 +94,15 @@ export async function analyze(sourcePath: string): Promise<AnalysisResult> {
       }
     }
 
-    const dbResult = await detectDatabase(svcDir, nodeDeps, pyPackages);
-    const envResult = await detectEnvNames(svcDir);
+    const [dbResult, envResult, riskResult] = await Promise.all([
+      detectDatabase(svcDir, nodeDeps, pyPackages),
+      detectEnvNames(svcDir),
+      checkRisks(svcDir),
+    ]);
 
     // Collect warnings and resources from detectors
     warnings.push(...dbResult.warnings);
+    warnings.push(...riskResult.warnings);
     resources.push(...dbResult.resources);
 
     // Determine language

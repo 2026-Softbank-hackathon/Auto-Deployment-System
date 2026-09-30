@@ -11,6 +11,8 @@
   },
   "scripts": {
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "migrate": "node --loader tsx src/migrate.ts"
   },
   "dependencies": {

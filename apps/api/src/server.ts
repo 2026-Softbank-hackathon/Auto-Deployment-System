@@ -23,6 +23,7 @@ import { ApprovalService } from "./services/approval-service.js";
 import { AnalysisReportService } from "./services/analysis-report-service.js";
 import { LogService } from "./services/log-service.js";
 import { DeploymentHealthService } from "./services/deployment-health-service.js";
+import { DiagnosisService } from "./services/diagnosis-service.js";
 
 import projectsRoutes from "./routes/projects.js";
 import deploymentsRoutes from "./routes/deployments.js";
@@ -33,6 +34,7 @@ import deploymentApprovalsRoutes from "./routes/deployment-approvals.js";
 import deploymentAnalysisReportRoutes from "./routes/deployment-analysis-report.js";
 import deploymentLogsRoutes from "./routes/deployment-logs.js";
 import deploymentHealthRoutes from "./routes/deployment-health.js";
+import deploymentDiagnosisRoutes from "./routes/deployment-diagnosis.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -81,6 +83,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const analysisReportService = new AnalysisReportService(opts.pool);
   const logService = new LogService(opts.pool);
   const deploymentHealthService = new DeploymentHealthService(opts.pool);
+  const diagnosisService = new DiagnosisService(opts.pool);
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -174,6 +177,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(deploymentHealthRoutes, {
       prefix: "/deployments",
       deploymentHealthService,
+    });
+
+    v1.register(deploymentDiagnosisRoutes, {
+      prefix: "/deployments",
+      diagnosisService,
     });
   }, { prefix: "/api/v1" });
 

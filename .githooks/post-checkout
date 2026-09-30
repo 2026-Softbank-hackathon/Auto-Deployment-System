@@ -4,5 +4,8 @@
 [ "$3" = "1" ] || exit 0
 # 최초 clone · worktree add (이전 HEAD가 전부 0)은 제외
 case "$1" in *[!0]*) ;; *) exit 0 ;; esac
+# rebase 도중(onto 체크아웃)은 제외 — 중간 상태로 설치하지 않고 끝난 뒤 post-rewrite가 처리
+[ -d "$(git rev-parse --git-path rebase-merge)" ] && exit 0
+[ -d "$(git rev-parse --git-path rebase-apply)" ] && exit 0
 sh "$(dirname "$0")/lib/pnpm-install-if-changed.sh" "$1" "$2"
 exit 0

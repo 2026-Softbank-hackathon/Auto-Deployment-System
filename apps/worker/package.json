@@ -8,6 +8,7 @@
     "dev": "tsx watch src/main.ts",
     "start": "node --loader tsx src/main.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {

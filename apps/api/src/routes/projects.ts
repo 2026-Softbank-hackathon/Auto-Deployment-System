@@ -1,6 +1,6 @@
 /**
  * apps/api/src/routes/projects.ts
- * POST /projects, GET /projects, GET /projects/:id
+ * POST /projects, GET /projects, GET /projects/:id, GET /projects/:id/deployments
  */
 
 import { type FastifyPluginAsync } from "fastify";
@@ -15,6 +15,16 @@ const CreateProjectBodySchema = z.object({
 const ListProjectsQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+const ProjectIdParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+const ListDeploymentsQuerySchema = z.object({
+  cursor: z.string().regex(/^\d+$/, "cursor는 배포 ID(숫자)여야 합니다.").transform(Number).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.string().min(1).optional(),
 });
 
 const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = async (
@@ -44,6 +54,13 @@ const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = a
       throw new ApiError(400, "VALIDATION_ERROR", "프로젝트 ID는 양수 정수여야 합니다.");
     }
     return svc.get(id);
+  });
+
+  // GET /projects/:id/deployments — 배포 이력 (LOG-01 / API-22)
+  fastify.get("/:id/deployments", async (request) => {
+    const { id } = ProjectIdParamsSchema.parse(request.params);
+    const query = ListDeploymentsQuerySchema.parse(request.query);
+    return svc.listDeployments(id, query);
   });
 };
 

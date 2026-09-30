@@ -9,9 +9,15 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { DeploymentEventData, DeploymentEventName } from "@camellia/contracts";
 
+/** event · payload 는 @camellia/contracts 의 SSE 이벤트 계약 (DeploymentEvent) 을 따른다 */
 export type Notifier = {
-  notify(deploymentId: number, event: string, payload: unknown): Promise<void>;
+  notify<E extends DeploymentEventName>(
+    deploymentId: number,
+    event: E,
+    payload: DeploymentEventData<E>,
+  ): Promise<void>;
 };
 
 export function createPgNotifier(pool: Pool): Notifier {

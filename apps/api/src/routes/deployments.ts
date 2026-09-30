@@ -6,10 +6,11 @@
 import { type FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
+import { TARGET_PROFILES } from "@camellia/contracts";
 import { DeploymentService } from "../services/deployment-service.js";
 import { idParams } from "../plugins/swagger.js";
 
-const VALID_PROFILES = new Set(["aws-ecs-basic", "onprem-docker-basic"]);
+const VALID_PROFILES = new Set<string>(TARGET_PROFILES);
 
 const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentService }> = async (
   fastify,

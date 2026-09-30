@@ -1,4 +1,5 @@
 import type { Pool } from "@camellia/db";
+import type { DeploymentHealth } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 type DeploymentRow = {
@@ -23,21 +24,7 @@ type HealthCheckAttemptRow = {
   error_message: string | null;
 };
 
-export type DeploymentHealthResponse = {
-  deploymentId: string;
-  status: "checking" | "passed" | "failed";
-  checks: Array<{
-    attempt: number;
-    timestamp: string;
-    statusCode?: number;
-    latencyMs?: number;
-    passed: boolean;
-    error?: string;
-  }>;
-  consecutivePassed: number;
-  requiredPasses: 3;
-  targetUrl: string;
-};
+export type DeploymentHealthResponse = DeploymentHealth;
 
 export class DeploymentHealthService {
   constructor(private readonly pool: Pool) {}

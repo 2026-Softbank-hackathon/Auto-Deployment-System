@@ -6,20 +6,10 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import { DeploymentLogsQuerySchema as LogsQuerySchema } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { LogService } from "../services/log-service.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
-
-const LogsQuerySchema = z.object({
-  step: z.enum(["analyze", "build", "provision", "verify"]),
-  tail: z.coerce.number().int().positive().optional(),
-  stream: z
-    .union([z.literal("true"), z.literal("false"), z.boolean()])
-    .optional()
-    .default(false)
-    .transform((v) => v === true || v === "true"),
-});
 
 const deploymentLogsRoutes: FastifyPluginAsync<{
   logService: LogService;

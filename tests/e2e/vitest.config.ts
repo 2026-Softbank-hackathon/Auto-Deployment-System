@@ -21,6 +21,7 @@ export default defineConfig({
       { find: "@camellia/db", replacement: resolve(ROOT, "packages/db/src/index.ts") },
       { find: "@camellia/storage", replacement: resolve(ROOT, "packages/storage/src/index.ts") },
       { find: "@camellia/ir-schema", replacement: resolve(ROOT, "packages/ir-schema/src/schema.ts") },
+      { find: "@camellia/contracts", replacement: resolve(ROOT, "packages/contracts/src/index.ts") },
     ],
   },
   test: {

@@ -4,20 +4,10 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { AnalysisReport } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
-export type AnalysisReportResponse = {
-  deploymentId: number;
-  detectedStack: string[];
-  services: unknown[];
-  resources: unknown[];
-  warnings: unknown[];
-  unresolved: unknown[];
-  irValid: boolean;
-  irErrors: unknown[] | null;
-  migrationTool: string | null;
-  createdAt: string;
-};
+export type AnalysisReportResponse = AnalysisReport;
 
 export class AnalysisReportService {
   constructor(private readonly pool: Pool) {}

@@ -5,16 +5,11 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import { PatchIrBodySchema, type DeploymentEventData } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import { IrService } from "../services/ir-service.js";
 import { type SseBroker } from "../plugins/sse-broker.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
-
-const PatchIrBodySchema = z.object({
-  ir: z.record(z.string(), z.unknown()),
-  version: z.number().int(),
-});
 
 const deploymentIrRoutes: FastifyPluginAsync<{
   irService: IrService;
@@ -57,7 +52,7 @@ const deploymentIrRoutes: FastifyPluginAsync<{
         deploymentId: String(id),
         version: result.version,
         source: result.source,
-      },
+      } satisfies DeploymentEventData<"ir_updated">,
     });
 
     return reply.status(200).send(result);

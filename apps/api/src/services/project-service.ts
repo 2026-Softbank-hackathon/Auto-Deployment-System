@@ -4,6 +4,13 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type {
+  DeploymentStatus,
+  Project,
+  ProjectDeployment,
+  ProjectDeploymentList,
+  ProjectList,
+} from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export interface ProjectRow {
@@ -19,7 +26,7 @@ export interface CreateProjectInput {
   description?: string;
 }
 
-export function projectToDto(row: ProjectRow) {
+export function projectToDto(row: ProjectRow): Project {
   return {
     id: String(row.id),
     name: row.name,
@@ -31,7 +38,7 @@ export function projectToDto(row: ProjectRow) {
 
 export interface ProjectDeploymentRow {
   id: number;
-  status: string;
+  status: DeploymentStatus;
   target_profile: string | null;
   public_url: string | null;
   created_at: Date;
@@ -41,7 +48,7 @@ export interface ProjectDeploymentRow {
   source_sha256: string | null;
 }
 
-export function projectDeploymentToDto(row: ProjectDeploymentRow) {
+export function projectDeploymentToDto(row: ProjectDeploymentRow): ProjectDeployment {
   return {
     id: String(row.id),
     status: row.status,
@@ -60,7 +67,7 @@ export function projectDeploymentToDto(row: ProjectDeploymentRow) {
 export class ProjectService {
   constructor(private readonly pool: Pool) {}
 
-  async create(input: CreateProjectInput) {
+  async create(input: CreateProjectInput): Promise<Project> {
     const { name, description } = input;
     try {
       const res = await this.pool.query<ProjectRow>(
@@ -84,7 +91,7 @@ export class ProjectService {
     }
   }
 
-  async list(opts: { limit: number; cursor?: string }) {
+  async list(opts: { limit: number; cursor?: string }): Promise<ProjectList> {
     const { limit, cursor } = opts;
     let rows: ProjectRow[];
     if (cursor) {
@@ -116,7 +123,7 @@ export class ProjectService {
     return { items, nextCursor, total: items.length };
   }
 
-  async get(id: number) {
+  async get(id: number): Promise<Project> {
     const res = await this.pool.query<ProjectRow>(
       `SELECT id, name, description, created_at, updated_at
        FROM projects WHERE id = $1`,
@@ -130,7 +137,10 @@ export class ProjectService {
   }
 
   /** 프로젝트 배포 이력 — 최신순, id 커서 페이지네이션 (LOG-01). */
-  async listDeployments(projectId: number, opts: { limit: number; cursor?: number; status?: string }) {
+  async listDeployments(
+    projectId: number,
+    opts: { limit: number; cursor?: number; status?: string },
+  ): Promise<ProjectDeploymentList> {
     const { limit, cursor, status } = opts;
 
     const exists = await this.pool.query(`SELECT 1 FROM projects WHERE id = $1`, [projectId]);

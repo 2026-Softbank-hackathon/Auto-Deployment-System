@@ -7,33 +7,11 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { AwsConfig, Environment, OnpremConfig } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
-export type AwsConfig = {
-  credentialsType: "access_key" | "assume_role";
-  accessKeyIdSecretName?: string;
-  secretAccessKeySecretName?: string;
-  roleArn?: string;
-  externalId?: string;
-  region: string;
-};
-
-export type OnpremConfig = {
-  agentRegistrationToken: string;
-  hostname: string;
-};
-
-export type EnvironmentDto = {
-  id: number;
-  projectId: number;
-  name: string;
-  type: "aws" | "onprem";
-  awsConfig?: AwsConfig;
-  onpremConfig?: OnpremConfig;
-  agentStatus: string | null;
-  lastSeenAt: string | null;
-  createdAt: string;
-};
+export type { AwsConfig, OnpremConfig };
+export type EnvironmentDto = Environment;
 
 type EnvRow = {
   id: number;

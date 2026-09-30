@@ -8,24 +8,14 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import {
+  CreateSecretBodySchema as CreateBody,
+  ProjectIdQuerySchema as ProjectIdQuery,
+  SecretNameParamsSchema,
+} from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { SecretService } from "../services/secret-service.js";
 import { toJsonSchema } from "../plugins/swagger.js";
-
-const CreateBody = z.object({
-  projectId: z.number().int().positive(),
-  name: z
-    .string()
-    .min(1)
-    .max(128)
-    .regex(/^[A-Za-z0-9._-]+$/, "영숫자·점·언더바·하이픈만 허용"),
-  value: z.string().min(1),
-});
-
-const ProjectIdQuery = z.object({
-  projectId: z.coerce.number().int().positive(),
-});
 
 const secretsRoutes: FastifyPluginAsync<{ secretService: SecretService }> = async (
   fastify,
@@ -52,7 +42,7 @@ const secretsRoutes: FastifyPluginAsync<{ secretService: SecretService }> = asyn
     schema: {
       tags: ["secrets"],
       summary: "시크릿 삭제",
-      params: toJsonSchema(z.object({ name: z.string().min(1) })),
+      params: toJsonSchema(SecretNameParamsSchema),
       querystring: toJsonSchema(ProjectIdQuery),
     },
   }, async (request, reply) => {

@@ -8,13 +8,10 @@
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { Pool } from "@camellia/db";
+import type { Secret } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
-export type SecretDto = {
-  name: string;
-  projectId: number;
-  createdAt: string;
-};
+export type SecretDto = Secret;
 
 export class SecretService {
   constructor(

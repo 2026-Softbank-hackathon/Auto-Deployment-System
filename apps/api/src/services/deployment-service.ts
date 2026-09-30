@@ -7,12 +7,18 @@ import { createHash } from "node:crypto";
 import type { Pool } from "@camellia/db";
 import type PgBoss from "pg-boss";
 import type { Storage } from "@camellia/storage";
+import type {
+  ApprovalGate,
+  CreateDeploymentResponse,
+  Deployment,
+  DeploymentStatus,
+} from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export interface DeploymentRow {
   id: number;
   project_id: number;
-  status: string;
+  status: DeploymentStatus;
   target_profile: string | null;
   public_url: string | null;
   created_at: Date;
@@ -30,12 +36,16 @@ export interface StepRow {
 }
 
 export interface ApprovalRow {
-  gate: string;
+  gate: ApprovalGate;
   decision: string | null;
   created_at: Date;
 }
 
-export function deploymentToDto(row: DeploymentRow, step?: StepRow | null, approval?: ApprovalRow | null) {
+export function deploymentToDto(
+  row: DeploymentRow,
+  step?: StepRow | null,
+  approval?: ApprovalRow | null,
+): Deployment {
   return {
     id: String(row.id),
     projectId: String(row.project_id),
@@ -77,7 +87,7 @@ export class DeploymentService {
     private readonly storage: Storage
   ) {}
 
-  async create(input: CreateDeploymentInput) {
+  async create(input: CreateDeploymentInput): Promise<CreateDeploymentResponse> {
     const { projectId, targetProfile, fileBuffer } = input;
 
     // 1. sha256 계산
@@ -133,7 +143,7 @@ export class DeploymentService {
     };
   }
 
-  async get(id: number) {
+  async get(id: number): Promise<Deployment> {
     const depRes = await this.pool.query<DeploymentRow>(
       `SELECT id, project_id, status, target_profile, public_url,
               created_at, updated_at, succeeded_at, failed_at, error

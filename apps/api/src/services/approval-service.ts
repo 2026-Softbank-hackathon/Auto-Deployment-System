@@ -5,6 +5,7 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { DeploymentStatus, SubmitApprovalResponse } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export interface SubmitApprovalInput {
@@ -15,12 +16,12 @@ export interface SubmitApprovalInput {
 }
 
 // Status transitions
-const APPROVAL_REQUIRED_STATUS: Record<string, string> = {
+const APPROVAL_REQUIRED_STATUS: Record<string, DeploymentStatus> = {
   target: "awaiting_target_confirmation",
   plan: "awaiting_plan_approval",
 };
 
-const APPROVE_NEXT_STATUS: Record<string, string> = {
+const APPROVE_NEXT_STATUS: Record<string, DeploymentStatus> = {
   target: "queued",
   plan: "provisioning",
 };
@@ -28,7 +29,7 @@ const APPROVE_NEXT_STATUS: Record<string, string> = {
 export class ApprovalService {
   constructor(private readonly pool: Pool) {}
 
-  async submit(input: SubmitApprovalInput) {
+  async submit(input: SubmitApprovalInput): Promise<SubmitApprovalResponse> {
     const { deploymentId, gate, decision, note } = input;
 
     const client = await this.pool.connect();
@@ -71,7 +72,7 @@ export class ApprovalService {
       );
 
       // 3. 상태 전이
-      let newStatus: string;
+      let newStatus: DeploymentStatus;
       let lockAcquired = false;
 
       if (decision === "approve") {

@@ -5,17 +5,11 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import { SubmitApprovalBodySchema, type DeploymentEventData } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import { ApprovalService } from "../services/approval-service.js";
 import { type SseBroker } from "../plugins/sse-broker.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
-
-const SubmitApprovalBodySchema = z.object({
-  gate: z.enum(["target", "plan"]),
-  decision: z.enum(["approve", "reject"]),
-  note: z.string().max(500).optional(),
-});
 
 const deploymentApprovalsRoutes: FastifyPluginAsync<{
   approvalService: ApprovalService;
@@ -54,7 +48,7 @@ const deploymentApprovalsRoutes: FastifyPluginAsync<{
         from: body.gate === "target" ? "awaiting_target_confirmation" : "awaiting_plan_approval",
         to: result.newStatus,
         reason: body.decision === "reject" ? (body.note ?? "사용자 거절") : undefined,
-      },
+      } satisfies DeploymentEventData<"state_changed">,
     });
 
     return reply.status(200).send(result);

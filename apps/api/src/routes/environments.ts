@@ -9,36 +9,13 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import {
+  CreateEnvironmentBodySchema as CreateBody,
+  ProjectIdQuerySchema as ProjectIdQuery,
+} from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { EnvironmentService } from "../services/environment-service.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
-
-const AwsConfigSchema = z.object({
-  credentialsType: z.enum(["access_key", "assume_role"]),
-  accessKeyIdSecretName: z.string().optional(),
-  secretAccessKeySecretName: z.string().optional(),
-  roleArn: z.string().optional(),
-  externalId: z.string().optional(),
-  region: z.string().min(1),
-});
-
-const OnpremConfigSchema = z.object({
-  agentRegistrationToken: z.string().min(1),
-  hostname: z.string().min(1),
-});
-
-const CreateBody = z.object({
-  projectId: z.number().int().positive(),
-  name: z.string().min(1).max(128),
-  type: z.enum(["aws", "onprem"]),
-  awsConfig: AwsConfigSchema.optional(),
-  onpremConfig: OnpremConfigSchema.optional(),
-});
-
-const ProjectIdQuery = z.object({
-  projectId: z.coerce.number().int().positive(),
-});
 
 const environmentsRoutes: FastifyPluginAsync<{ environmentService: EnvironmentService }> = async (
   fastify,

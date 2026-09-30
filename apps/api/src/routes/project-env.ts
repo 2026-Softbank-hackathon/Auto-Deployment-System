@@ -7,25 +7,9 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import { IdParamsSchema as ProjectIdParams, PatchProjectEnvBodySchema as PatchBody } from "@camellia/contracts";
 import type { EnvVarService } from "../services/env-var-service.js";
 import { toJsonSchema } from "../plugins/swagger.js";
-
-const ProjectIdParams = z.object({
-  id: z.coerce.number().int().positive(),
-});
-
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-const PatchBody = z.object({
-  vars: z
-    .record(z.string().max(4096).nullable())
-    .refine((vars) => Object.keys(vars).length > 0, "변경할 환경변수가 없습니다.")
-    .refine(
-      (vars) => Object.keys(vars).every((name) => name.length <= 128 && ENV_NAME.test(name)),
-      "환경변수 이름은 영문·숫자·언더바만 쓸 수 있고 숫자로 시작할 수 없습니다.",
-    ),
-});
 
 const projectEnvRoutes: FastifyPluginAsync<{ envVarService: EnvVarService }> = async (
   fastify,

@@ -4,29 +4,14 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import {
+  CreateProjectBodySchema,
+  IdParamsSchema as ProjectIdParamsSchema,
+  ListProjectDeploymentsQuerySchema as ListDeploymentsQuerySchema,
+  ListProjectsQuerySchema,
+} from "@camellia/contracts";
 import { ProjectService } from "../services/project-service.js";
 import { toJsonSchema } from "../plugins/swagger.js";
-
-const CreateProjectBodySchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).optional(),
-});
-
-const ListProjectsQuerySchema = z.object({
-  cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-});
-
-const ProjectIdParamsSchema = z.object({
-  id: z.coerce.number().int().positive(),
-});
-
-const ListDeploymentsQuerySchema = z.object({
-  cursor: z.string().regex(/^\d+$/, "cursor는 배포 ID(숫자)여야 합니다.").transform(Number).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  status: z.string().min(1).optional(),
-});
 
 const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = async (
   fastify,

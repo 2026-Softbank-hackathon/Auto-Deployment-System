@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@camellia/analyzer": "workspace:*",
+    "@camellia/contracts": "workspace:*",
     "@camellia/db": "workspace:*",
     "@camellia/storage": "workspace:*",
     "pg-boss": "^10.1.0",

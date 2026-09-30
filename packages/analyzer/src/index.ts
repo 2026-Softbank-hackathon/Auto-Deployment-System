@@ -85,7 +85,7 @@ export async function analyze(sourcePath: string): Promise<AnalysisResult> {
         const reqRaw = await readFile(reqPath, "utf8");
         pyPackages = reqRaw
           .split("\n")
-          .map((l) => l.trim().split(/[>=<!;[]/)[0].trim())
+          .map((l) => l.trim().split(/[>=<!;[]/)[0]!.trim())
           .filter((p) => p.length > 0 && !p.startsWith("#"));
       } catch {
         // try pyproject or Pipfile — already handled in python detector

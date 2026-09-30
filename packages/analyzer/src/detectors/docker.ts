@@ -39,7 +39,7 @@ export async function detectDocker(serviceDir: string): Promise<DockerDetectResu
 
   // Prefer bare "Dockerfile"
   const preferred =
-    dockerfiles.find((f) => f.endsWith("/Dockerfile")) ?? dockerfiles[0];
+    dockerfiles.find((f) => f.endsWith("/Dockerfile")) ?? dockerfiles[0]!;
 
   const relPath = relative(serviceDir, preferred);
   const detectedFrom: string[] = [relPath];
@@ -56,9 +56,9 @@ export async function detectDocker(serviceDir: string): Promise<DockerDetectResu
   const exposeRe = /^EXPOSE\s+([\d\s/]+)/gm;
   let match: RegExpExecArray | null;
   while ((match = exposeRe.exec(content)) !== null) {
-    const parts = match[1].trim().split(/\s+/);
+    const parts = match[1]!.trim().split(/\s+/);
     for (const part of parts) {
-      const portNum = parseInt(part.split("/")[0], 10);
+      const portNum = parseInt(part.split("/")[0]!, 10);
       if (!isNaN(portNum)) {
         exposedPorts.push(portNum);
       }
@@ -75,7 +75,7 @@ export async function detectDocker(serviceDir: string): Promise<DockerDetectResu
   let cmdMatch: RegExpExecArray | null;
   let lastCmd: string | undefined;
   while ((cmdMatch = cmdRe.exec(content)) !== null) {
-    lastCmd = cmdMatch[1].trim();
+    lastCmd = cmdMatch[1]!.trim();
   }
 
   if (lastCmd) {

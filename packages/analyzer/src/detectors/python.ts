@@ -94,12 +94,12 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
     const procContent = await readFile(procfilePath, "utf8");
     const portMatch = /--port[= ](\d+)/.exec(procContent);
     if (portMatch) {
-      port = parseInt(portMatch[1], 10);
+      port = parseInt(portMatch[1]!, 10);
       detectedFrom.push(`Procfile (port ${port})`);
     }
     const webLine = /^web:\s*(.+)/m.exec(procContent);
     if (webLine) {
-      command = webLine[1].trim().split(/\s+/);
+      command = webLine[1]!.trim().split(/\s+/);
       detectedFrom.push("Procfile web:");
     }
   } catch {
@@ -127,7 +127,7 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
       // uvicorn.run(..., port=8000)
       const uvicornPortMatch = /uvicorn\.run\s*\([^)]*port\s*=\s*(\d+)/s.exec(content);
       if (uvicornPortMatch) {
-        port = parseInt(uvicornPortMatch[1], 10);
+        port = parseInt(uvicornPortMatch[1]!, 10);
         const rel = file.replace(serviceDir + "/", "");
         detectedFrom.push(`${rel} (uvicorn.run port=${port})`);
         break;
@@ -136,7 +136,7 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
       // app.run(port=5000) Flask pattern
       const flaskPortMatch = /\.run\s*\([^)]*port\s*=\s*(\d+)/s.exec(content);
       if (flaskPortMatch) {
-        port = parseInt(flaskPortMatch[1], 10);
+        port = parseInt(flaskPortMatch[1]!, 10);
         const rel = file.replace(serviceDir + "/", "");
         detectedFrom.push(`${rel} (.run port=${port})`);
         break;
@@ -182,7 +182,7 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
 function parseRequirementsTxt(content: string): string[] {
   return content
     .split("\n")
-    .map((line) => line.trim().split(/[>=<!;[]/)[0].trim())
+    .map((line) => line.trim().split(/[>=<!;[]/)[0]!.trim())
     .filter((p) => p.length > 0 && !p.startsWith("#"));
 }
 
@@ -191,23 +191,23 @@ function parsePyprojectToml(content: string): string[] {
   const packages: string[] = [];
   const depsBlock = /dependencies\s*=\s*\[([^\]]*)\]/s.exec(content);
   if (depsBlock) {
-    const raw = depsBlock[1];
+    const raw = depsBlock[1]!;
     const re = /"([a-zA-Z0-9_-]+)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(raw)) !== null) {
-      packages.push(match[1]);
+      packages.push(match[1]!);
     }
   }
 
   // tool.poetry.dependencies table
   const poetryDeps = /\[tool\.poetry\.dependencies\]([\s\S]*?)(?=\[|$)/.exec(content);
   if (poetryDeps) {
-    const block = poetryDeps[1];
+    const block = poetryDeps[1]!;
     const re = /^([a-zA-Z0-9_-]+)\s*=/gm;
     let match: RegExpExecArray | null;
     while ((match = re.exec(block)) !== null) {
-      if (match[1].toLowerCase() !== "python") {
-        packages.push(match[1]);
+      if (match[1]!.toLowerCase() !== "python") {
+        packages.push(match[1]!);
       }
     }
   }
@@ -221,8 +221,8 @@ function parsePipfile(content: string): string[] {
   if (inPackages) {
     const re = /^([a-zA-Z0-9_-]+)\s*=/gm;
     let match: RegExpExecArray | null;
-    while ((match = re.exec(inPackages[1])) !== null) {
-      packages.push(match[1]);
+    while ((match = re.exec(inPackages[1]!)) !== null) {
+      packages.push(match[1]!);
     }
   }
   return packages;
@@ -258,7 +258,7 @@ async function scanPythonEnvNames(serviceDir: string): Promise<string[]> {
       re.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = re.exec(content)) !== null) {
-        names.add(match[1]);
+        names.add(match[1]!);
       }
     }
   }

@@ -86,7 +86,7 @@ export async function detectEnvNames(serviceDir: string): Promise<EnvDetectResul
     nodeRe.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = nodeRe.exec(content)) !== null) {
-      names.add(match[1]);
+      names.add(match[1]!);
       nodeFound = true;
     }
   }
@@ -123,7 +123,7 @@ export async function detectEnvNames(serviceDir: string): Promise<EnvDetectResul
       re.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = re.exec(content)) !== null) {
-        names.add(match[1]);
+        names.add(match[1]!);
         pyFound = true;
       }
     }

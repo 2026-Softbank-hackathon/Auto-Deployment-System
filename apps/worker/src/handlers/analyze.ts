@@ -24,6 +24,7 @@ import { analyzeWithAI } from "@camellia/analyzer";
 import type { FillOptions } from "@camellia/analyzer";
 import type { WorkerDeps } from "../deps.js";
 import { transitionTo } from "../state-machine.js";
+import { createStepLogger } from "../step-log.js";
 
 export type AnalyzeJobPayload = {
   deployment_id: number;
@@ -84,10 +85,12 @@ export async function handleAnalyze(
   const { pool, storage, notifier, log } = deps;
 
   log?.info({ deployment_id, source_storage_key }, "analyze job started");
+  const stepLog = createStepLogger(deps, deployment_id, "analyze");
 
   // 1. 상태 전이: received → analyzing
   await transitionTo(pool, deployment_id, "analyzing");
   await notifier?.notify(deployment_id, "state_changed", { status: "analyzing" });
+  await stepLog.line("분석 시작");
 
   // 2. ANL-08 캐시 조회: 같은 sha256 을 가진 기존 배포의 분석 결과 재사용
   const cached = await lookupAnalysisCache(pool, sha256, deployment_id);
@@ -96,6 +99,7 @@ export async function handleAnalyze(
       { deployment_id, cached_source_version: cached.source_version_id },
       "analyze cache hit — skipping analyzer + AI"
     );
+    await stepLog.line(`이전 분석 결과 재사용 (source_version ${cached.source_version_id})`);
     await notifier?.notify(deployment_id, "analysis.progress", {
       step: "cache_hit",
       cached_source_version_id: cached.source_version_id,
@@ -146,6 +150,7 @@ export async function handleAnalyze(
       status: "awaiting_target_confirmation",
     });
     await notifier?.notify(deployment_id, "approval_requested", { gate: "target" });
+    await stepLog.line("대상 확인 대기");
 
     log?.info({ deployment_id }, "analyze job succeeded (cache hit)");
     return;
@@ -160,6 +165,7 @@ export async function handleAnalyze(
   // 4. stage(unzip) → 소스 폴더 경로
   const staged = await stage(tmpZip, { mode: "unzip" });
   try {
+    await stepLog.line("소스 압축 해제 완료");
     await notifier?.notify(deployment_id, "analysis.progress", {
       step: "detecting",
     });
@@ -188,6 +194,10 @@ export async function handleAnalyze(
     log?.info(
       { deployment_id, ir_valid: analysis.ai?.ir_valid_after ?? analysis.ir_valid },
       "analysis complete"
+    );
+    const irValid = analysis.ai?.ir_valid_after ?? analysis.ir_valid;
+    await stepLog.line(
+      `분석 완료 — 서비스 ${analysis.services.length}개, 경고 ${analysis.warnings.length}개, IR ${irValid ? "유효" : "검증 실패"}`
     );
 
     // 6. analysis_reports INSERT
@@ -240,8 +250,12 @@ export async function handleAnalyze(
     await notifier?.notify(deployment_id, "approval_requested", {
       gate: "target",
     });
+    await stepLog.line("대상 확인 대기");
 
     log?.info({ deployment_id }, "analyze job succeeded");
+  } catch (err) {
+    await stepLog.line(`분석 실패: ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
   } finally {
     await staged.cleanup?.();
     await fs.rm(tmpZip, { force: true }).catch(() => {});

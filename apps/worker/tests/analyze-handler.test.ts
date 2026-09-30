@@ -109,8 +109,14 @@ function makeDeps(pool: ReturnType<typeof makeMockPool>, notifierCalls: unknown[
       notifierCalls.push(args);
     }),
   };
+  const files = new Map<string, Buffer>();
   const storage = {
-    get: vi.fn(async () => Buffer.from("fake-zip")),
+    get: vi.fn(async (key: string) => files.get(key) ?? Buffer.from("fake-zip")),
+    exists: vi.fn(async (key: string) => files.has(key)),
+    put: vi.fn(async (key: string, buf: Buffer) => {
+      files.set(key, buf);
+    }),
+    files,
   };
   return {
     deps: {
@@ -282,5 +288,58 @@ describe("handleAnalyze", () => {
     );
     expect(approvalCalls.length).toBe(1);
     expect(approvalCalls[0]?.[2]).toMatchObject({ gate: "target" });
+  });
+
+  it("LOG-02: 분석 진행 과정을 analyze 단계 로그 파일에 남긴다", async () => {
+    const pool = makeMockPool("received");
+    const { deps, storage } = makeDeps(pool);
+    vi.mocked(analyzeWithAI).mockResolvedValue(makeAnalysisResult() as any);
+
+    await handleAnalyze(makeJob(), deps);
+
+    const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
+    expect(log).toContain("분석 시작");
+    expect(log).toContain("분석 완료");
+    expect(log).toContain("대상 확인 대기");
+  });
+
+  it("LOG-02: 분석이 실패하면 실패 원인을 로그에 남기고 재던진다", async () => {
+    const pool = makeMockPool("received");
+    const { deps, storage } = makeDeps(pool);
+    vi.mocked(analyzeWithAI).mockRejectedValue(new Error("AI failed"));
+
+    await expect(handleAnalyze(makeJob(), deps)).rejects.toThrow("AI failed");
+
+    const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
+    expect(log).toContain("분석 실패: AI failed");
+  });
+
+  it("LOG-02: 캐시 재사용도 로그에 남긴다", async () => {
+    const pool = makeMockPool("received");
+    pool.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM source_versions sv")) {
+        return {
+          rows: [
+            {
+              source_version_id: 5,
+              services_json: [],
+              resources_json: [],
+              warnings_json: [],
+              unresolved_json: [],
+              ir_valid: true,
+              ir_errors_json: null,
+              ir_json: null,
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    const { deps, storage } = makeDeps(pool);
+
+    await handleAnalyze(makeJob(), deps);
+
+    const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
+    expect(log).toContain("이전 분석 결과 재사용");
   });
 });

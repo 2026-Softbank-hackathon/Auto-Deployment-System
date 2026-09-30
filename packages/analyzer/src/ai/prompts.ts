@@ -40,12 +40,12 @@ Always call the fill_unresolved_ir_fields tool with your answer.`,
  */
 export function getSystemBlocksWithCache(): SystemBlock[] {
   const blocks = [...SYSTEM_PROMPT_BLOCKS];
-  const last = blocks[blocks.length - 1];
+  const last = blocks[blocks.length - 1]!;
   return [
     ...blocks.slice(0, -1),
     {
       ...last,
-      cache_control: { type: "ephemeral" },
+      cache_control: { type: "ephemeral" } as const,
     },
   ];
 }

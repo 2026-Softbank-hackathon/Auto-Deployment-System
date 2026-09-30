@@ -64,7 +64,7 @@ export async function splitServices(rootPath: string): Promise<ServiceRoot[]> {
     for (const pkgFile of filtered) {
       const parts = relative(rootPath, pkgFile).split("/");
       const serviceDir = pkgFile.replace(/\/package\.json$/, "");
-      const name = await readPackageName(pkgFile, parts[parts.length - 2]);
+      const name = await readPackageName(pkgFile, parts[parts.length - 2] ?? "service");
       services.push({
         name,
         absPath: serviceDir,
@@ -197,7 +197,7 @@ function extractDockerComposeServiceNames(yaml: string): string[] {
     // 2-space indent service name: "  <name>:"
     const match = /^ {2}([a-zA-Z0-9_-]+)\s*:/.exec(line);
     if (match) {
-      names.push(match[1]);
+      names.push(match[1]!);
     }
   }
 

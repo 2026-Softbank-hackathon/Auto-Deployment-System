@@ -165,7 +165,7 @@ async function scanPortListen(filePath: string): Promise<number | undefined> {
   const re = /\.listen\(\s*(\d+)/g;
   const match = re.exec(content);
   if (match) {
-    return parseInt(match[1], 10);
+    return parseInt(match[1]!, 10);
   }
   return undefined;
 }
@@ -194,7 +194,7 @@ async function scanNodeEnvNames(serviceDir: string): Promise<string[]> {
     }
     let match: RegExpExecArray | null;
     while ((match = re.exec(content)) !== null) {
-      names.add(match[1]);
+      names.add(match[1]!);
     }
     re.lastIndex = 0;
   }

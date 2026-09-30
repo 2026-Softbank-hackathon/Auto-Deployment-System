@@ -20,6 +20,8 @@ import { ProjectService } from "./services/project-service.js";
 import { DeploymentService } from "./services/deployment-service.js";
 import { IrService } from "./services/ir-service.js";
 import { ApprovalService } from "./services/approval-service.js";
+import { AnalysisReportService } from "./services/analysis-report-service.js";
+import { LogService } from "./services/log-service.js";
 
 import projectsRoutes from "./routes/projects.js";
 import deploymentsRoutes from "./routes/deployments.js";
@@ -27,6 +29,8 @@ import deploymentEventsRoutes from "./routes/deployment-events.js";
 import deploymentIrRoutes from "./routes/deployment-ir.js";
 import deploymentMissingRoutes from "./routes/deployment-missing.js";
 import deploymentApprovalsRoutes from "./routes/deployment-approvals.js";
+import deploymentAnalysisReportRoutes from "./routes/deployment-analysis-report.js";
+import deploymentLogsRoutes from "./routes/deployment-logs.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -72,6 +76,8 @@ export async function buildServer(opts: BuildServerOptions) {
   const deploymentService = new DeploymentService(opts.pool, opts.boss, opts.storage);
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);
+  const analysisReportService = new AnalysisReportService(opts.pool);
+  const logService = new LogService(opts.pool);
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -150,6 +156,16 @@ export async function buildServer(opts: BuildServerOptions) {
       prefix: "/deployments",
       approvalService,
       sseBroker,
+    });
+
+    v1.register(deploymentAnalysisReportRoutes, {
+      prefix: "/deployments",
+      analysisReportService,
+    });
+
+    v1.register(deploymentLogsRoutes, {
+      prefix: "/deployments",
+      logService,
     });
   }, { prefix: "/api/v1" });
 

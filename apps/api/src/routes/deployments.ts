@@ -7,6 +7,7 @@ import { type FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import { DeploymentService } from "../services/deployment-service.js";
+import { idParams } from "../plugins/swagger.js";
 
 const VALID_PROFILES = new Set(["aws-ecs-basic", "onprem-docker-basic"]);
 
@@ -17,7 +18,22 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
   const svc = opts.deploymentService;
 
   // POST /deployments — multipart
-  fastify.post("/", async (request, reply) => {
+  fastify.post("/", {
+    schema: {
+      tags: ["deployments"],
+      summary: "소스 zip 업로드 → 배포 시작 (202)",
+      consumes: ["multipart/form-data"],
+      body: {
+        type: "object",
+        required: ["source", "project_id", "target"],
+        properties: {
+          source: { type: "string", format: "binary", description: "소스 zip (최대 100MB)" },
+          project_id: { type: "integer", minimum: 1 },
+          target: { type: "string", enum: [...VALID_PROFILES] },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const data = await request.file();
     if (!data) {
       throw new ApiError(400, "VALIDATION_ERROR", "source 파일이 없습니다.", "multipart/form-data로 source 필드(zip 파일)를 포함하세요.");
@@ -76,7 +92,9 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
   });
 
   // GET /deployments/:id
-  fastify.get<{ Params: { id: string } }>("/:id", async (request) => {
+  fastify.get<{ Params: { id: string } }>("/:id", {
+    schema: { tags: ["deployments"], summary: "배포 조회", params: idParams },
+  }, async (request) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");

@@ -6,6 +6,7 @@
 import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
 import type { DiagnosisService } from "../services/diagnosis-service.js";
+import { idParams } from "../plugins/swagger.js";
 
 const deploymentDiagnosisRoutes: FastifyPluginAsync<{
   diagnosisService: DiagnosisService;
@@ -14,6 +15,7 @@ const deploymentDiagnosisRoutes: FastifyPluginAsync<{
 
   fastify.get<{ Params: { id: string } }>(
     "/:id/diagnosis",
+    { schema: { tags: ["deployments"], summary: "실패 진단 조회", params: idParams } },
     async (request) => {
       const id = Number(request.params.id);
       if (!Number.isFinite(id) || id <= 0) {

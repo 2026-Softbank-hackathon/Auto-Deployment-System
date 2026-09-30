@@ -13,6 +13,17 @@ export const onpremDockerBasic: Profile = {
     supports_internal_expose: true,
     max_services: 5,
   },
+  runtime: {
+    type: "docker-compose",
+    replicas: 1,
+    size_map: {
+      small: { vcpu: 0.25, memory_mib: 512 },
+      medium: { vcpu: 0.5, memory_mib: 1024 },
+    },
+  },
+  ingress: {
+    type: "cloudflare-tunnel",
+    https: true,
+  },
   default_region: "local",
-  terraform_module_ref: "TODO(은영): 온프레미스는 Compose 렌더러라 Terraform 아님",
 };

@@ -3,6 +3,7 @@ import {
   ProfileSchema,
   awsEcsBasic,
   onpremDockerBasic,
+  defaultProfileFor,
   getProfile,
   PROFILES,
 } from "../src/index.js";
@@ -68,6 +69,16 @@ describe("getProfile", () => {
   });
 });
 
+describe("defaultProfileFor", () => {
+  it("returns the P0 AWS default profile", () => {
+    expect(defaultProfileFor("aws")).toBe("aws-ecs-basic");
+  });
+
+  it("returns the P0 On-Prem default profile", () => {
+    expect(defaultProfileFor("onprem")).toBe("onprem-docker-basic");
+  });
+});
+
 describe("capabilities", () => {
   it("awsEcsBasic service_types includes 'http'", () => {
     expect(awsEcsBasic.capabilities.service_types).toContain("http");
@@ -75,6 +86,20 @@ describe("capabilities", () => {
 
   it("awsEcsBasic resource_types includes 'postgres'", () => {
     expect(awsEcsBasic.capabilities.resource_types).toContain("postgres");
+  });
+
+  it("awsEcsBasic maps small to 0.25 vCPU and 512 MiB", () => {
+    expect(awsEcsBasic.runtime.size_map.small).toEqual({
+      vcpu: 0.25,
+      memory_mib: 512,
+    });
+  });
+
+  it("uses the confirmed P0 runtimes and ingress types", () => {
+    expect(awsEcsBasic.runtime.type).toBe("ecs-fargate");
+    expect(awsEcsBasic.ingress.type).toBe("alb");
+    expect(onpremDockerBasic.runtime.type).toBe("docker-compose");
+    expect(onpremDockerBasic.ingress.type).toBe("cloudflare-tunnel");
   });
 });
 

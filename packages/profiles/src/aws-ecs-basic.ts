@@ -13,6 +13,19 @@ export const awsEcsBasic: Profile = {
     supports_internal_expose: true,
     max_services: 10,
   },
+  runtime: {
+    type: "ecs-fargate",
+    replicas: 1,
+    size_map: {
+      small: { vcpu: 0.25, memory_mib: 512 },
+      medium: { vcpu: 0.5, memory_mib: 1024 },
+      large: { vcpu: 1, memory_mib: 2048 },
+    },
+  },
+  ingress: {
+    type: "alb",
+    https: true,
+  },
   default_region: "ap-northeast-2",
-  terraform_module_ref: "TODO(은영): packages/profiles/terraform/aws-ecs-basic",
+  terraform_module_ref: "infra/terraform/profiles/aws-ecs-basic",
 };

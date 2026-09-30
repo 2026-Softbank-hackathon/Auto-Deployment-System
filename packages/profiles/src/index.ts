@@ -1,5 +1,17 @@
-export { ProfileSchema, ProfileCapabilitiesSchema } from "./types.js";
-export type { Profile, ProfileCapabilities } from "./types.js";
+export {
+  ProfileSchema,
+  ProfileCapabilitiesSchema,
+  ComputeSizeSchema,
+  RuntimeProfileSchema,
+  IngressProfileSchema,
+} from "./types.js";
+export type {
+  Profile,
+  ProfileCapabilities,
+  ComputeSize,
+  RuntimeProfile,
+  IngressProfile,
+} from "./types.js";
 export { awsEcsBasic } from "./aws-ecs-basic.js";
 export { onpremDockerBasic } from "./onprem-docker-basic.js";
 

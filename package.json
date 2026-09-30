@@ -7,10 +7,19 @@
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "pnpm -r --if-present lint"
+    "lint": "pnpm -r --if-present lint",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:reset": "docker compose down -v && docker compose up -d postgres",
+    "db:migrate": "pnpm --filter @camellia/db migrate",
+    "dev": "concurrently 'pnpm --filter @camellia/api dev' 'pnpm --filter @camellia/worker dev'",
+    "dev:api": "pnpm --filter @camellia/api dev",
+    "dev:worker": "pnpm --filter @camellia/worker dev"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
+    "concurrently": "^9.0.0",
     "eslint": "^9.15.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.18.0"

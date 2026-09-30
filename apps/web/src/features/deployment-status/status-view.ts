@@ -15,6 +15,8 @@ export interface DeploymentStatusView {
   stage: number | null;
   stageKey: StageKey;
   outcome: DeploymentOutcome;
+  /** 사람(또는 자동) 승인을 기다리는 상태 — awaiting_* */
+  waiting: boolean;
 }
 
 export const railStages = ['source', 'analyze', 'deploy', 'verify'] as const;
@@ -30,13 +32,13 @@ const activeStages: Record<string, number> = {
 export function deploymentStatusView(status: string): DeploymentStatusView {
   if (status in activeStages) {
     const stage = activeStages[status];
-    return { tone: 'running', tape: 'DEPLOYING', stage, stageKey: status === 'rollback' ? 'rollback' : railStages[stage], outcome: 'active' };
+    return { tone: 'running', tape: 'DEPLOYING', stage, stageKey: status === 'rollback' ? 'rollback' : railStages[stage], outcome: 'active', waiting: status.startsWith('awaiting_') };
   }
   switch (status) {
-    case 'succeeded': return { tone: 'success', tape: 'LIVE', stage: railStageCount, stageKey: 'arrived', outcome: 'success' };
-    case 'failed': return { tone: 'failed', tape: 'FAILED', stage: null, stageKey: 'failed', outcome: 'failed' };
-    case 'cancelled': return { tone: 'waiting', tape: 'CANCELLED', stage: null, stageKey: 'cancelled', outcome: 'stopped' };
-    case 'rejected': return { tone: 'waiting', tape: 'REJECTED', stage: null, stageKey: 'rejected', outcome: 'stopped' };
-    default: return { tone: 'waiting', tape: status.toUpperCase(), stage: null, stageKey: 'unknown', outcome: 'unknown' };
+    case 'succeeded': return { tone: 'success', tape: 'LIVE', stage: railStageCount, stageKey: 'arrived', outcome: 'success', waiting: false };
+    case 'failed': return { tone: 'failed', tape: 'FAILED', stage: null, stageKey: 'failed', outcome: 'failed', waiting: false };
+    case 'cancelled': return { tone: 'waiting', tape: 'CANCELLED', stage: null, stageKey: 'cancelled', outcome: 'stopped', waiting: false };
+    case 'rejected': return { tone: 'waiting', tape: 'REJECTED', stage: null, stageKey: 'rejected', outcome: 'stopped', waiting: false };
+    default: return { tone: 'waiting', tape: status.toUpperCase(), stage: null, stageKey: 'unknown', outcome: 'unknown', waiting: false };
   }
 }

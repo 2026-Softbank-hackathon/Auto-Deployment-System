@@ -134,9 +134,10 @@ export async function getDeploymentIr(deploymentId: string): Promise<DeploymentI
 export const deploymentLogSteps = ['analyze', 'build', 'provision', 'verify'] as const;
 export type DeploymentLogStep = typeof deploymentLogSteps[number];
 
-/** API-12 — the P0 non-streaming log view of one step. 204 (no log yet) → null. */
-export async function getDeploymentLogs(deploymentId: string, step: DeploymentLogStep): Promise<string | null> {
+/** API-12 — the P0 non-streaming log view of one step. 204 (no log yet) → null. `tail` limits to the last N lines. */
+export async function getDeploymentLogs(deploymentId: string, step: DeploymentLogStep, tail?: number): Promise<string | null> {
   const query = new URLSearchParams({ step });
+  if (tail) query.set('tail', String(tail));
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/logs?${query}`), { credentials: 'include' });
   if (response.status === 204) return null;
   if (!response.ok) throw new DeploymentApiError(response.status, `로그를 불러오지 못했습니다. (${response.status})`);
@@ -212,4 +213,15 @@ export async function listProjectDeployments(projectId: string, options: { limit
     }),
     nextCursor: optionalString(body.nextCursor),
   };
+}
+
+/** GET /projects/:id — used only to show the project name on the progress screen. */
+export async function getProject(projectId: string): Promise<ProjectSummary> {
+  const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { credentials: 'include' });
+  const body = asRecord(await readJson(response), '프로젝트');
+  const id = optionalString(body.id);
+  const name = optionalString(body.name);
+  const createdAt = optionalString(body.createdAt);
+  if (!id || !name || !createdAt) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
+  return { id, name, createdAt };
 }

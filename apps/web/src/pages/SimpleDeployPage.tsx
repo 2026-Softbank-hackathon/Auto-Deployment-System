@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createDeployment, createProject } from '../api/deployment-api';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
+import type { Navigate } from '../app/navigation';
+import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
@@ -13,7 +15,7 @@ function automaticProjectName(fileName: string): string {
   return `${baseName.slice(0, 100 - suffix.length)}${suffix}`;
 }
 
-export function SimpleDeployPage({ onStarted }: { onStarted: (deploymentId: string) => void }) {
+export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploymentId: string) => void; onNavigate: Navigate }) {
   const { t } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -40,6 +42,7 @@ export function SimpleDeployPage({ onStarted }: { onStarted: (deploymentId: stri
     <div className="page-head">
       <div><h1>{t.deploy.title}</h1><p>{t.deploy.description}</p></div>
     </div>
+    <ActiveDeploymentsBanner onNavigate={onNavigate} />
     <section className="deploy-card" aria-label={t.deploy.cardLabel}>
       <PipelineRail sourceReady={Boolean(file)} />
       <ZipUploader file={file} onChange={(next) => { setFile(next); setError(null); }} disabled={isStarting} />

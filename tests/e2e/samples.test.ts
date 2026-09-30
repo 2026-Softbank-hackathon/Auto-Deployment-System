@@ -6,17 +6,23 @@
  *   2. Python FastAPI         (aws-ecs-basic)
  *   3. Node + PostgreSQL      (aws-ecs-basic)
  *   4. MSA (api + worker)     (onprem-docker-basic)
+ *   5. apps/samples/monolith  (데모용 실제 샘플 앱, SMP-01)
  *
- * Postgres가 없으면 전체 describe를 skip한다.
+ * Postgres가 없으면 업로드 describe를 skip한다.
+ * 5번의 분석기 직접 호출 테스트는 Postgres 없이도 돈다 (규칙 기반, AI 호출 없음).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { analyze } from "@camellia/analyzer";
 import { IrSchema } from "@camellia/ir-schema";
 import {
   createSampleExpressZipBuffer,
   createSamplePythonFastapiZipBuffer,
   createSampleNodePostgresZipBuffer,
   createSampleMsaZipBuffer,
+  createZipFromDir,
 } from "./fixtures/create-sample-zip.js";
 import { startHarness } from "./lib/harness.js";
 import type { Harness } from "./lib/harness.js";
@@ -284,5 +290,91 @@ describe.skipIf(skipE2e)("e2e sample: msa (api + worker)", () => {
         `Expected a service with "worker" in its name, got: ${svcKeys.join(", ")}`
       ).toBe(true);
     }
+  });
+});
+
+// ── 5. apps/samples/monolith (데모용 실제 샘플 앱) ────────────────────────────
+
+const MONOLITH_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../apps/samples/monolith"
+);
+
+/** 샘플 앱 IR 공통 검사: 단일 http 서비스 · port 3000 · /health · Dockerfile · env 이름 */
+function expectMonolithIr(ir: unknown): void {
+  const parsed = IrSchema.safeParse(ir);
+  expect(
+    parsed.success,
+    `IR schema failed: ${JSON.stringify(parsed.error?.issues)}`
+  ).toBe(true);
+  if (!parsed.success) return;
+
+  expect(parsed.data.metadata.name).toBe("sample-monolith");
+
+  const svcKeys = Object.keys(parsed.data.services);
+  expect(svcKeys).toEqual(["web"]);
+
+  const svc = parsed.data.services["web"]!;
+  expect(svc.type).toBe("http");
+  expect(svc.port).toBe(3000);
+  expect(svc.health.path).toBe("/health");
+  expect(svc.health.expected_status).toBe(200);
+  expect(svc.build?.dockerfile).toBe("Dockerfile");
+  expect(svc.command).toEqual(["node", "dist/server.js"]);
+  expect(svc.env).toEqual(
+    expect.arrayContaining(["APP_MESSAGE", "DEPLOY_TARGET", "PORT"])
+  );
+  expect(parsed.data.resources).toBeUndefined();
+}
+
+describe("sample app: apps/samples/monolith — 분석기 규칙 기반", () => {
+  it("node · hono · port 3000 · /health · Dockerfile · env 감지, IR 유효, 경고 없음", async () => {
+    const result = await analyze(MONOLITH_DIR);
+
+    expect(result.ir_valid, `ir_errors: ${JSON.stringify(result.ir_errors)}`).toBe(true);
+    expect(result.warnings).toEqual([]);
+
+    expect(result.services).toHaveLength(1);
+    const svc = result.services[0]!;
+    expect(svc.language).toBe("node");
+    expect(svc.framework).toBe("hono");
+    expect(svc.type).toBe("http");
+
+    expectMonolithIr(result.ir_draft);
+  });
+});
+
+describe.skipIf(skipE2e)("e2e sample: apps/samples/monolith 업로드", () => {
+  let harness: Harness;
+  let deploymentId: string;
+
+  beforeAll(async () => {
+    harness = await startHarness({
+      fixtureZip: createZipFromDir(MONOLITH_DIR),
+      target: "aws-ecs-basic",
+      projectName: "sample-monolith",
+      tmpPrefix: "camellia-e2e-monolith-",
+    });
+  }, 30000);
+
+  afterAll(async () => {
+    await harness?.close();
+  }, 15000);
+
+  it("업로드 성공 → awaiting_target_confirmation 도달", async () => {
+    deploymentId = await harness.upload();
+    expect(deploymentId).toBeTruthy();
+
+    const status = await harness.waitForAnalysis(deploymentId, 30_000);
+    expect(status).toBe("awaiting_target_confirmation");
+  }, 35000);
+
+  it("IR: web 1개 · http · port 3000 · /health · Dockerfile · env 이름", async () => {
+    expect(deploymentId).toBeTruthy();
+
+    const body = await harness.fetchIr(deploymentId);
+    expect(Number(body.version)).toBeGreaterThan(0);
+
+    expectMonolithIr(body.ir);
   });
 });

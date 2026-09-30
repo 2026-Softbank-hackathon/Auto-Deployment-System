@@ -26,8 +26,11 @@ import type {
   Warning,
   UnresolvedField,
 } from "./types.js";
+import { fillUnresolved } from "./ai/fill-unresolved.js";
+import type { FillOptions, AiFillResult } from "./ai/fill-unresolved.js";
 
 export type { AnalysisResult, ServiceCandidate, ResourceCandidate, Warning, UnresolvedField } from "./types.js";
+export type { FillOptions, AiFillResult } from "./ai/fill-unresolved.js";
 
 /**
  * 소스 경로를 스캔해서 IR 초안을 생성한다.
@@ -182,6 +185,32 @@ export async function analyze(sourcePath: string): Promise<AnalysisResult> {
     ir_valid: irResult.ir_valid,
     ir_errors: irResult.ir_errors,
   };
+}
+
+/**
+ * analyze() 후 unresolved 필드를 AI로 채운다.
+ *
+ * @param sourcePath - 분석할 소스 디렉터리 절대/상대 경로
+ * @param opts - AI 채우기 옵션 (client 주입, apiKey, model, maxRetries, onUsage)
+ * @returns AnalysisResult + ai 필드 (AiFillResult)
+ */
+export async function analyzeWithAI(
+  sourcePath: string,
+  opts?: FillOptions
+): Promise<AnalysisResult & { ai: AiFillResult }> {
+  const analysis = await analyze(sourcePath);
+  const ai = await fillUnresolved(analysis, opts ?? {});
+
+  // Merge AI-filled IR back into the result when it's valid
+  const merged: AnalysisResult = {
+    ...analysis,
+    ir_draft: ai.ir_after,
+    ir_valid: ai.ir_valid_after,
+    ir_errors: ai.ir_errors_after,
+    unresolved: ai.still_unresolved,
+  };
+
+  return { ...merged, ai };
 }
 
 async function readAppMeta(

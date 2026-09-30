@@ -8,7 +8,7 @@
 
 - **P0 파이프라인 구현 완료**: 분석기(규칙+AI) → IR → API 서버 → 워커 큐 → DB
 - **e2e 통합 검증**: 4 fixture(Express · FastAPI · Node+Postgres · MSA)에서 실 zip → 실 Claude API → 실 IR까지 100% 통과
-- **GitHub 이슈 11개 / PR 12개** (10개 머지, 2개 리뷰 대기)
+- **GitHub 이슈 11개 / PR 12개** (전부 머지 완료)
 - **로컬 실행 가능**: docker + Postgres + API + Worker + 실 Claude API 호출
 
 ## 2. 담당자별 필독 3종
@@ -206,7 +206,7 @@ pnpm test:e2e           # measure 포함 실 API 호출 (~$0.05)
 | #8 | 백엔드 API 서버 | #18 | ✅ 머지 |
 | #9 | 백엔드 워커 · 상태 머신 | #19 | ✅ 머지 |
 | #20 | API-12/API-19 후속 | #21 | ✅ 머지 |
-| #10 | e2e·측정·다이어그램·IR 팀 명세 | #22 | 📥 리뷰 대기 (이 문서 포함) |
+| #10 | e2e·측정·다이어그램·IR 팀 명세 | #22 | ✅ 머지 |
 
 ## 8. 팀원 시작 순서 (권장)
 

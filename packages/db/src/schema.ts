@@ -136,6 +136,22 @@ export const DeploymentStepSchema = z.object({
 });
 export type DeploymentStep = z.infer<typeof DeploymentStepSchema>;
 
+// ── health_check_attempts ────────────────────────────────────────────────────
+
+export const HealthCheckAttemptSchema = z.object({
+  id: z.number().int().positive(),
+  deployment_step_id: z.number().int().positive(),
+  environment_id: z.string().min(1),
+  attempt: z.number().int().min(1),
+  checked_at: z.date(),
+  status_code: z.number().int().min(100).max(599).nullable(),
+  latency_ms: z.number().int().nonnegative().nullable(),
+  passed: z.boolean(),
+  error_code: z.string().min(1).nullable(),
+  error_message: z.string().min(1).nullable(),
+});
+export type HealthCheckAttempt = z.infer<typeof HealthCheckAttemptSchema>;
+
 // ── ai_usage ──────────────────────────────────────────────────────────────────
 
 export const AiUsageSchema = z.object({

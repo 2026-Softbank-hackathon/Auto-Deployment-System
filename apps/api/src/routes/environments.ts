@@ -12,6 +12,7 @@ import { type FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import type { EnvironmentService } from "../services/environment-service.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const AwsConfigSchema = z.object({
   credentialsType: z.enum(["access_key", "assume_role"]),
@@ -45,18 +46,24 @@ const environmentsRoutes: FastifyPluginAsync<{ environmentService: EnvironmentSe
 ) => {
   const svc = opts.environmentService;
 
-  fastify.post("/", async (request, reply) => {
+  fastify.post("/", {
+    schema: { tags: ["environments"], summary: "배포 환경 등록 (AWS · 온프레미스)", body: toJsonSchema(CreateBody) },
+  }, async (request, reply) => {
     const body = CreateBody.parse(request.body);
     const dto = await svc.create(body);
     return reply.status(201).send(dto);
   });
 
-  fastify.get("/", async (request) => {
+  fastify.get("/", {
+    schema: { tags: ["environments"], summary: "배포 환경 목록", querystring: toJsonSchema(ProjectIdQuery) },
+  }, async (request) => {
     const q = ProjectIdQuery.parse(request.query);
     return svc.list(q);
   });
 
-  fastify.get<{ Params: { id: string } }>("/:id", async (request) => {
+  fastify.get<{ Params: { id: string } }>("/:id", {
+    schema: { tags: ["environments"], summary: "배포 환경 조회", params: idParams },
+  }, async (request) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "환경 ID 는 양수 정수여야 합니다.");
@@ -64,7 +71,9 @@ const environmentsRoutes: FastifyPluginAsync<{ environmentService: EnvironmentSe
     return svc.get(id);
   });
 
-  fastify.delete<{ Params: { id: string } }>("/:id", async (request, reply) => {
+  fastify.delete<{ Params: { id: string } }>("/:id", {
+    schema: { tags: ["environments"], summary: "배포 환경 삭제 (진행 중 배포 있으면 409)", params: idParams },
+  }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "환경 ID 는 양수 정수여야 합니다.");

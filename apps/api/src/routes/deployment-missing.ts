@@ -11,6 +11,7 @@ import { ApiError } from "../plugins/error-handler.js";
 import type { Pool } from "@camellia/db";
 import { IrSchema } from "@camellia/ir-schema";
 import { type SseBroker } from "../plugins/sse-broker.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const MissingResourceDecisionSchema = z.object({
   resource: z.string().min(1),
@@ -28,7 +29,14 @@ const deploymentMissingRoutes: FastifyPluginAsync<{
 }> = async (fastify, opts) => {
   const { pool, sseBroker } = opts;
 
-  fastify.post<{ Params: { id: string } }>("/:id/missing-resources", async (request, reply) => {
+  fastify.post<{ Params: { id: string } }>("/:id/missing-resources", {
+    schema: {
+      tags: ["deployments"],
+      summary: "누락 리소스 결정 제출 (awaiting_target_confirmation)",
+      params: idParams,
+      body: toJsonSchema(SubmitMissingResourcesBodySchema),
+    },
+  }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");

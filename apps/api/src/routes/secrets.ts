@@ -11,6 +11,7 @@ import { type FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import type { SecretService } from "../services/secret-service.js";
+import { toJsonSchema } from "../plugins/swagger.js";
 
 const CreateBody = z.object({
   projectId: z.number().int().positive(),
@@ -32,18 +33,29 @@ const secretsRoutes: FastifyPluginAsync<{ secretService: SecretService }> = asyn
 ) => {
   const svc = opts.secretService;
 
-  fastify.post("/", async (request, reply) => {
+  fastify.post("/", {
+    schema: { tags: ["secrets"], summary: "시크릿 저장 (값은 암호화 저장, 응답에 없음)", body: toJsonSchema(CreateBody) },
+  }, async (request, reply) => {
     const body = CreateBody.parse(request.body);
     const dto = await svc.create(body);
     return reply.status(201).send(dto);
   });
 
-  fastify.get("/", async (request) => {
+  fastify.get("/", {
+    schema: { tags: ["secrets"], summary: "시크릿 목록 (값 제외)", querystring: toJsonSchema(ProjectIdQuery) },
+  }, async (request) => {
     const q = ProjectIdQuery.parse(request.query);
     return svc.list(q);
   });
 
-  fastify.delete<{ Params: { name: string } }>("/:name", async (request, reply) => {
+  fastify.delete<{ Params: { name: string } }>("/:name", {
+    schema: {
+      tags: ["secrets"],
+      summary: "시크릿 삭제",
+      params: toJsonSchema(z.object({ name: z.string().min(1) })),
+      querystring: toJsonSchema(ProjectIdQuery),
+    },
+  }, async (request, reply) => {
     const q = ProjectIdQuery.parse(request.query);
     if (!request.params.name) {
       throw new ApiError(400, "VALIDATION_ERROR", "시크릿 name 이 필요합니다.");

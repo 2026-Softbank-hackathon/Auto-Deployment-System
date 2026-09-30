@@ -6,6 +6,7 @@
 import { type FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ProjectService } from "../services/project-service.js";
+import { toJsonSchema } from "../plugins/swagger.js";
 
 const CreateProjectBodySchema = z.object({
   name: z.string().min(1).max(100),
@@ -34,20 +35,26 @@ const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = a
   const svc = opts.projectService;
 
   // POST /projects
-  fastify.post("/", async (request, reply) => {
+  fastify.post("/", {
+    schema: { tags: ["projects"], summary: "프로젝트 생성", body: toJsonSchema(CreateProjectBodySchema) },
+  }, async (request, reply) => {
     const body = CreateProjectBodySchema.parse(request.body);
     const project = await svc.create(body);
     return reply.status(201).send(project);
   });
 
   // GET /projects
-  fastify.get("/", async (request) => {
+  fastify.get("/", {
+    schema: { tags: ["projects"], summary: "프로젝트 목록", querystring: toJsonSchema(ListProjectsQuerySchema) },
+  }, async (request) => {
     const query = ListProjectsQuerySchema.parse(request.query);
     return svc.list({ limit: query.limit, cursor: query.cursor });
   });
 
   // GET /projects/:id
-  fastify.get<{ Params: { id: string } }>("/:id", async (request) => {
+  fastify.get<{ Params: { id: string } }>("/:id", {
+    schema: { tags: ["projects"], summary: "프로젝트 조회", params: toJsonSchema(ProjectIdParamsSchema) },
+  }, async (request) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       const { ApiError } = await import("../plugins/error-handler.js");
@@ -57,7 +64,14 @@ const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = a
   });
 
   // GET /projects/:id/deployments — 배포 이력 (LOG-01 / API-22)
-  fastify.get("/:id/deployments", async (request) => {
+  fastify.get("/:id/deployments", {
+    schema: {
+      tags: ["projects"],
+      summary: "프로젝트 배포 이력 (최신순 · 커서 페이지네이션)",
+      params: toJsonSchema(ProjectIdParamsSchema),
+      querystring: toJsonSchema(ListDeploymentsQuerySchema),
+    },
+  }, async (request) => {
     const { id } = ProjectIdParamsSchema.parse(request.params);
     const query = ListDeploymentsQuerySchema.parse(request.query);
     return svc.listDeployments(id, query);

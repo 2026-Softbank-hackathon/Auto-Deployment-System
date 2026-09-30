@@ -14,6 +14,7 @@ import errorHandlerPlugin from "./plugins/error-handler.js";
 import authPlugin from "./plugins/auth.js";
 import multipartPlugin from "./plugins/multipart.js";
 import sseBrokerPlugin from "./plugins/sse-broker.js";
+import swaggerPlugin from "./plugins/swagger.js";
 import { startPgListener } from "./plugins/pg-listener.js";
 
 import { ProjectService } from "./services/project-service.js";
@@ -81,6 +82,7 @@ export async function buildServer(opts: BuildServerOptions) {
   await fastify.register(authPlugin, { apiKey: opts.apiKey, nodeEnv: opts.nodeEnv });
   await fastify.register(multipartPlugin);
   await fastify.register(sseBrokerPlugin);
+  await fastify.register(swaggerPlugin);
 
   // Wait for plugins to be ready before accessing decorators
   await fastify.after();
@@ -141,7 +143,11 @@ export async function buildServer(opts: BuildServerOptions) {
   }
 
   // ── health check ───────────────────────────────────────────────────────────
-  fastify.get("/health", async () => ({ status: "ok" }));
+  fastify.get(
+    "/health",
+    { schema: { tags: ["system"], summary: "헬스 체크", security: [] } },
+    async () => ({ status: "ok" }),
+  );
 
   // ── routes under /api/v1 ───────────────────────────────────────────────────
   fastify.register(async (v1) => {

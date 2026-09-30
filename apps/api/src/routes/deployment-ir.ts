@@ -9,6 +9,7 @@ import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import { IrService } from "../services/ir-service.js";
 import { type SseBroker } from "../plugins/sse-broker.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const PatchIrBodySchema = z.object({
   ir: z.record(z.string(), z.unknown()),
@@ -22,7 +23,9 @@ const deploymentIrRoutes: FastifyPluginAsync<{
   const { irService, sseBroker } = opts;
 
   // GET /deployments/:id/ir
-  fastify.get<{ Params: { id: string } }>("/:id/ir", async (request) => {
+  fastify.get<{ Params: { id: string } }>("/:id/ir", {
+    schema: { tags: ["deployments"], summary: "최신 IR 조회", params: idParams },
+  }, async (request) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");
@@ -31,7 +34,14 @@ const deploymentIrRoutes: FastifyPluginAsync<{
   });
 
   // PATCH /deployments/:id/ir
-  fastify.patch<{ Params: { id: string } }>("/:id/ir", async (request, reply) => {
+  fastify.patch<{ Params: { id: string } }>("/:id/ir", {
+    schema: {
+      tags: ["deployments"],
+      summary: "IR 수동 편집",
+      params: idParams,
+      body: toJsonSchema(PatchIrBodySchema),
+    },
+  }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");

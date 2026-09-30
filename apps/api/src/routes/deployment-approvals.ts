@@ -9,6 +9,7 @@ import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import { ApprovalService } from "../services/approval-service.js";
 import { type SseBroker } from "../plugins/sse-broker.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const SubmitApprovalBodySchema = z.object({
   gate: z.enum(["target", "plan"]),
@@ -22,7 +23,14 @@ const deploymentApprovalsRoutes: FastifyPluginAsync<{
 }> = async (fastify, opts) => {
   const { approvalService, sseBroker } = opts;
 
-  fastify.post<{ Params: { id: string } }>("/:id/approvals", async (request, reply) => {
+  fastify.post<{ Params: { id: string } }>("/:id/approvals", {
+    schema: {
+      tags: ["deployments"],
+      summary: "승인 게이트 결정 (target · plan)",
+      params: idParams,
+      body: toJsonSchema(SubmitApprovalBodySchema),
+    },
+  }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");

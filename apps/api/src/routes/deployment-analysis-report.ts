@@ -7,6 +7,7 @@
 import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
 import type { AnalysisReportService } from "../services/analysis-report-service.js";
+import { idParams } from "../plugins/swagger.js";
 
 const deploymentAnalysisReportRoutes: FastifyPluginAsync<{
   analysisReportService: AnalysisReportService;
@@ -15,6 +16,7 @@ const deploymentAnalysisReportRoutes: FastifyPluginAsync<{
 
   fastify.get<{ Params: { id: string } }>(
     "/:id/analysis-report",
+    { schema: { tags: ["deployments"], summary: "분석 리포트 조회", params: idParams } },
     async (request) => {
       const id = Number(request.params.id);
       if (!Number.isFinite(id) || id <= 0) {

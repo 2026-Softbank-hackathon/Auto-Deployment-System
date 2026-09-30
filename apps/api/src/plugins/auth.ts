@@ -29,6 +29,11 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
       return;
     }
 
+    // Skip OpenAPI 문서 (Swagger UI · /docs/json). API 호출은 여전히 키 필요
+    if (/^\/docs(\/|\?|$)/.test(request.url)) {
+      return;
+    }
+
     const headerKey =
       request.headers["x-api-key"] ?? request.headers["authorization"]?.replace(/^Bearer\s+/i, "");
 

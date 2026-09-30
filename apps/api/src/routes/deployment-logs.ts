@@ -9,6 +9,7 @@ import { type FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import type { LogService } from "../services/log-service.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const LogsQuerySchema = z.object({
   step: z.enum(["analyze", "build", "provision", "verify"]),
@@ -27,6 +28,14 @@ const deploymentLogsRoutes: FastifyPluginAsync<{
 
   fastify.get<{ Params: { id: string }; Querystring: unknown }>(
     "/:id/logs",
+    {
+      schema: {
+        tags: ["deployments"],
+        summary: "단계 로그 조회 (text/plain, 없으면 204)",
+        params: idParams,
+        querystring: toJsonSchema(LogsQuerySchema),
+      },
+    },
     async (request, reply) => {
       const id = Number(request.params.id);
       if (!Number.isFinite(id) || id <= 0) {

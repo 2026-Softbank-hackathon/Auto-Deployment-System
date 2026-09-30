@@ -9,6 +9,7 @@ import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
 import { type SseBroker, formatSseMessage } from "../plugins/sse-broker.js";
 import type { Pool } from "@camellia/db";
+import { idParams } from "../plugins/swagger.js";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -18,7 +19,14 @@ const deploymentEventsRoutes: FastifyPluginAsync<{
 }> = async (fastify, opts) => {
   const { sseBroker, pool } = opts;
 
-  fastify.get<{ Params: { id: string } }>("/:id/events", async (request, reply) => {
+  fastify.get<{ Params: { id: string } }>("/:id/events", {
+    schema: {
+      tags: ["deployments"],
+      summary: "배포 이벤트 SSE 스트림",
+      description: "text/event-stream. 30초마다 heartbeat, Last-Event-Id 헤더로 재연결 시 누락 이벤트 replay.",
+      params: idParams,
+    },
+  }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");

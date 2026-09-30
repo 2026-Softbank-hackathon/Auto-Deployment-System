@@ -6,22 +6,16 @@
  */
 
 import { type FastifyPluginAsync } from "fastify";
-import { z } from "zod";
+import {
+  SubmitMissingResourcesBodySchema,
+  type DeploymentEventData,
+  type SubmitMissingResourcesResponse,
+} from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { Pool } from "@camellia/db";
 import { IrSchema } from "@camellia/ir-schema";
 import { type SseBroker } from "../plugins/sse-broker.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
-
-const MissingResourceDecisionSchema = z.object({
-  resource: z.string().min(1),
-  action: z.enum(["exclude", "add_module"]),
-  moduleId: z.string().optional(),
-});
-
-const SubmitMissingResourcesBodySchema = z.object({
-  decisions: z.array(MissingResourceDecisionSchema).min(1),
-});
 
 const deploymentMissingRoutes: FastifyPluginAsync<{
   pool: Pool;
@@ -121,7 +115,7 @@ const deploymentMissingRoutes: FastifyPluginAsync<{
     // SSE 브로드캐스트
     sseBroker.publish(String(id), {
       event: "missing_resources_updated",
-      data: { deploymentId: String(id), resolved, remaining },
+      data: { deploymentId: String(id), resolved, remaining } satisfies DeploymentEventData<"missing_resources_updated">,
     });
 
     return reply.status(200).send({
@@ -129,7 +123,7 @@ const deploymentMissingRoutes: FastifyPluginAsync<{
       resolved,
       remaining,
       updatedIr: parsed.data,
-    });
+    } satisfies SubmitMissingResourcesResponse);
   });
 };
 

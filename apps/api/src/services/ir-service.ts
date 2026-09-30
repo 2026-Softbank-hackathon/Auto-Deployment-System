@@ -6,6 +6,7 @@
 
 import type { Pool } from "@camellia/db";
 import { IrSchema } from "@camellia/ir-schema";
+import type { IrVersion } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export interface IrVersionRow {
@@ -24,7 +25,7 @@ const EDITABLE_STATUSES = new Set([
 export class IrService {
   constructor(private readonly pool: Pool) {}
 
-  async getLatest(deploymentId: number) {
+  async getLatest(deploymentId: number): Promise<IrVersion> {
     const res = await this.pool.query<IrVersionRow & { version_num: number }>(
       `SELECT iv.id, iv.deployment_id, iv.ir_json, iv.source, iv.created_at,
               ROW_NUMBER() OVER (PARTITION BY iv.deployment_id ORDER BY iv.id ASC) AS version_num
@@ -46,7 +47,7 @@ export class IrService {
     return this.toDto(row, row.version_num);
   }
 
-  async patch(deploymentId: number, irPartial: unknown, requestedVersion: number) {
+  async patch(deploymentId: number, irPartial: unknown, requestedVersion: number): Promise<IrVersion> {
     // 1. 현재 배포 상태 확인
     const depRes = await this.pool.query<{ status: string }>(
       `SELECT status FROM deployments WHERE id = $1`,
@@ -122,7 +123,7 @@ export class IrService {
     return res.rows[0]!;
   }
 
-  private toDto(row: IrVersionRow, version: number) {
+  private toDto(row: IrVersionRow, version: number): IrVersion {
     return {
       deploymentId: String(row.deployment_id),
       ir: row.ir_json,

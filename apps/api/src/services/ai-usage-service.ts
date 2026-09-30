@@ -4,22 +4,11 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { AiUsage, AiUsageBreakdown } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
-export type AiUsageBreakdown = {
-  model: string;
-  tokenIn: number;
-  tokenOut: number;
-  costUsd: number;
-};
-
-export type AiUsageResponse = {
-  deploymentId: number;
-  totalTokenIn: number;
-  totalTokenOut: number;
-  totalCostUsd: number;
-  breakdown: AiUsageBreakdown[];
-};
+export type { AiUsageBreakdown };
+export type AiUsageResponse = AiUsage;
 
 export class AiUsageService {
   constructor(private readonly pool: Pool) {}

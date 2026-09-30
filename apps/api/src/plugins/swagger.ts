@@ -12,8 +12,9 @@ import { type FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import { z, type ZodTypeAny } from "zod";
+import { type ZodTypeAny } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { IdParamsSchema } from "@camellia/contracts";
 
 /** Zod 스키마(입력 형태) → OpenAPI 3 JSON Schema. 라우트 schema 의 params/querystring/body 에 사용. */
 export function toJsonSchema(schema: ZodTypeAny) {
@@ -21,7 +22,7 @@ export function toJsonSchema(schema: ZodTypeAny) {
 }
 
 /** `/:id` 경로 파라미터 (배포 · 환경 ID) 문서용 */
-export const idParams = toJsonSchema(z.object({ id: z.coerce.number().int().positive() }));
+export const idParams = toJsonSchema(IdParamsSchema);
 
 const swaggerPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.setValidatorCompiler(() => () => true);

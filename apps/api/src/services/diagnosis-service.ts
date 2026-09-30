@@ -4,20 +4,11 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { Diagnosis, PatchCandidate } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
-export type PatchCandidate = {
-  description: string;
-  diff: string;
-};
-
-export type DiagnosisResponse = {
-  deploymentId: number;
-  failedStep: string | null;
-  summary: string;
-  patchCandidates: PatchCandidate[];
-  generatedAt: string;
-};
+export type { PatchCandidate };
+export type DiagnosisResponse = Diagnosis;
 
 type StoredDiagnosis = {
   failedStep: string | null;

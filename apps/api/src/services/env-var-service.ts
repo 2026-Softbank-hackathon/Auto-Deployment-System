@@ -5,13 +5,12 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type { EnvVarList } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 type EnvVarRow = { name: string; value: string; updated_at: Date };
 
-export type EnvVarList = {
-  items: { name: string; value: string; updatedAt: string }[];
-};
+export type { EnvVarList };
 
 export class EnvVarService {
   constructor(private readonly pool: Pool) {}

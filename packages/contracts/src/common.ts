@@ -97,6 +97,11 @@ export const TARGET_PROFILES = ["aws-ecs-basic", "onprem-docker-basic"] as const
 export const TargetProfileSchema = z.enum(TARGET_PROFILES);
 export type TargetProfile = z.infer<typeof TargetProfileSchema>;
 
+/** POST /deployments 요청의 target — 사용자는 벤더까지만 선택, 서버가 default profile 매핑 */
+export const TARGET_VENDORS = ["aws", "onprem"] as const;
+export const TargetVendorSchema = z.enum(TARGET_VENDORS);
+export type TargetVendor = z.infer<typeof TargetVendorSchema>;
+
 /** 승인 게이트 */
 export const ApprovalGateSchema = z.enum(["target", "plan"]);
 export type ApprovalGate = z.infer<typeof ApprovalGateSchema>;

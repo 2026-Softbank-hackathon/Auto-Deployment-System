@@ -104,7 +104,7 @@ describe.skipIf(skipE2e)("e2e: upload → analyze → IR → approve", () => {
     const zipBuffer = createSampleZipBuffer();
     const form = new FormData();
     form.append("project_id", project.id);
-    form.append("target", "aws-ecs-basic");
+    form.append("target", "aws");
     form.append("source", zipBuffer, {
       filename: "sample-express.zip",
       contentType: "application/zip",

@@ -40,7 +40,7 @@ describe.skipIf(skipE2e)("e2e sample: express basic", () => {
   beforeAll(async () => {
     harness = await startHarness({
       fixtureZip: createSampleExpressZipBuffer(),
-      target: "aws-ecs-basic",
+      target: "aws",
       projectName: "sample-express",
       tmpPrefix: "camellia-e2e-express-",
     });
@@ -91,7 +91,7 @@ describe.skipIf(skipE2e)("e2e sample: python fastapi", () => {
   beforeAll(async () => {
     harness = await startHarness({
       fixtureZip: createSamplePythonFastapiZipBuffer(),
-      target: "aws-ecs-basic",
+      target: "aws",
       projectName: "sample-fastapi",
       tmpPrefix: "camellia-e2e-fastapi-",
     });
@@ -171,7 +171,7 @@ describe.skipIf(skipE2e)("e2e sample: node + postgres", () => {
   beforeAll(async () => {
     harness = await startHarness({
       fixtureZip: createSampleNodePostgresZipBuffer(),
-      target: "aws-ecs-basic",
+      target: "aws",
       projectName: "sample-node-postgres",
       tmpPrefix: "camellia-e2e-nodepg-",
     });
@@ -236,7 +236,7 @@ describe.skipIf(skipE2e)("e2e sample: msa (api + worker)", () => {
   beforeAll(async () => {
     harness = await startHarness({
       fixtureZip: createSampleMsaZipBuffer(),
-      target: "onprem-docker-basic",
+      target: "onprem",
       projectName: "sample-msa",
       tmpPrefix: "camellia-e2e-msa-",
     });
@@ -351,7 +351,7 @@ describe.skipIf(skipE2e)("e2e sample: apps/samples/monolith 업로드", () => {
   beforeAll(async () => {
     harness = await startHarness({
       fixtureZip: createZipFromDir(MONOLITH_DIR),
-      target: "aws-ecs-basic",
+      target: "aws",
       projectName: "sample-monolith",
       tmpPrefix: "camellia-e2e-monolith-",
     });

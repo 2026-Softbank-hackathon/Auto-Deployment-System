@@ -97,10 +97,10 @@ function maskKey(key: string): string {
 // ── Fixture definitions ───────────────────────────────────────────────────────
 
 const FIXTURES = [
-  { name: "Express", label: "Express Basic",         createZip: createSampleExpressZipBuffer,       target: "aws-ecs-basic" },
-  { name: "FastAPI", label: "Python FastAPI",         createZip: createSamplePythonFastapiZipBuffer, target: "aws-ecs-basic" },
-  { name: "NodePG",  label: "Node + Postgres",        createZip: createSampleNodePostgresZipBuffer,  target: "aws-ecs-basic" },
-  { name: "MSA",     label: "MSA",                    createZip: createSampleMsaZipBuffer,           target: "aws-ecs-basic" },
+  { name: "Express", label: "Express Basic",         createZip: createSampleExpressZipBuffer,       target: "aws" },
+  { name: "FastAPI", label: "Python FastAPI",         createZip: createSamplePythonFastapiZipBuffer, target: "aws" },
+  { name: "NodePG",  label: "Node + Postgres",        createZip: createSampleNodePostgresZipBuffer,  target: "aws" },
+  { name: "MSA",     label: "MSA",                    createZip: createSampleMsaZipBuffer,           target: "aws" },
 ] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

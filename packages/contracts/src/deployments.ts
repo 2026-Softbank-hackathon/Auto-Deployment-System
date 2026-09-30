@@ -24,6 +24,7 @@ import {
   IsoDateTimeSchema,
   PgBigIntSchema,
   type TargetProfile,
+  type TargetVendor,
 } from "./common.js";
 
 // ── POST /deployments (multipart/form-data) ──────────────────────────────────
@@ -31,11 +32,12 @@ import {
 /**
  * multipart 필드. Zod 로 parse 하지 않고 라우트가 직접 검사한다 (문서 · 타입용).
  * 프론트: `FormData` 에 source(zip, 최대 100MB) · project_id · target 을 넣어 보낸다.
+ * target 은 벤더 (aws/onprem), 서버가 default profile 매핑.
  */
 export type CreateDeploymentFields = {
   source: Blob;
   project_id: string | number;
-  target: TargetProfile;
+  target: TargetVendor;
 };
 
 export const CreateDeploymentResponseSchema = z

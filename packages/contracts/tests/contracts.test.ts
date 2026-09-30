@@ -13,6 +13,8 @@ import {
   ListProjectDeploymentsQuerySchema,
   PatchProjectEnvBodySchema,
   ProjectSchema,
+  TARGET_VENDORS,
+  TargetVendorSchema,
   type DeploymentEventData,
 } from "../src/index.js";
 
@@ -22,6 +24,20 @@ const project = {
   createdAt: "2026-09-30T03:00:00.000Z",
   updatedAt: "2026-09-30T03:00:00.000Z",
 };
+
+describe("TARGET_VENDORS", () => {
+  it("aws 와 onprem 두 벤더만 포함함", () => {
+    expect([...TARGET_VENDORS].sort()).toEqual(["aws", "onprem"]);
+  });
+
+  it("TargetVendorSchema — aws/onprem 허용, profile ID 거부", () => {
+    expect(TargetVendorSchema.safeParse("aws").success).toBe(true);
+    expect(TargetVendorSchema.safeParse("onprem").success).toBe(true);
+    expect(TargetVendorSchema.safeParse("aws-ecs-basic").success).toBe(false);
+    expect(TargetVendorSchema.safeParse("onprem-docker-basic").success).toBe(false);
+    expect(TargetVendorSchema.safeParse("").success).toBe(false);
+  });
+});
 
 describe("응답 스키마", () => {
   it("선언 안 된 필드 · 빠진 필드를 거부함 (strict)", () => {

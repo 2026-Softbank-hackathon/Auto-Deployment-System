@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@camellia/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@camellia/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -111,6 +114,9 @@ importers:
       '@camellia/analyzer':
         specifier: workspace:*
         version: link:../../packages/analyzer
+      '@camellia/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@camellia/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -173,6 +179,19 @@ importers:
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)
+
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.4)
 
   packages/db:
     dependencies:
@@ -2568,14 +2587,6 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 1.2.0
 
-  '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@20.19.43))':
-    dependencies:
-      '@vitest/spy': 2.1.9
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 5.4.21(@types/node@20.19.43)
-
   '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@22.20.4))':
     dependencies:
       '@vitest/spy': 2.1.9
@@ -3694,7 +3705,7 @@ snapshots:
   vitest@2.1.9(@types/node@20.19.43):
     dependencies:
       '@vitest/expect': 2.1.9
-      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@20.19.43))
+      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@22.20.4))
       '@vitest/pretty-format': 2.1.9
       '@vitest/runner': 2.1.9
       '@vitest/snapshot': 2.1.9

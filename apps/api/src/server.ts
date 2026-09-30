@@ -89,7 +89,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);
   const analysisReportService = new AnalysisReportService(opts.pool);
-  const logService = new LogService(opts.pool);
+  const logService = new LogService(opts.pool, opts.storage);
   const deploymentHealthService = new DeploymentHealthService(opts.pool);
   const diagnosisService = new DiagnosisService(opts.pool);
   const aiUsageService = new AiUsageService(opts.pool);

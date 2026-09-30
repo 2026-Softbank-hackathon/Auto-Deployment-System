@@ -96,6 +96,10 @@ export class MockStorage {
     return this.store.get(key) ?? null;
   }
 
+  async exists(key: string): Promise<boolean> {
+    return this.store.has(key);
+  }
+
   async delete(key: string): Promise<void> {
     this.store.delete(key);
   }

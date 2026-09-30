@@ -33,6 +33,17 @@ import type { FillOptions, AiFillResult } from "./ai/fill-unresolved.js";
 export type { AnalysisResult, ServiceCandidate, ResourceCandidate, Warning, UnresolvedField } from "./types.js";
 export type { FillOptions, AiFillResult } from "./ai/fill-unresolved.js";
 
+// Re-export AI helpers so consumers (e.g. apps/worker/handlers/diagnose.ts) can import top-level.
+export { createClient } from "./ai/anthropic-client.js";
+export type {
+  AnthropicLike,
+  AnthropicContentBlock,
+  AnthropicMessageResponse,
+  AnthropicCreateParams,
+  ClientOptions,
+} from "./ai/anthropic-client.js";
+export { redact, redactPayload } from "./ai/redact.js";
+
 /**
  * 소스 경로를 스캔해서 IR 초안을 생성한다.
  *

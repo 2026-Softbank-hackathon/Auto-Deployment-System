@@ -12,11 +12,12 @@ import { handleBuild, type BuildJobPayload } from "./handlers/build.js";
 import { handleProvision, type ProvisionJobPayload } from "./handlers/provision.js";
 import type { VerifyJobPayload } from "./handlers/verify.js";
 import { runVerifyJob } from "./verify-orchestrator.js";
+import { handleDiagnose, type DiagnoseJobPayload } from "./handlers/diagnose.js";
 
 export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void> {
   // pg-boss v10 breaking change: send/work 이전에 큐를 명시적으로 생성해야 함.
   // 이미 존재하면 no-op으로 처리.
-  for (const q of ["analyze", "build", "provision", "verify"]) {
+  for (const q of ["analyze", "build", "provision", "verify", "diagnose"]) {
     try {
       await boss.createQueue(q);
     } catch (e) {
@@ -66,6 +67,18 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         await runVerifyJob(job as { data: VerifyJobPayload }, deps);
       } catch (e) {
         deps.log?.error({ err: e, jobId: job.id }, "verify job failed");
+        throw e;
+      }
+    }
+  });
+
+  // API-36 진단 잡: state-machine.transitionTo(..., "failed", { boss }) 가 자동 큐잉.
+  await boss.work("diagnose", async (jobs) => {
+    for (const job of jobs) {
+      try {
+        await handleDiagnose(job as { data: DiagnoseJobPayload }, deps);
+      } catch (e) {
+        deps.log?.error({ err: e, jobId: job.id }, "diagnose job failed");
         throw e;
       }
     }

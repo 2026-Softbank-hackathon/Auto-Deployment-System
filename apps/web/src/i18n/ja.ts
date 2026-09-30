@@ -96,7 +96,7 @@ export const ja: Messages = {
     stepLoading: 'デプロイ状態を読み込んでいます',
     events: {
       state_changed: 'デプロイ状態が更新されました', 'analysis.progress': 'ソース分析の進行状況を受信しました', approval_requested: 'AIレビューが始まりました',
-      'lock.changed': 'デプロイ環境の状態が更新されました', step_completed: 'デプロイ段階が完了しました',
+      'log.line': 'デプロイログを受信しました', ir_updated: 'デプロイ仕様(IR)が更新されました', missing_resources_updated: '不足リソースの決定が反映されました',
     },
     pipeline: ['分析', '自動レビュー', 'ビルド', '計画', 'デプロイ', '検証', '完了'],
     deploymentId: 'デプロイID',
@@ -110,6 +110,7 @@ export const ja: Messages = {
     waitingEvents: 'リアルタイム更新を待っています。',
     technical: '技術的な詳細',
     loadLogs: 'ログを読み込む',
+    logSteps: { analyze: '分析', build: 'ビルド', provision: 'プロビジョニング', verify: '検証' },
     noLogs: 'まだ保存されたログはありません。',
   },
   analysis: {

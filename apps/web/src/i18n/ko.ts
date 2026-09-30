@@ -94,7 +94,7 @@ export const ko = {
     stepLoading: '배포 상태를 불러오고 있어요',
     events: {
       state_changed: '배포 상태가 업데이트되었어요', 'analysis.progress': '소스 분석 진행 상태를 받았어요', approval_requested: 'AI 검토가 시작됐어요',
-      'lock.changed': '배포 환경 상태가 업데이트되었어요', step_completed: '배포 단계가 완료되었어요',
+      'log.line': '배포 로그를 받았어요', ir_updated: '배포 명세(IR)가 수정되었어요', missing_resources_updated: '누락 리소스 결정이 반영되었어요',
     },
     pipeline: ['분석', '자동 검토', '빌드', '계획', '배포', '검증', '완료'],
     deploymentId: '배포 ID',
@@ -108,6 +108,7 @@ export const ko = {
     waitingEvents: '실시간 업데이트를 기다리고 있어요.',
     technical: '기술 세부 정보',
     loadLogs: '로그 불러오기',
+    logSteps: { analyze: '분석', build: '빌드', provision: '프로비저닝', verify: '검증' },
     noLogs: '아직 저장된 로그가 없습니다.',
   },
   analysis: {

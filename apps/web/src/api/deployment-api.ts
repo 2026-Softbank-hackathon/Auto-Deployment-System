@@ -130,9 +130,14 @@ export async function getDeploymentIr(deploymentId: string): Promise<DeploymentI
   return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt };
 }
 
-/** API-12 — the P0 non-streaming deployment log view. */
-export async function getDeploymentLogs(deploymentId: string): Promise<string | null> {
-  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/logs`), { credentials: 'include' });
+/** packages/contracts LOG_STEPS — the logs endpoint requires one of these as `step`. */
+export const deploymentLogSteps = ['analyze', 'build', 'provision', 'verify'] as const;
+export type DeploymentLogStep = typeof deploymentLogSteps[number];
+
+/** API-12 — the P0 non-streaming log view of one step. 204 (no log yet) → null. */
+export async function getDeploymentLogs(deploymentId: string, step: DeploymentLogStep): Promise<string | null> {
+  const query = new URLSearchParams({ step });
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/logs?${query}`), { credentials: 'include' });
   if (response.status === 204) return null;
   if (!response.ok) throw new DeploymentApiError(response.status, `로그를 불러오지 못했습니다. (${response.status})`);
   return response.text();

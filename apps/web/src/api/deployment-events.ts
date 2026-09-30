@@ -1,6 +1,7 @@
 import { deploymentEventsUrl } from './deployment-api';
 
-export const deploymentEventNames = ['state_changed', 'analysis.progress', 'approval_requested', 'lock.changed', 'step_completed'] as const;
+/** packages/contracts/src/events.ts 의 DEPLOYMENT_EVENT_NAMES와 같은 목록 (백엔드가 실제로 보내는 이벤트). */
+export const deploymentEventNames = ['state_changed', 'analysis.progress', 'approval_requested', 'log.line', 'ir_updated', 'missing_resources_updated'] as const;
 export type DeploymentEventName = typeof deploymentEventNames[number];
 export interface DeploymentEvent { name: DeploymentEventName; payload: unknown; receivedAt: Date; }
 

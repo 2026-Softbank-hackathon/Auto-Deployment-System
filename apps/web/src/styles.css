@@ -70,6 +70,8 @@
 .technical-details summary { cursor: pointer; font-weight: 500; }
 .technical-details summary:hover { color: var(--ink); }
 .technical-details button { margin: 16px 0; }
+.step-log { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.step-log strong { color: var(--ink); font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; }
 .technical-details pre {
   max-height: 260px; overflow: auto; padding: 16px; white-space: pre-wrap;
   background: var(--paper-sunken); color: var(--ink); border-radius: var(--radius-input); font-size: 13px;

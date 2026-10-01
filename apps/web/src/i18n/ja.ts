@@ -100,6 +100,7 @@ export const ja: Messages = {
       keysMissing: 'AWSキーを再登録してください',
       keysMissingCopy: 'AWS接続はありますが、保存されたキーが見つかりません。このままデプロイするとビルド段階で失敗します。',
       keysMissingAction: 'キーを再登録',
+      credentialRejected: 'AWSキーがないか、設定が正しくないためデプロイを開始できませんでした。キーを再登録してください。',
     },
     button: 'デプロイ',
     startError: 'デプロイを開始できませんでした。',

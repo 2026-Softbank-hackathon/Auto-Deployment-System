@@ -98,6 +98,7 @@ export const ko = {
       keysMissing: 'AWS 키를 다시 등록해 주세요',
       keysMissingCopy: 'AWS 연결은 있지만 저장된 키를 찾을 수 없어요. 이대로 배포하면 빌드 단계에서 실패해요.',
       keysMissingAction: '키 다시 등록',
+      credentialRejected: 'AWS 키가 없거나 설정이 올바르지 않아 배포를 시작하지 못했어요. 키를 다시 등록해 주세요.',
     },
     button: '배포하기',
     startError: '배포를 시작하지 못했어요.',

@@ -147,6 +147,8 @@ export const ja: Messages = {
       overwrites: '同じ名前がすでにあります。保存すると値が変わります。',
       nameInvalid: '名前に使えるのは英数字とアンダースコア(_)だけで、数字から始めることはできません。',
       saveError: '環境変数を保存できませんでした。',
+      missingTitle: (n) => `このプロジェクトが読み込む環境変数のうち、${n}個がまだ登録されていません。`,
+      missingCopy: '現在はすべて登録しないとデプロイが進みません。名前を押すと下の入力欄に入ります。',
     },
   },
   dashboard: {
@@ -271,6 +273,8 @@ export const ja: Messages = {
     },
     failureCode: (code) => `エラーコード: ${code}`,
     fixAwsKey: '接続設定へ',
+    fixEnv: '環境変数を登録する',
+    envMissing: (names) => `登録されていない環境変数: ${names}`,
     viewResult: '結果を見る',
     healthTitle: 'ヘルスチェック',
     healthCount: (passed, required) => `連続 ${passed}/${required}回 成功`,

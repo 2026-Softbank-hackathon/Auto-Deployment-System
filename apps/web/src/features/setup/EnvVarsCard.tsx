@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { DeploymentApiError, listProjectEnv, patchProjectEnv, type ProjectEnvVar } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
+import { requiredEnvOfProject, type RequiredEnvVar } from './required-env';
 
 /** 서버 계약과 같은 이름 규칙 (packages/contracts env.ts). */
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -22,6 +23,8 @@ export function EnvVarsCard({ projectId }: { projectId: string | null }) {
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
+  // 최근 배포의 분석이 찾은 "앱이 읽는 변수". 값을 대신 넣지는 않고, 무엇을 등록해야 하는지만 알려 준다.
+  const [required, setRequired] = useState<RequiredEnvVar[]>([]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -29,6 +32,8 @@ export function EnvVarsCard({ projectId }: { projectId: string | null }) {
     setItems(null);
     setLoadError(null);
     listProjectEnv(projectId).then((list) => { if (active) setItems(list); }, (error) => { if (active) setLoadError(error); });
+    setRequired([]);
+    requiredEnvOfProject(projectId).then((list) => { if (active) setRequired(list); }, () => { /* 안내용이라 읽지 못해도 카드는 동작한다 */ });
     return () => { active = false; };
   }, [projectId]);
 
@@ -37,6 +42,7 @@ export function EnvVarsCard({ projectId }: { projectId: string | null }) {
   const trimmedName = name.trim();
   const nameInvalid = trimmedName !== '' && !ENV_NAME.test(trimmedName);
   const overwrites = items?.some((item) => item.name === trimmedName) ?? false;
+  const missing = items === null ? [] : required.filter((variable) => !items.some((item) => item.name === variable.name));
 
   async function apply(vars: Record<string, string | null>) {
     if (!projectId || saving) return false;
@@ -66,6 +72,14 @@ export function EnvVarsCard({ projectId }: { projectId: string | null }) {
         </span>
       </li>)}
     </ul>}
+    {missing.length > 0 && <div className="notice env-missing">
+      <strong>{copy.missingTitle(missing.length)}</strong>
+      <p>{copy.missingCopy}</p>
+      <div className="env-missing__names">
+        {missing.map((variable) => <button key={variable.name} type="button" className="env-missing__name" disabled={saving}
+          onClick={() => { setName(variable.name); setValue(variable.suggestedValue ?? ''); document.getElementById(ids.value)?.focus(); }}>{variable.name}</button>)}
+      </div>
+    </div>}
     <form className="aws-key-form" onSubmit={(event) => void submit(event)} autoComplete="off">
       <div className="aws-key-form__field">
         <label htmlFor={ids.name}>{copy.name}</label>

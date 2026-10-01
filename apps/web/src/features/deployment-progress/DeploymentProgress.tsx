@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentLogs, getDeploymentStatus, getProject, listProjectEnv, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -12,6 +12,8 @@ import { deploymentStatusView, railStages, type DeploymentStatusView } from '../
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
 import { failureKind, fixableByAwsKey } from './failure-reason';
+import { requiredEnvOfDeployment } from '../setup/required-env';
+import { useDeployProject } from '../deployment-start/useDeployProject';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { HealthProgress } from './HealthProgress';
 
@@ -187,6 +189,19 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
   const failure = failureKind(failureMessage);
+  // 환경변수 미등록으로 실패했으면 어떤 이름이 빠졌는지 알려 준다 (서버 오류에는 이름이 없어 IR과 등록 목록을 비교한다).
+  const [missingEnv, setMissingEnv] = useState<string[]>([]);
+  useEffect(() => {
+    if (failure !== 'envVar' || !projectId) return;
+    let active = true;
+    Promise.all([requiredEnvOfDeployment(deploymentId), listProjectEnv(projectId)]).then(([required, registered]) => {
+      if (active) setMissingEnv(required.map((variable) => variable.name).filter((name) => !registered.some((item) => item.name === name)));
+    }, () => { /* 이름을 못 읽어도 실패 안내는 그대로 보인다 */ });
+    return () => { active = false; };
+  }, [failure, projectId, deploymentId]);
+  // 연결 설정은 "지금 고른 프로젝트"를 보여 주므로, 이 배포의 프로젝트로 바꾼 뒤에 간다.
+  const { selectProject } = useDeployProject();
+  const goSetup = onFixAwsKey ? async () => { if (projectId) await selectProject(projectId); onFixAwsKey(); } : undefined;
   const publicUrl = safeHttpUrl(text(status?.publicUrl));
 
   async function loadLogs() {
@@ -251,9 +266,10 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
         <strong>{t.run.failedCause}</strong>
         <p>{failure ? t.run.failureReasons[failure] : failureMessage ?? t.progress.failedCopy}</p>
         {failure && failureMessage && <p className="run-failure__code">{t.run.failureCode(failureMessage)}</p>}
+        {failure === 'envVar' && missingEnv.length > 0 && <p>{t.run.envMissing(missingEnv.join(', '))}</p>}
         <FailureDiagnosis deploymentId={deploymentId} />
         <div className="run-failure__actions">
-          {fixableByAwsKey(failure) && onFixAwsKey && <Keycap onClick={onFixAwsKey}>{t.run.fixAwsKey}</Keycap>}
+          {(fixableByAwsKey(failure) || failure === 'envVar') && goSetup && <Keycap onClick={() => void goSetup()}>{failure === 'envVar' ? t.run.fixEnv : t.run.fixAwsKey}</Keycap>}
           {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
         </div>
       </div>}

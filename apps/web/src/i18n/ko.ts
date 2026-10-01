@@ -145,6 +145,8 @@ export const ko = {
       overwrites: '같은 이름이 이미 있어요. 저장하면 값이 바뀌어요.',
       nameInvalid: '이름은 영문 · 숫자 · 밑줄(_)만 쓸 수 있고, 숫자로 시작할 수 없어요.',
       saveError: '환경변수를 저장하지 못했어요.',
+      missingTitle: (n: number) => `이 프로젝트가 읽는 환경변수 중 ${n}개가 아직 등록되지 않았어요.`,
+      missingCopy: '지금은 전부 등록해야 배포가 진행돼요. 이름을 누르면 아래 입력 칸에 채워져요.',
     },
   },
   dashboard: {
@@ -269,6 +271,8 @@ export const ko = {
     },
     failureCode: (code: string) => `오류 코드: ${code}`,
     fixAwsKey: '연결 설정으로',
+    fixEnv: '환경변수 등록하러 가기',
+    envMissing: (names: string) => `등록되지 않은 환경변수: ${names}`,
     viewResult: '결과 보기',
     healthTitle: '헬스체크',
     healthCount: (passed: number, required: number) => `연속 ${passed}/${required}회 통과`,

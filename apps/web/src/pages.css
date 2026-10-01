@@ -397,3 +397,12 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .result-card h1 { font-size: 28px; }
   .result-url__link { font-size: 18px; }
 }
+
+/* 아직 등록하지 않은 환경변수 안내 */
+.env-missing { display: grid; gap: 8px; }
+.env-missing p { margin: 0; font-size: 14px; }
+.env-missing__names { display: flex; gap: 8px; flex-wrap: wrap; }
+.env-missing__name { min-height: 36px; padding: 4px 12px; font: inherit; font-family: var(--font-mono); font-size: 14px; color: var(--ink); background: var(--surface); border: var(--border); border-radius: var(--radius-tape); cursor: pointer; }
+.env-missing__name:hover { border-color: var(--koro); }
+.env-missing__name:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.env-missing__name:disabled { opacity: 0.6; cursor: default; }

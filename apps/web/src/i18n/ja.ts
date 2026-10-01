@@ -90,7 +90,7 @@ export const ja: Messages = {
     heading: 'デプロイ進行',
     checking: '現在のデプロイ状態を確認しています。',
     steps: {
-      received: 'デプロイを準備しています', analyzing: 'ソースを分析しています', awaiting_patch_approval: '修正案の確認を待っています', awaiting_target_confirmation: 'デプロイ先の確認を待っています',
+      received: 'デプロイを準備しています', analyzing: 'ソースを分析しています', awaiting_patch_approval: '修正案の確認を待っています', awaiting_target_confirmation: 'デプロイ先を確定しています',
       queued: 'デプロイの順番を待っています', building: 'アプリケーションイメージを作成しています', planning: 'デプロイ計画を準備しています',
       awaiting_plan_approval: 'デプロイ計画の確認を待っています', provisioning: 'デプロイ環境を準備しています', deploying: 'アプリケーションをデプロイしています',
       verifying: 'サービスの状態を確認しています', rollback: '前のバージョンに戻しています', succeeded: 'デプロイが完了しました', failed: 'デプロイできませんでした',
@@ -164,6 +164,9 @@ export const ja: Messages = {
     diagnosisRetry: '再確認',
     diagnosisStep: (step) => `停止したと推定される段階: ${step}`,
     diagnosisPatches: (n) => `修正候補 ${n}件 — 提案であり、自動では適用されません。`,
+    approveFailed: 'デプロイ先を確定できませんでした。',
+    approveLocked: '同じ環境で進行中のデプロイがあります。そのデプロイが終わってから再試行してください。',
+    approveRetry: '再試行',
     newDeploy: '新しくデプロイ',
   },
   activeBanner: {

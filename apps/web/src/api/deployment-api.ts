@@ -1,7 +1,8 @@
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '');
 
 export class DeploymentApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  /** code — 서버 오류 본문의 error.code (예: DEPLOYMENT_LOCKED). 본문을 읽은 경우에만 있다. */
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
     this.name = 'DeploymentApiError';
   }
@@ -155,6 +156,24 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
     return typeof description === 'string' && typeof diff === 'string' ? [{ description, diff }] : [];
   });
   return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: body.summary, patchCandidates };
+}
+
+/**
+ * API-11 — 대상(target) 승인. 원클릭 흐름에서 프론트가 자동으로 호출한다 (2026-10-01 팀 결정:
+ * 사용자는 벤더만 고르고 프로필은 서버가 정하므로 대상 확인은 사용자 승인으로 받지 않는다).
+ * plan 승인은 인프라를 실제로 만드는 단계라 여기서 다루지 않는다.
+ */
+export async function approveDeploymentTarget(deploymentId: string, note: string): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/approvals`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gate: 'target', decision: 'approve', note }),
+    credentials: 'include',
+  });
+  if (response.ok) return;
+  const body = await response.json().catch(() => null) as { error?: { code?: unknown } } | null;
+  const code = typeof body?.error?.code === 'string' ? body.error.code : undefined;
+  throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`, code);
 }
 
 /** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */

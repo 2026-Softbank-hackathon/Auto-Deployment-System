@@ -88,7 +88,7 @@ export const ko = {
     heading: '배포 진행',
     checking: '현재 배포 상태를 확인하고 있어요.',
     steps: {
-      received: '배포를 준비하고 있어요', analyzing: '소스를 분석하고 있어요', awaiting_patch_approval: '수정안 확인을 기다리고 있어요', awaiting_target_confirmation: '배포 대상 확인을 기다리고 있어요',
+      received: '배포를 준비하고 있어요', analyzing: '소스를 분석하고 있어요', awaiting_patch_approval: '수정안 확인을 기다리고 있어요', awaiting_target_confirmation: '배포 대상을 확정하고 있어요',
       queued: '배포를 기다리고 있어요', building: '애플리케이션 이미지를 만들고 있어요', planning: '배포 계획을 준비하고 있어요',
       awaiting_plan_approval: '배포 계획 확인을 기다리고 있어요', provisioning: '배포 환경을 준비하고 있어요', deploying: '애플리케이션을 배포하고 있어요',
       verifying: '서비스 상태를 확인하고 있어요', rollback: '이전 버전으로 되돌리고 있어요', succeeded: '배포가 완료되었어요', failed: '배포하지 못했어요',
@@ -162,6 +162,9 @@ export const ko = {
     diagnosisRetry: '다시 확인',
     diagnosisStep: (step: string) => `멈춘 단계로 추정: ${step}`,
     diagnosisPatches: (n: number) => `수정 후보 ${n}건 — 제안이며 자동으로 적용되지 않아요.`,
+    approveFailed: '배포 대상을 확정하지 못했어요.',
+    approveLocked: '같은 환경에 진행 중인 배포가 있어요. 그 배포가 끝난 뒤 다시 시도해 주세요.',
+    approveRetry: '다시 시도',
     newDeploy: '새로 배포하기',
   },
   activeBanner: {

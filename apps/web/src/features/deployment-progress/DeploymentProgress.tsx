@@ -11,6 +11,7 @@ import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/f
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
+import { FailureDiagnosis } from './FailureDiagnosis';
 import { HealthProgress } from './HealthProgress';
 
 type ErrorState = { cause: unknown; fallback: 'statusFailed' | 'logsFailed' } | null;
@@ -201,6 +202,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
       {view.outcome === 'failed' && <div className="notice error run-failure" role="alert">
         <strong>{t.run.failedCause}</strong>
         <p>{failureMessage ?? t.progress.failedCopy}</p>
+        <FailureDiagnosis deploymentId={deploymentId} />
         {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
       </div>}
       {view.outcome === 'success' && <div className="run-success">

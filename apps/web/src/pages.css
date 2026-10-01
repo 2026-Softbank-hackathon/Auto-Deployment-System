@@ -289,3 +289,11 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .health-progress__dots span.is-passed { background: var(--moss); border-color: var(--moss); }
 .health-progress__last { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
 .health-progress.is-failed strong { color: var(--brick-text); }
+
+/* 실패 화면의 AI 진단 */
+.diagnosis { align-self: stretch; display: grid; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+.diagnosis > strong { color: var(--ink); }
+.diagnosis p { margin: 0; color: var(--ink); }
+.diagnosis p.diagnosis__step, .diagnosis p.diagnosis__note { font-size: 14px; color: var(--ink-soft); }
+.diagnosis__patches { display: grid; gap: 8px; }
+.diagnosis pre { overflow-x: auto; }

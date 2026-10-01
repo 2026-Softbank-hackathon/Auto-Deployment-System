@@ -169,6 +169,12 @@ export const ja: Messages = {
     healthLast: (attempt) => `${attempt}回目の確認`,
     healthPassed: '通過',
     healthFailed: '失敗',
+    diagnosisTitle: 'AI診断',
+    diagnosisLoading: 'AIが失敗の原因を調べています…',
+    diagnosisNone: '診断結果がまだありません。',
+    diagnosisRetry: '再確認',
+    diagnosisStep: (step) => `止まったと推定される段階: ${step}`,
+    diagnosisPatches: (n) => `修正候補 ${n}件 — 提案であり、自動では適用されません。`,
     newDeploy: '新しくデプロイ',
   },
   activeBanner: {

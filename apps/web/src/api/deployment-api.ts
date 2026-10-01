@@ -140,6 +140,23 @@ export async function getDeploymentIr(deploymentId: string): Promise<DeploymentI
   return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt, source: body.source };
 }
 
+export interface DeploymentPatchCandidate { description: string; diff: string }
+export interface DeploymentDiagnosisResponse { failedStep: string | null; summary: string; patchCandidates: DeploymentPatchCandidate[] }
+
+/** API-36 — 실패한 배포의 AI 진단. 진단이 아직 없으면(404) null. */
+export async function getDeploymentDiagnosis(deploymentId: string): Promise<DeploymentDiagnosisResponse | null> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/diagnosis`), { credentials: 'include' });
+  if (response.status === 404) return null;
+  const body = asRecord(await readJson(response), 'AI 진단');
+  if (typeof body.summary !== 'string') throw new Error('AI 진단 응답 형식이 올바르지 않습니다.');
+  const patchCandidates = (Array.isArray(body.patchCandidates) ? body.patchCandidates : []).flatMap((item): DeploymentPatchCandidate[] => {
+    if (!item || typeof item !== 'object') return [];
+    const { description, diff } = item as { description?: unknown; diff?: unknown };
+    return typeof description === 'string' && typeof diff === 'string' ? [{ description, diff }] : [];
+  });
+  return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: body.summary, patchCandidates };
+}
+
 /** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */
 export async function getDeploymentHealth(deploymentId: string): Promise<DeploymentHealthResponse | null> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/health`), { credentials: 'include' });

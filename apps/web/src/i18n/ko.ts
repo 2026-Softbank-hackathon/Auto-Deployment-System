@@ -167,6 +167,12 @@ export const ko = {
     healthLast: (attempt: number) => `${attempt}번째 확인`,
     healthPassed: '통과',
     healthFailed: '실패',
+    diagnosisTitle: 'AI 진단',
+    diagnosisLoading: 'AI가 실패 원인을 살펴보고 있어요…',
+    diagnosisNone: '아직 진단 결과가 없어요.',
+    diagnosisRetry: '다시 확인',
+    diagnosisStep: (step: string) => `멈춘 단계로 추정: ${step}`,
+    diagnosisPatches: (n: number) => `수정 후보 ${n}건 — 제안이며 자동으로 적용되지 않아요.`,
     newDeploy: '새로 배포하기',
   },
   activeBanner: {

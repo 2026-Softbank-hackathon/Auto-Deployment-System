@@ -83,7 +83,7 @@ function makePayload(
   };
 }
 
-function makeDeps(status = "verifying"): WorkerDeps {
+function makeDeps(status = "verifying", dnsReady = true): WorkerDeps {
   const query = vi.fn(async (sql: string) => {
     if (/SELECT.+status.+FROM deployments/is.test(sql)) {
       return { rows: [{ status }] };
@@ -103,6 +103,9 @@ function makeDeps(status = "verifying"): WorkerDeps {
     } as unknown as WorkerDeps["pool"],
     boss: {} as WorkerDeps["boss"],
     storage: {} as WorkerDeps["storage"],
+    dnsActivationChecker: {
+      waitUntilResolvable: vi.fn(async () => dnsReady),
+    },
   };
 }
 
@@ -148,7 +151,7 @@ describe("handleVerify", () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(target.paths).toEqual(["/health", "/health", "/health"]);
     expect(runtime.sleep).toHaveBeenCalledTimes(2);
-    expect(runtime.sleep).toHaveBeenCalledWith(5_000);
+    expect(runtime.sleep).toHaveBeenCalledWith(1_000);
   });
 
   it("중간 실패가 발생하면 연속 성공 횟수를 0으로 초기화함", async () => {
@@ -206,6 +209,7 @@ describe("handleVerify", () => {
     expect(result.consecutivePassed).toBe(0);
     expect(result.failureReason).toBeTruthy();
     expect(runtime.sleep).toHaveBeenCalledTimes(7);
+    expect(runtime.sleep).toHaveBeenCalledWith(5_000);
   });
 
   it("응답 제한 시간을 넘긴 요청을 timeout 실패로 기록함", async () => {
@@ -336,12 +340,66 @@ describe("handleVerify", () => {
       environmentId: "env-onprem-1",
       environmentType: "onprem",
     });
+    const deps = makeDeps();
 
-    const result = await handleVerify({ data: payload }, makeDeps(), makeRuntime());
+    const result = await handleVerify({ data: payload }, deps, makeRuntime());
 
     expect(result).toMatchObject({
       status: "passed",
       environmentId: "env-onprem-1",
     });
+    expect(deps.dnsActivationChecker?.waitUntilResolvable).toHaveBeenCalledWith(
+      "127.0.0.1",
+      undefined,
+    );
+  });
+
+  it("On-Prem 외부 HTTP 요청 전에 별도 DNS activation gate를 통과한다", async () => {
+    const events: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      events.push("fetch");
+      return new Response("ok", { status: 200 });
+    }));
+    const deps = makeDeps();
+    deps.dnsActivationChecker = {
+      waitUntilResolvable: vi.fn(async () => {
+        events.push("dns");
+        return true;
+      }),
+    };
+    const payload = makePayload("https://verify-d42.example.com", {
+      environmentType: "onprem",
+    });
+
+    const result = await handleVerify({ data: payload }, deps, makeRuntime());
+
+    expect(result.status).toBe("passed");
+    expect(deps.dnsActivationChecker.waitUntilResolvable).toHaveBeenCalledWith(
+      "verify-d42.example.com",
+      undefined,
+    );
+    expect(events[0]).toBe("dns");
+    expect(events.slice(1)).toEqual(["fetch", "fetch", "fetch"]);
+  });
+
+  it("DNS activation이 시간 안에 끝나지 않으면 기본 resolver로 HTTP 요청하지 않는다", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const payload = makePayload("https://verify-d42.example.com", {
+      environmentType: "onprem",
+    });
+
+    const result = await handleVerify(
+      { data: payload },
+      makeDeps("verifying", false),
+      makeRuntime(),
+    );
+
+    expect(result).toMatchObject({
+      status: "failed",
+      checks: [],
+      failureReason: "dns_activation_timeout",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

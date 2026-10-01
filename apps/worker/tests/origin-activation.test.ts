@@ -33,6 +33,7 @@ function context(payload = awsPayload) {
 function cloudflare() {
   return {
     ensureNamedTunnel: vi.fn(async () => ({ id: "tunnel-4", name: "camellia-service-4", endpoint: "tunnel-4.cfargotunnel.com" })),
+    ensureCname: vi.fn(async () => ({ id: "verify-dns-42" })),
     setTunnelOrigin: vi.fn(async () => undefined),
     switchServiceOrigin: vi.fn(async () => ({ id: "dns-4", name: "service-4.apps.example.com", content: "origin.example.com", proxied: true })),
   };
@@ -41,6 +42,25 @@ function cloudflare() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("DeploymentOriginActivator", () => {
+  it("Agent Job 실행 전에 검증용 Named Tunnel과 CNAME을 준비한다", async () => {
+    const cf = cloudflare();
+    const activator = new DeploymentOriginActivator({ query: vi.fn() } as unknown as Pool, {
+      cloudflare: cf,
+      zoneId: "zone-1",
+      platformDomain: "example.com",
+    });
+
+    await activator.prepareOnpremVerification({ deploymentId: 42, projectId: 4 });
+
+    expect(cf.ensureNamedTunnel).toHaveBeenCalledWith("4");
+    expect(cf.ensureCname).toHaveBeenCalledWith({
+      zoneId: "zone-1",
+      hostname: "verify-d42.example.com",
+      target: "tunnel-4.cfargotunnel.com",
+      proxied: true,
+    });
+  });
+
   it("검증한 AWS 배포의 ALB를 고정 서비스 CNAME에 연결한다", async () => {
     const query = vi.fn().mockResolvedValueOnce({ rows: [context()] })
       .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });

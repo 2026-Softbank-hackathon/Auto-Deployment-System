@@ -11,6 +11,7 @@ import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
 import { transitionTo, type Status } from "../state-machine.js";
 import { TerraformCliError } from "../terraform-cli.js";
+import { OriginActivationError } from "../origin-activation.js";
 
 export type ProvisionJobPayload = {
   deployment_id: number;
@@ -101,6 +102,14 @@ export async function handleProvision(
         throw new Error("PROVISION_TARGET_UNSUPPORTED");
       }
       const region = ecrRegionFromRepository(context.repository_uri);
+      if (!deps.originActivator) {
+        throw new OriginActivationError("ORIGIN_CONFIGURATION_MISSING");
+      }
+      await deps.originActivator.prepareOnpremVerification({
+        deploymentId,
+        projectId,
+      });
+      await stepLog.line("검증용 DNS 사전 준비 완료");
       await createOrGetOnpremAgentJob(deps, {
         jobId: String(deploymentId),
         attempt: 1,
@@ -526,6 +535,7 @@ function parsePositiveId(value: number | string | null, errorCode: string): numb
 function normalizeProvisionFailure(error: unknown): string {
   if (error instanceof TerraformCliError) return error.code;
   if (error instanceof AdapterError) return error.code;
+  if (error instanceof OriginActivationError) return error.code;
   if (error instanceof Error) {
     const allowed = new Set([
       "PROVISION_CONTEXT_NOT_FOUND",

@@ -33,6 +33,7 @@ function makeHarness(overrides: Partial<{
   imagePlatform: string;
   statusAfterApplyFailure: string;
   cleanupFailure: boolean;
+  dnsPreparationFailure: Error;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
@@ -41,6 +42,7 @@ function makeHarness(overrides: Partial<{
     : IR;
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   const agentJobQueries: Array<{ sql: string; params: unknown[] }> = [];
+  const onpremPreparationOrder: string[] = [];
   const client = {
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
       queries.push({ sql, params });
@@ -98,6 +100,7 @@ function makeHarness(overrides: Partial<{
         return { rows: overrides.environmentVariables ?? [{ name: "PUBLIC_MODE", value: "demo" }] };
       }
       if (sql.includes("INSERT INTO onprem_agent_jobs")) {
+        onpremPreparationOrder.push("agent-job");
         agentJobQueries.push({ sql, params });
         return { rows: overrides.existingAgentJob ? [] : [{ job_id: params[0] }] };
       }
@@ -124,6 +127,15 @@ function makeHarness(overrides: Partial<{
   };
   const boss = { send: vi.fn(async (_queue: string, _payload: unknown) => "verify-job") };
   const notifier = { notify: vi.fn(async () => {}) };
+  const originActivator = {
+    prepareOnpremVerification: vi.fn(async () => {
+      onpremPreparationOrder.push("dns");
+      if (overrides.dnsPreparationFailure) {
+        throw overrides.dnsPreparationFailure;
+      }
+    }),
+    activate: vi.fn(async () => undefined),
+  };
   const secretReader = {
     read: vi.fn(async (_projectId: number, name: string) =>
       name === "AWS_ACCESS_KEY_ID" ? "access-key-value" : "secret-key-value",
@@ -134,6 +146,7 @@ function makeHarness(overrides: Partial<{
     boss,
     storage: {} as WorkerDeps["storage"],
     notifier,
+    originActivator,
     secretReader,
     terraformCli,
     terraformBackend: {
@@ -145,10 +158,50 @@ function makeHarness(overrides: Partial<{
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   } as unknown as WorkerDeps;
 
-  return { deps, pool, boss, notifier, secretReader, terraformCli, queries, agentJobQueries, getStatus: () => status };
+  return {
+    deps,
+    pool,
+    boss,
+    notifier,
+    originActivator,
+    secretReader,
+    terraformCli,
+    queries,
+    agentJobQueries,
+    onpremPreparationOrder,
+    getStatus: () => status,
+  };
 }
 
 describe("handleProvision", () => {
+  it("On-Prem Agent Job을 공개하기 전에 검증용 DNS를 준비한다", async () => {
+    const harness = makeHarness({ targetType: "onprem" });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.originActivator.prepareOnpremVerification).toHaveBeenCalledWith({
+      deploymentId: 99,
+      projectId: 12,
+    });
+    expect(harness.onpremPreparationOrder).toEqual(["dns", "agent-job"]);
+  });
+
+  it("검증용 DNS 준비 실패 시 Agent Job을 노출하지 않고 락을 해제한다", async () => {
+    const harness = makeHarness({
+      targetType: "onprem",
+      dnsPreparationFailure: new Error("provider unavailable"),
+    });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.agentJobQueries).toHaveLength(0);
+    expect(harness.getStatus()).toBe("failed");
+    expect(harness.queries).toContainEqual({
+      sql: "DELETE FROM env_locks WHERE deployment_id = $1",
+      params: [99],
+    });
+  });
+
   it.each(["aws", "onprem"] as const)("%s planning 오류는 failed와 락 해제를 같은 트랜잭션으로 처리한다", async (targetType) => {
     const harness = makeHarness({ status: "planning", targetType });
     await handleProvision({ data: { deployment_id: 99 } }, harness.deps);

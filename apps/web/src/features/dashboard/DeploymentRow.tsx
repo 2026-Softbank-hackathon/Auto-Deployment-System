@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { StatusTape } from '../../components/ui/StatusTape';
@@ -13,7 +14,7 @@ function ExternalIcon() {
   </svg>;
 }
 
-export function DeploymentRow({ deployment, now, onNavigate }: { deployment: DeploymentListItem; now: number; onNavigate: Navigate }) {
+export function DeploymentRow({ deployment, now, onNavigate, menu }: { deployment: DeploymentListItem; now: number; onNavigate: Navigate; /** 기본 동작 옆의 "⋯" 메뉴 */ menu?: ReactNode }) {
   const { t } = useI18n();
   const view = deploymentStatusView(deployment.status);
   const stalled = isStalled(view.outcome === 'active', deployment.createdAt, now);
@@ -48,6 +49,6 @@ export function DeploymentRow({ deployment, now, onNavigate }: { deployment: Dep
       <span className={`deployment-row__stage-label is-${stalled ? 'stopped' : view.outcome}`}>{stalled ? t.dashboard.stalled : t.status.stage[view.stageKey]}</span>
       <span className="deployment-row__time">{timing}</span>
     </div>
-    <div className="deployment-row__action">{action}</div>
+    <div className="deployment-row__action">{action}{menu}</div>
   </article>;
 }

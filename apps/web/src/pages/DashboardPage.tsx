@@ -77,7 +77,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
       <Counts items={state.items} now={state.loadedAt} />
       {state.partialFailures > 0 && <p className="dashboard-status">{t.dashboard.partialFailures(state.partialFailures)}</p>}
 
-      <DeploymentBrowser items={state.items} now={state.loadedAt} onNavigate={onNavigate} searchPlaceholder={t.dashboard.searchPlaceholder} selection="multi" onRedeployed={refresh} />
+      <DeploymentBrowser items={state.items} now={state.loadedAt} onNavigate={onNavigate} searchPlaceholder={t.dashboard.searchPlaceholder} onChanged={refresh} />
     </>}
   </>;
 }

@@ -36,7 +36,7 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
   return <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
-    searchPlaceholder={t.projects.searchPlaceholder} selection="single" onRedeployed={() => setReloadKey((key) => key + 1)} />;
+    searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} />;
 }
 
 /**

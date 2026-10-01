@@ -4,6 +4,16 @@
  * DB 연결 실패 시 warn 후 재시도 (dev 편의).
  */
 
+// 쉘 source 없이 env 자동 로드. CAMELLIA_ENV_FILE 로 경로 override 가능.
+// production 은 실제 env var 가 override: false 로 보존됨.
+import { config as loadDotenv } from "dotenv";
+import { resolve } from "node:path";
+
+const envFile =
+  process.env["CAMELLIA_ENV_FILE"] ??
+  resolve(process.cwd(), "credentials/credentials.env");
+loadDotenv({ path: envFile, override: false });
+
 import { decodeSecretMasterKey, loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { createPool, createPgBoss } from "@camellia/db";

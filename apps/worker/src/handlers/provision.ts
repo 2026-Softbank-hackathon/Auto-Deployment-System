@@ -74,10 +74,26 @@ export async function handleProvision(
       throw new Error("APPLICATION_SECRET_DELIVERY_UNAVAILABLE");
     }
 
+    // 플랫폼 자동 주입용 region 미리 결정 (분기별로 다른 소스).
+    let platformRegion: string;
+    if (plan.target === "onprem") {
+      platformRegion = ecrRegionFromRepository(context.repository_uri);
+    } else if (plan.target === "aws" && context.target_environment_type === "aws") {
+      platformRegion = AwsConfigSchema.parse(context.aws_config).region;
+    } else {
+      throw new Error("PROVISION_TARGET_UNSUPPORTED");
+    }
+
     const environmentVariables = await loadProjectEnvironmentVariables(
       deps,
       projectId,
       plan.service.environmentNames,
+      plan.service.environmentDefaults,
+      {
+        containerPort: plan.service.containerPort,
+        deployTarget: plan.target,
+        region: platformRegion,
+      },
     );
 
     if (plan.target === "onprem") {
@@ -395,25 +411,88 @@ function normalizeImagePlatform(value: string): "linux/amd64" {
   return value;
 }
 
+/**
+ * 플랫폼이 자동 주입하는 환경변수 리스트 (원클릭 복원 — 이슈 #137).
+ * IR에 선언되어 있으면 user env_vars 등록 없이도 플랫폼이 결정한 값으로 채움.
+ * 우선순위: DB(user) > env_defaults > 플랫폼 자동 주입.
+ */
+const PLATFORM_INJECTED_ENV_VARS = new Set([
+  "PORT",
+  "DEPLOY_TARGET",
+  "NODE_ENV",
+  "AWS_REGION",
+]);
+
+type PlatformEnvContext = {
+  containerPort: number;
+  deployTarget: "aws" | "onprem";
+  region: string;
+};
+
+function platformInjectedEnvValue(
+  name: string,
+  context: PlatformEnvContext,
+): string | undefined {
+  if (!PLATFORM_INJECTED_ENV_VARS.has(name)) return undefined;
+  switch (name) {
+    case "PORT":
+      return String(context.containerPort);
+    case "DEPLOY_TARGET":
+      return context.deployTarget;
+    case "NODE_ENV":
+      return "production";
+    case "AWS_REGION":
+      return context.region;
+  }
+  return undefined;
+}
+
 async function loadProjectEnvironmentVariables(
   deps: WorkerDeps,
   projectId: number,
   names: string[],
+  envDefaults: Record<string, string>,
+  platformContext: PlatformEnvContext,
 ): Promise<Record<string, string>> {
   if (names.length === 0) return {};
+
+  // DB 조회 — 사용자 명시 값 (가장 높은 우선순위).
   const result = await deps.pool.query<ProjectEnvironmentVariable>(
     `SELECT name, value
      FROM env_vars
      WHERE project_id = $1 AND name = ANY($2::text[])`,
     [projectId, names],
   );
-  const variables = Object.fromEntries(
+  const dbVariables = Object.fromEntries(
     result.rows.map(({ name, value }) => [name, value]),
   );
-  if (names.some((name) => !(name in variables))) {
-    throw new Error("PROJECT_ENV_VAR_NOT_FOUND");
+
+  // 우선순위 적용: DB > env_defaults > 플랫폼 자동 주입.
+  const merged: Record<string, string> = {};
+  const missing: string[] = [];
+  for (const name of names) {
+    if (name in dbVariables) {
+      merged[name] = dbVariables[name]!;
+      continue;
+    }
+    const defaultValue = envDefaults[name];
+    if (defaultValue !== undefined) {
+      merged[name] = defaultValue;
+      continue;
+    }
+    const platformValue = platformInjectedEnvValue(name, platformContext);
+    if (platformValue !== undefined) {
+      merged[name] = platformValue;
+      continue;
+    }
+    missing.push(name);
   }
-  return variables;
+
+  if (missing.length > 0) {
+    // 어떤 변수가 누락됐는지 명시 — AI 진단 품질 향상.
+    throw new Error(`PROJECT_ENV_VAR_NOT_FOUND: ${missing.join(",")}`);
+  }
+  return merged;
 }
 
 function resourceNameFor(projectId: number, environmentId: number): string {

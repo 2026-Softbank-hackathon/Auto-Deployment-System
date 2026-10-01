@@ -33,6 +33,11 @@ export type ServicePlan = {
   command?: string[];
   containerPort: number;
   environmentNames: string[];
+  /**
+   * 분석기가 `.env.example` 에서 추출한 default 값 매핑.
+   * 원클릭 복원 (이슈 #137): provision 이 user env_vars 미등록 시 fallback.
+   */
+  environmentDefaults: Record<string, string>;
   secretNames: string[];
   compute: {
     vcpu: number;

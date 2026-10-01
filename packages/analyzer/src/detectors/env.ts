@@ -17,11 +17,17 @@ import { relativePosix } from "../paths.js";
 
 export type EnvDetectResult = {
   envNames: string[];
+  /**
+   * `.env.example` 등에서 KEY=value 로 선언된 변수의 default 값.
+   * 원클릭 복원 (이슈 #137): 프로젝트에 env_vars 미등록 시 provision 이 fallback.
+   */
+  envDefaults: Record<string, string>;
   detectedFrom: string[];
 };
 
 export async function detectEnvNames(serviceDir: string): Promise<EnvDetectResult> {
   const names = new Set<string>();
+  const defaults: Record<string, string> = {};
   const detectedFrom: string[] = [];
 
   // ------------------------------------------------------------------
@@ -56,6 +62,13 @@ export async function detectEnvNames(serviceDir: string): Promise<EnvDetectResul
         if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
           names.add(key);
           foundAny = true;
+          // default 값 추출 — 앞뒤 공백·따옴표 제거.
+          // 비어있으면 (`KEY=`) default 없음으로 간주. 기존 등록 default 는 유지(첫 파일 우선).
+          const rawValue = trimmed.slice(eqIdx + 1).trim();
+          const unquoted = stripSurroundingQuotes(rawValue);
+          if (unquoted.length > 0 && !(key in defaults)) {
+            defaults[key] = unquoted;
+          }
         }
       }
     }
@@ -135,6 +148,18 @@ export async function detectEnvNames(serviceDir: string): Promise<EnvDetectResul
 
   return {
     envNames: [...names].sort(),
+    envDefaults: defaults,
     detectedFrom,
   };
+}
+
+function stripSurroundingQuotes(value: string): string {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
 }

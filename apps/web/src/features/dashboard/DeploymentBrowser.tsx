@@ -6,7 +6,7 @@ import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
 import { deploymentStatusView } from '../deployment-status/status-view';
 import { DeploymentRow } from './DeploymentRow';
 import { RowMenu, type RowMenuItem } from './RowMenu';
-import { displayProjectName, isStalled } from './format';
+import { displayProjectName, isStalled, safeHttpUrl } from './format';
 import type { DeploymentListItem } from './useDeploymentList';
 
 /** 환경을 잡고 있는 상태 (서버의 재배포 락 검사와 같은 목록). 이 상태의 배포가 있으면 같은 환경으로는 재배포할 수 없다. */
@@ -79,13 +79,15 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder }:
     }
   }
 
+  // 메뉴에는 행의 기본 버튼과 겹치지 않는 동작만 둔다. 기본 버튼이 이미 진행 화면(지켜보기 · 원인 보기 · 자세히)이나
+  // 결과 화면으로 가므로, 같은 곳으로 가는 항목은 넣지 않는다. 진행 중인 배포는 메뉴가 비어 "⋯"가 나오지 않는다.
   function menuItems(item: DeploymentListItem): RowMenuItem[] {
-    const path = `/deployments/${encodeURIComponent(item.id)}`;
-    const outcome = deploymentStatusView(item.status).outcome;
+    if (!finished(item)) return [];
+    const opensLiveUrl = deploymentStatusView(item.status).outcome === 'success' && safeHttpUrl(item.publicUrl) !== null;
     return [
-      ...(finished(item) ? [{ key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item), disabledReason: blocked(item) ? t.redeploy.blocked : undefined }] : []),
-      { key: 'progress', label: t.dashboard.menuProgress, href: path },
-      ...(outcome === 'success' ? [{ key: 'result', label: t.dashboard.viewResult, href: `${path}/result` }] : []),
+      { key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item), disabledReason: blocked(item) ? t.redeploy.blocked : undefined },
+      // 성공한 배포의 기본 버튼이 "열기"(배포된 앱)일 때만, 결과 화면으로 가는 길을 메뉴에 둔다.
+      ...(opensLiveUrl ? [{ key: 'result', label: t.dashboard.viewResult, href: `/deployments/${encodeURIComponent(item.id)}/result` }] : []),
     ];
   }
 

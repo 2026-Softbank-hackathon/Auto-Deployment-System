@@ -256,7 +256,6 @@ export const ko = {
     partialFailures: (n: number) => `프로젝트 ${n}개의 배포 이력은 불러오지 못했어요.`,
     listLabel: '최근 배포 목록',
     more: '더 보기',
-    menuProgress: '진행 화면 보기',
     searchLabel: '검색',
     searchPlaceholder: '프로젝트 이름, 배포 번호, 주소',
     filterLabel: '상태',

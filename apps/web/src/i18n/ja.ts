@@ -258,7 +258,6 @@ export const ja: Messages = {
     partialFailures: (n) => `${n}件のプロジェクトのデプロイ履歴を読み込めませんでした。`,
     listLabel: '最近のデプロイ一覧',
     more: 'その他',
-    menuProgress: '進行画面を見る',
     searchLabel: '検索',
     searchPlaceholder: 'プロジェクト名、デプロイ番号、URL',
     filterLabel: '状態',

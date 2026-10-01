@@ -70,7 +70,8 @@ export class LocalStorage implements Storage {
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name as string);
-      const relKey = path.relative(this.rootDir, fullPath);
+      // 스토리지 키는 OS 와 무관하게 "/" 구분 (Windows 의 path.relative 는 역슬래시를 쓴다)
+      const relKey = path.relative(this.rootDir, fullPath).split(path.sep).join("/");
 
       if (entry.isDirectory()) {
         await this.scan(fullPath, prefix, results);

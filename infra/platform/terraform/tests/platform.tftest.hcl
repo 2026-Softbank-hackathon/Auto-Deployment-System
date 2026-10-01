@@ -25,6 +25,17 @@ mock_provider "aws" {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
     }
   }
+  mock_data "aws_iam_openid_connect_provider" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    }
+  }
+  mock_resource "aws_instance" {
+    override_during = plan
+    defaults = {
+      arn = "arn:aws:ec2:ap-northeast-2:123456789012:instance/i-0123456789abcdef0"
+    }
+  }
 }
 
 mock_provider "cloudflare" {
@@ -108,4 +119,73 @@ run "rejects_trailing_slash_prefix" {
   }
 
   expect_failures = [var.ssm_parameter_prefix]
+}
+
+run "plans_github_cd_role" {
+  command = plan
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && contains(aws_iam_openid_connect_provider.github[0].client_id_list, "sts.amazonaws.com")
+    error_message = "기본값은 GitHub OIDC provider 를 만들고 audience 는 sts.amazonaws.com 이어야 한다."
+  }
+
+  assert {
+    condition     = aws_iam_role.github_cd.name == "camellia-platform-github-cd"
+    error_message = "CD 역할 이름은 <name_prefix>-github-cd 여야 한다."
+  }
+
+  assert {
+    condition = alltrue([
+      for c in data.aws_iam_policy_document.github_cd_assume.statement[0].condition :
+      c.test == "StringEquals" && (
+        (c.variable == "token.actions.githubusercontent.com:aud" && tolist(c.values) == tolist(["sts.amazonaws.com"])) ||
+        (c.variable == "token.actions.githubusercontent.com:sub" && tolist(c.values) == tolist(["repo:2026-Softbank-hackathon@335012022/Auto-Deployment-System@1396159841:ref:refs/heads/main"]))
+      )
+    ]) && length(data.aws_iam_policy_document.github_cd_assume.statement[0].condition) == 2
+    error_message = "CD 역할은 aud = sts.amazonaws.com, sub = 이 리포 main 브랜치(StringEquals)로만 받을 수 있어야 한다."
+  }
+
+  assert {
+    condition = (
+      tolist(data.aws_iam_policy_document.github_cd.statement[0].actions) == tolist(["ssm:SendCommand"]) &&
+      toset(data.aws_iam_policy_document.github_cd.statement[0].resources) == toset([
+        "arn:aws:ec2:ap-northeast-2:123456789012:instance/i-0123456789abcdef0",
+        "arn:aws:ssm:ap-northeast-2::document/AWS-RunShellScript",
+      ])
+    )
+    error_message = "SendCommand 는 플랫폼 인스턴스와 AWS-RunShellScript 문서로만 제한해야 한다."
+  }
+
+  assert {
+    condition     = toset(data.aws_iam_policy_document.github_cd.statement[1].actions) == toset(["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:DescribeInstanceInformation"])
+    error_message = "리소스 \"*\" 문장에는 읽기 전용 조회 API 만 있어야 한다."
+  }
+
+  assert {
+    condition     = length(data.aws_iam_policy_document.github_cd.statement) == 2
+    error_message = "CD 역할 권한은 두 문장(SendCommand · 결과 조회)뿐이어야 한다."
+  }
+}
+
+run "reuses_existing_github_oidc_provider" {
+  command = plan
+
+  variables {
+    create_github_oidc_provider = false
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 0 && length(data.aws_iam_openid_connect_provider.github) == 1
+    error_message = "create_github_oidc_provider = false 면 provider 를 만들지 않고 조회만 해야 한다."
+  }
+}
+
+run "rejects_wildcard_oidc_subject" {
+  command = plan
+
+  variables {
+    github_oidc_sub_prefix = "repo:2026-Softbank-hackathon/*"
+  }
+
+  expect_failures = [var.github_oidc_sub_prefix]
 }

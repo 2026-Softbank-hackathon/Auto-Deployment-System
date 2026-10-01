@@ -82,3 +82,31 @@ variable "console_subdomain" {
     error_message = "console_subdomain 은 한 단계 DNS 라벨이어야 하고 'apps'(사용자 앱 영역)는 쓸 수 없다."
   }
 }
+
+variable "create_github_oidc_provider" {
+  description = "GitHub Actions OIDC provider(token.actions.githubusercontent.com)를 만든다. 계정에 이미 있으면 false (조회만)"
+  type        = bool
+  default     = true
+}
+
+variable "github_oidc_sub_prefix" {
+  description = "CD 역할을 받을 리포의 OIDC sub 접두어. 2026-07-15 이후 만든 리포는 immutable 형식(owner@id/repo@id). 확인: gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix"
+  type        = string
+  default     = "repo:2026-Softbank-hackathon@335012022/Auto-Deployment-System@1396159841"
+
+  validation {
+    condition     = can(regex("^repo:[^:/*]+/[^:/*]+$", var.github_oidc_sub_prefix))
+    error_message = "github_oidc_sub_prefix 는 repo:<owner>/<repo> 형식이어야 하고 와일드카드(*)는 쓸 수 없다."
+  }
+}
+
+variable "github_cd_branch" {
+  description = "CD 역할을 받을 수 있는 브랜치 (이 브랜치에서 돈 워크플로만)"
+  type        = string
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._/-]+$", var.github_cd_branch))
+    error_message = "github_cd_branch 는 와일드카드 없는 브랜치 이름이어야 한다."
+  }
+}

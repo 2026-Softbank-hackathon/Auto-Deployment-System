@@ -22,3 +22,8 @@ output "ssm_parameter_prefix" {
   description = "플랫폼 env 를 넣을 SSM 경로"
   value       = var.ssm_parameter_prefix
 }
+
+output "github_cd_role_arn" {
+  description = "GitHub Actions CD 역할 ARN → 저장소 변수 AWS_CD_ROLE_ARN"
+  value       = aws_iam_role.github_cd.arn
+}

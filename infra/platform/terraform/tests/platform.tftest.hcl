@@ -189,3 +189,80 @@ run "rejects_wildcard_oidc_subject" {
 
   expect_failures = [var.github_oidc_sub_prefix]
 }
+
+run "plans_github_terraform_roles" {
+  command = plan
+
+  assert {
+    condition     = aws_iam_role.github_tf_plan.name == "camellia-platform-tf-plan" && aws_iam_role.github_tf_apply.name == "camellia-platform-tf-apply"
+    error_message = "Terraform CI 역할 이름은 <name_prefix>-tf-plan / -tf-apply 여야 한다."
+  }
+
+  assert {
+    condition = toset(one([
+      for c in data.aws_iam_policy_document.github_tf_plan_assume.statement[0].condition : c.values
+      if c.variable == "token.actions.githubusercontent.com:sub" && c.test == "StringEquals"
+      ])) == toset([
+      "repo:2026-Softbank-hackathon@335012022/Auto-Deployment-System@1396159841:pull_request",
+      "repo:2026-Softbank-hackathon@335012022/Auto-Deployment-System@1396159841:ref:refs/heads/main",
+    ])
+    error_message = "plan 역할은 이 리포의 PR 과 main 에서만 받을 수 있어야 한다."
+  }
+
+  assert {
+    condition = tolist(one([
+      for c in data.aws_iam_policy_document.github_tf_apply_assume.statement[0].condition : c.values
+      if c.variable == "token.actions.githubusercontent.com:sub" && c.test == "StringEquals"
+      ])) == tolist([
+      "repo:2026-Softbank-hackathon@335012022/Auto-Deployment-System@1396159841:ref:refs/heads/main",
+    ]) && length(data.aws_iam_policy_document.github_tf_apply_assume.statement[0].condition) == 2
+    error_message = "apply 역할은 aud + main 브랜치 sub 로만 받을 수 있어야 한다 (PR 불가)."
+  }
+
+  assert {
+    condition = (
+      toset(one([for s in data.aws_iam_policy_document.github_tf_read.statement : s.resources if s.sid == "StateRead"])) == toset(["arn:aws:s3:::camellia-tfstate-725072160743/camellia/platform/terraform.tfstate"]) &&
+      toset(one([for s in data.aws_iam_policy_document.github_tf_read.statement : s.resources if s.sid == "StateLock"])) == toset(["arn:aws:s3:::camellia-tfstate-725072160743/camellia/platform/terraform.tfstate.tflock"]) &&
+      toset(one([for s in data.aws_iam_policy_document.github_tf_write.statement : s.resources if s.sid == "StateWrite"])) == toset(["arn:aws:s3:::camellia-tfstate-725072160743/camellia/platform/terraform.tfstate"])
+    )
+    error_message = "state 권한은 이 설정의 state key 와 잠금 파일로만 제한해야 한다."
+  }
+
+  assert {
+    condition = toset(one([for s in data.aws_iam_policy_document.github_tf_read.statement : s.resources if s.sid == "SsmRead"])) == toset([
+      "arn:aws:ssm:ap-northeast-2:123456789012:parameter/camellia/platform/env/CLOUDFLARE_TUNNEL_TOKEN",
+      "arn:aws:ssm:ap-northeast-2:123456789012:parameter/camellia/platform/env/CLOUDFLARE_API_TOKEN",
+      "arn:aws:ssm:ap-northeast-2:*:parameter/aws/service/canonical/*",
+    ])
+    error_message = "plan 역할은 플랫폼 env 중 Cloudflare token 두 개만 읽어야 한다 (DB 비밀번호 · API Key 불가)."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.github_tf_read.statement :
+      alltrue([for a in s.actions : !can(regex(":(Create|Delete|Put|Update|Attach|Detach|Run|Terminate|Modify|Tag|Untag|Pass)", a))])
+      if s.sid != "StateLock"
+    ])
+    error_message = "공통 읽기 정책에는 state 잠금 파일 외에 쓰기 액션이 없어야 한다."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.github_tf_write.statement :
+      alltrue([for r in s.resources : startswith(r, "arn:aws:iam::123456789012:role/camellia-platform-") || startswith(r, "arn:aws:iam::123456789012:instance-profile/camellia-platform-")])
+      if s.sid == "IamManagePlatformRoles" || s.sid == "IamPassPlatformRoleToEc2"
+    ])
+    error_message = "IAM 쓰기는 camellia-platform-* 역할 · 인스턴스 프로파일로만 제한해야 한다."
+  }
+
+  assert {
+    condition = toset([
+      for c in one([for s in data.aws_iam_policy_document.github_tf_write.statement : s.condition if s.sid == "Ec2ModifyPlatformTagged"]) : "${c.variable}=${join(",", c.values)}"
+      ]) == toset([
+      "aws:RequestedRegion=ap-northeast-2",
+      "aws:ResourceTag/Project=camellia",
+      "aws:ResourceTag/Component=platform",
+    ])
+    error_message = "EC2 삭제 · 변경은 플랫폼 태그가 붙은 리소스로만 제한해야 한다."
+  }
+}

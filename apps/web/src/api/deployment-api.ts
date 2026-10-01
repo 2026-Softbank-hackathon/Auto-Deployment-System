@@ -39,6 +39,8 @@ export interface DeploymentAnalysisReportResponse {
   irValid: unknown;
   irErrors: unknown;
   migrationTool: unknown;
+  /** 등록해야 배포되는 환경변수 이름 (기본값도 자동 값도 없고 미등록). 분석이 끝나지 않았으면 null */
+  missingEnvNames: string[] | null;
   createdAt: unknown;
 }
 
@@ -142,6 +144,7 @@ export async function getDeploymentAnalysisReport(deploymentId: string): Promise
     irValid: body.irValid,
     irErrors: body.irErrors,
     migrationTool: body.migrationTool,
+    missingEnvNames: Array.isArray(body.missingEnvNames) ? body.missingEnvNames.filter((name): name is string => typeof name === 'string') : null,
     createdAt: body.createdAt,
   };
 }

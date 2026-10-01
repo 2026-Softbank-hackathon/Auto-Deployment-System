@@ -374,6 +374,12 @@ export const ja: Messages = {
     diagnosisRetry: 'もう一度確認',
     diagnosisStep: (step) => `停止したと推定される段階: ${step}`,
     diagnosisPatches: (n) => `修正候補 ${n}件 — あくまで提案で、自動では適用されません。`,
+    envInput: {
+      waiting: '環境変数の入力を待っています',
+      title: (n) => `デプロイを続けるには、環境変数を${n}個入力してください。`,
+      copy: '分析の結果、デフォルト値がないため自分で入力する必要がある変数です。保存するとこのプロジェクトに登録され、次回のデプロイでもそのまま使われます。',
+      submit: '保存してデプロイを続ける',
+    },
     approveFailed: 'デプロイ先を確定できませんでした。',
     approveLocked: '同じ環境で進行中のデプロイがあります。そのデプロイが終わってから再試行してください。',
     approveRetry: '再試行',

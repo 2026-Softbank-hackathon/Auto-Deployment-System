@@ -30,7 +30,7 @@ function Card({ id, title, tone, status, children }: { id?: string; title: strin
  */
 export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
-  const { state, refresh, createDeployProject, registerAws, registerOnprem } = useDeployProject();
+  const { state, refresh, createDeployProject, registerAws, registerOnprem, removeEnvironment } = useDeployProject();
   const [changingKey, setChangingKey] = useState(false);
   const status = setupStatus(state);
   // 화면에 들어올 때 연결 상태를 다시 읽는다.
@@ -83,7 +83,7 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </Card>
 
     <Card id="onprem" title={t.setup.onprem.title} tone={onprem ? 'success' : 'waiting'} status={onprem ? t.setup.status.registered : t.setup.status.optional}>
-      <OnpremCard key={project?.id} hasProject={project !== null} environment={onprem} onRegisterHost={registerOnprem} />
+      <OnpremCard key={project?.id} hasProject={project !== null} environment={onprem} onRegisterHost={registerOnprem} onRemoveHost={removeEnvironment} onRefresh={refresh} />
     </Card>
 
     <Card title={t.setup.env.title} tone="waiting" status={t.setup.status.optional}>

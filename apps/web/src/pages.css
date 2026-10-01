@@ -432,3 +432,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .toast { animation: toast-in 180ms ease-out; }
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 }
+
+/* 온프레미스 Agent 상태 · 서버 등록 해제 */
+.agent-status { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.agent-status .agent-status__seen { font-size: 14px; color: var(--ink-soft); }
+.setup-remove { display: grid; gap: 10px; padding-top: 12px; border-top: var(--border); }

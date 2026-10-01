@@ -34,8 +34,9 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   const targetReady = status.ready && project !== null && status.awsReady && missingFor(target, projectState.phase === 'ready' ? projectState.environments : []).length === 0;
   const canDeploy = Boolean(file) && targetReady;
 
-  // AWS 연결이 아직 없으면(처음 쓰는 경우) 연결 설정 화면으로 바로 보낸다.
-  const needsFirstSetup = status.ready && status.aws === null;
+  // 등록한 앱이 하나도 없으면(처음 쓰는 경우) 연결 설정 화면으로 바로 보낸다.
+  // 앱은 있는데 AWS 연결만 없을 때는 보내지 않는다. 여기서 다른 앱으로 바꿀 수 있어야 하기 때문이다.
+  const needsFirstSetup = status.ready && status.project === null;
   useEffect(() => { if (needsFirstSetup) onRedirect('/setup'); }, [needsFirstSetup, onRedirect]);
 
   async function startDeployment() {

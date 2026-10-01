@@ -342,10 +342,10 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .setup-summary__app { padding: 2px 8px; border: var(--border); border-radius: var(--radius-tape); font-family: var(--font-mono); color: var(--ink); }
 .setup-summary__item.is-ok { color: var(--moss-text); font-weight: 700; }
 .setup-summary__item.is-missing { color: var(--brick-text); font-weight: 700; }
-.app-picker.is-compact { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.app-picker.is-compact label { font-weight: 700; color: var(--ink); white-space: nowrap; }
-.app-picker.is-compact select { min-width: 0; max-width: 220px; min-height: 36px; padding: 4px 8px; border: var(--border); border-radius: var(--radius-tape); background: var(--surface); font: inherit; font-family: var(--font-mono); color: var(--ink); }
-.app-picker.is-compact select:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.app-picker { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.app-picker label { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.app-picker select { min-width: 0; max-width: 220px; min-height: 36px; padding: 4px 8px; border: var(--border); border-radius: var(--radius-tape); background: var(--surface); font: inherit; font-family: var(--font-mono); color: var(--ink); }
+.app-picker select:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
 .setup-summary__link { margin-left: auto; color: var(--koro-text); font-weight: 700; }
 .setup-summary__link:hover { color: var(--koro-text-hover); }
 @media (max-width: 760px) {

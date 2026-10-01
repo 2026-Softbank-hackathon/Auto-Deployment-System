@@ -38,6 +38,9 @@ async function findProject(): Promise<Found> {
     const environments = await listEnvironments(project.id).catch(() => []);
     if (environments.some((environment) => environment.isDefault)) { storeId(project.id); return withSecrets(projects, project, environments); }
   }
+  // 연결된 앱이 없으면 가장 최근 앱을 쓴다 (연결 설정에서 이어서 등록할 수 있게).
+  const latest = projects[0];
+  if (latest) { storeId(latest.id); return withSecrets(projects, latest, await listEnvironments(latest.id).catch(() => [])); }
   return { projects, project: null, environments: [], secretNames: null };
 }
 

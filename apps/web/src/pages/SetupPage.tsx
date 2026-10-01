@@ -6,7 +6,6 @@ import { Keycap } from '../components/ui/Keycap';
 import { StatusTape } from '../components/ui/StatusTape';
 import type { MarbleTone } from '../components/ui/Marble';
 import { displayProjectName } from '../features/dashboard/format';
-import { AppPicker } from '../features/deployment-start/AppPicker';
 import { AwsKeyForm } from '../features/deployment-start/AwsKeyForm';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { OnpremCard } from '../features/setup/OnpremCard';
@@ -57,12 +56,12 @@ function AppNameForm({ onCreate, onCancel }: { onCreate: (name: string) => Promi
 }
 
 /**
- * 연결 설정: 앱 이름 · AWS 키 · 온프레미스 서버를 한곳에서 등록하고 바꾼다.
+ * 연결 설정: 지금 고른 앱의 AWS 키 · 온프레미스 서버를 등록하고 바꾸고, 새 앱을 추가한다.
  * 처음 한 번만 하면 되고, 그다음부터 간단 배포에서는 ZIP만 올리면 된다.
  */
 export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
-  const { state, refresh, createDeployProject, selectProject, registerAws, registerOnprem } = useDeployProject();
+  const { state, refresh, createDeployProject, registerAws, registerOnprem } = useDeployProject();
   const [changingKey, setChangingKey] = useState(false);
   const [addingApp, setAddingApp] = useState(false);
   const status = setupStatus(state);
@@ -79,7 +78,7 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </>;
   }
 
-  const { projects, project, aws, onprem, keysMissing, awsReady } = status;
+  const { project, aws, onprem, keysMissing, awsReady } = status;
   const awsTone: MarbleTone = awsReady ? 'success' : keysMissing ? 'failed' : 'waiting';
   const awsStatus = awsReady ? t.setup.status.done : keysMissing ? t.setup.status.fix : t.setup.status.needed;
   const showKeyForm = project !== null && (!aws || keysMissing || changingKey);
@@ -91,9 +90,8 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </div>
 
     <Card title={t.setup.app.title} tone={project ? 'success' : 'waiting'} status={project ? t.setup.status.done : t.setup.status.needed}>
-      {projects.length > 1 || (projects.length === 1 && !project)
-        ? <AppPicker projects={projects} value={project?.id ?? null} disabled={addingApp} onChange={(projectId) => { setChangingKey(false); void selectProject(projectId); }} />
-        : project && <p className="setup-card__value">{displayProjectName(project.name)}</p>}
+      {/* 여기는 지금 고른 앱의 연결을 관리하는 곳이다. 앱을 바꾸는 것은 간단 배포 화면에서만 한다. */}
+      {project && <p className="setup-card__value">{displayProjectName(project.name)}</p>}
       {project && !addingApp && <>
         <p>{t.setup.app.doneCopy}</p>
         <div><Keycap variant="secondary" onClick={() => setAddingApp(true)}>{t.setup.app.add}</Keycap></div>

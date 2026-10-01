@@ -1,0 +1,32 @@
+# 플랫폼 이미지(apps/api · apps/worker · apps/web Dockerfile) 빌드 컨텍스트 = 리포 루트
+**/node_modules
+**/dist
+**/coverage
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/.env
+**/.env.*
+!**/.env.example
+**/credentials
+# 로컬 dev 오브젝트 스토리지 (packages/storage 소스는 포함해야 함)
+storage
+apps/*/storage
+**/*.log
+**/.DS_Store
+
+.git
+.github
+.githooks
+.claude
+.omc
+.vscode
+.idea
+docs
+tools
+tests
+apps/*/tests
+packages/*/tests
+apps/samples
+infra/platform

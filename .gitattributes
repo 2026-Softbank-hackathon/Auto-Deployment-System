@@ -1,1 +1,5 @@
 .githooks/** text eol=lf
+# 컨테이너 · 리눅스 호스트에서 실행되는 스크립트는 Windows 체크아웃에서도 LF 유지
+*.sh text eol=lf
+*.envsh text eol=lf
+*.tftpl text eol=lf

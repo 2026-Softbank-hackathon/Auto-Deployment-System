@@ -50,11 +50,17 @@ export async function runVerifyJob(
 
   const validJob = { data: validated.data };
   const claim = await claimVerifyStep(deps.pool, validJob.data);
-  if (!claim.owned) return claim.result;
+  if (!claim.owned) {
+    if (claim.result.status === "passed") {
+      await deps.originActivator?.activate(validJob.data);
+    }
+    return claim.result;
+  }
   const { stepId } = claim;
 
+  let result: VerifyResult;
   try {
-    const result = await handleVerify(validJob, deps, {
+    result = await handleVerify(validJob, deps, {
       ...runtime,
       onAttempt: (attempt) =>
         persistHealthCheckAttempt(
@@ -65,11 +71,15 @@ export async function runVerifyJob(
         ),
     });
     await finishVerifyStep(deps.pool, stepId, result, validJob.data);
-    return result;
   } catch (error) {
     await failVerifyStep(deps.pool, stepId, error);
     throw error;
   }
+  // Keep the successful health result for retries if Cloudflare activation fails.
+  if (result.status === "passed") {
+    await deps.originActivator?.activate(validJob.data);
+  }
+  return result;
 }
 
 export async function claimVerifyStep(

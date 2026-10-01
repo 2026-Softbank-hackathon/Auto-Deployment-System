@@ -36,7 +36,7 @@ function byNewest(a: { id: string; createdAt: string }, b: { id: string; created
   return Date.parse(b.createdAt) - Date.parse(a.createdAt) || Number(b.id) - Number(a.id);
 }
 
-async function loadDeployments(): Promise<{ items: DeploymentListItem[]; partialFailures: number }> {
+export async function loadDeployments(): Promise<{ items: DeploymentListItem[]; partialFailures: number }> {
   const recentProjects = (await loadAllProjects()).sort(byNewest).slice(0, RECENT_PROJECT_LIMIT);
   const results = await Promise.allSettled(recentProjects.map(async (project) => {
     const page = await listProjectDeployments(project.id, { limit: DEPLOYMENTS_PER_PROJECT });

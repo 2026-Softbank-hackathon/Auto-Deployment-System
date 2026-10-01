@@ -7,8 +7,6 @@ import { Keycap } from '../components/ui/Keycap';
 import { DeploymentBrowser } from '../features/dashboard/DeploymentBrowser';
 import { displayProjectName } from '../features/dashboard/format';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
-import { RedeployButton } from '../features/deployment-progress/RedeployButton';
-import { deploymentStatusView } from '../features/deployment-status/status-view';
 import { ConnectionCards } from '../features/setup/ConnectionCards';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
@@ -24,23 +22,21 @@ const tabs: ReadonlyArray<{ tab: ProjectTab; path: string }> = [
 function Deployments({ projectId, projectName, onNavigate }: { projectId: string; projectName: string; onNavigate: Navigate }) {
   const { t } = useI18n();
   const [state, setState] = useState<{ items: ProjectDeploymentSummary[]; loadedAt: number } | { error: unknown } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let active = true;
-    setState(null);
     listProjectDeployments(projectId, { limit: DEPLOYMENTS_SHOWN }).then(
       (page) => { if (active) setState({ items: page.items, loadedAt: Date.now() }); },
       (error) => { if (active) setState({ error }); },
     );
     return () => { active = false; };
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   if (state === null) return <p className="dashboard-status" role="status">{t.dashboard.loading}</p>;
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
   return <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
-    searchPlaceholder={t.projects.searchPlaceholder}
-    extraAction={(deployment) => deploymentStatusView(deployment.status).outcome === 'active' ? undefined
-      : <RedeployButton compact variant="ghost" deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} />} />;
+    searchPlaceholder={t.projects.searchPlaceholder} selection="single" onRedeployed={() => setReloadKey((key) => key + 1)} />;
 }
 
 /**

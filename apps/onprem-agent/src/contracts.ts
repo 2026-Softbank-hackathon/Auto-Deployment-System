@@ -86,7 +86,7 @@ export type TunnelStartInput = {
   jobId: string;
   deploymentId: number;
   environmentId: string;
-  localUrl: string;
+  localPort: number;
 };
 
 export type TunnelResult = {

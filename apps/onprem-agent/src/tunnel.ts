@@ -73,27 +73,16 @@ function validateSession(session: TunnelSession): void {
 }
 
 function validateStartInput(input: TunnelStartInput): void {
-  let url: URL;
-  try {
-    url = new URL(input.localUrl);
-  } catch {
-    throw new AgentError("tunnel_failed", "로컬 endpoint가 올바르지 않습니다.");
-  }
   if (
     !input.jobId.trim() ||
     !input.environmentId.trim() ||
     !Number.isSafeInteger(input.deploymentId) ||
     input.deploymentId < 1 ||
-    url.protocol !== "http:" ||
-    url.hostname !== "127.0.0.1" ||
-    !url.port ||
-    url.username ||
-    url.password ||
-    url.pathname !== "/" ||
-    url.search ||
-    url.hash
+    !Number.isSafeInteger(input.localPort) ||
+    input.localPort < 1 ||
+    input.localPort > 65_535
   ) {
-    throw new AgentError("tunnel_failed", "로컬 endpoint가 올바르지 않습니다.");
+    throw new AgentError("tunnel_failed", "로컬 포트가 올바르지 않습니다.");
   }
 }
 

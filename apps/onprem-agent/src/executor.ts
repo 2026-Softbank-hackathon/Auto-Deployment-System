@@ -42,6 +42,31 @@ function deploymentKey(job: OnpremAgentJob): string {
   return `${job.deploymentId}:${job.environmentId}`;
 }
 
+function extractLoopbackPort(localUrl: string): number {
+  let url: URL;
+  try {
+    url = new URL(localUrl);
+  } catch {
+    throw new AgentError("tunnel_failed", "로컬 endpoint가 올바르지 않습니다.");
+  }
+  const localPort = Number(url.port);
+  if (
+    url.protocol !== "http:" ||
+    url.hostname !== "127.0.0.1" ||
+    !Number.isSafeInteger(localPort) ||
+    localPort < 1 ||
+    localPort > 65_535 ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    throw new AgentError("tunnel_failed", "로컬 endpoint가 올바르지 않습니다.");
+  }
+  return localPort;
+}
+
 function cloneResultForJob(
   result: OnpremExecutionResult,
   job: OnpremAgentJob,
@@ -196,7 +221,7 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
           jobId: job.jobId,
           deploymentId: job.deploymentId,
           environmentId: job.environmentId,
-          localUrl: running.localUrl,
+          localPort: extractLoopbackPort(running.localUrl),
         }, { signal });
         tunnelStarted = true;
       } catch (error) {

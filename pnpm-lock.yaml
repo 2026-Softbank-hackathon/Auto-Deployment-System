@@ -109,6 +109,22 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(lightningcss@1.33.0)
 
+  apps/onprem-agent:
+    dependencies:
+      '@camellia/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.43)(lightningcss@1.33.0)
+
   apps/web:
     dependencies:
       '@fontsource-variable/noto-sans-jp':

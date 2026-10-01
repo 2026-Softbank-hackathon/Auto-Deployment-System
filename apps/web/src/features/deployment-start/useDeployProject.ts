@@ -1,4 +1,4 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createOnpremEnvironment, createProject, getProject, listEnvironments, listProjects, listSecretNames, registerAwsEnvironment, type EnvironmentSummary } from '../../api/deployment-api';
 import type { DeployTarget } from './TargetToggle';
 
@@ -64,8 +64,16 @@ export function awsKeysMissing(environments: EnvironmentSummary[], secretNames: 
 function useDeployProjectState() {
   const [state, setState] = useState<State>({ phase: 'loading' });
 
+  // 여러 화면이 동시에 다시 읽기를 부르므로, 늦게 도착한 예전 응답이 최신 상태(방금 바꾼 프로젝트)를 덮어쓰지 않게 한다.
+  const latestRefresh = useRef(0);
   const refresh = useCallback(async () => {
-    try { setState({ phase: 'ready', ...(await findProject()) }); } catch (error) { setState({ phase: 'error', error }); }
+    const turn = ++latestRefresh.current;
+    try {
+      const found = await findProject();
+      if (turn === latestRefresh.current) setState({ phase: 'ready', ...found });
+    } catch (error) {
+      if (turn === latestRefresh.current) setState({ phase: 'error', error });
+    }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 

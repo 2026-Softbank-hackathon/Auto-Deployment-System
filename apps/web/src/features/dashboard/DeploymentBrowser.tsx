@@ -5,9 +5,11 @@ import { Keycap } from '../../components/ui/Keycap';
 import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
 import { deploymentStatusView } from '../deployment-status/status-view';
 import { DeploymentRow } from './DeploymentRow';
-import { displayProjectName } from './format';
+import { displayProjectName, isStalled } from './format';
 import type { DeploymentListItem } from './useDeploymentList';
 
+/** 환경을 잡고 있는 상태 (서버의 재배포 락 검사와 같은 목록). 이 상태의 배포가 있으면 같은 환경으로는 재배포할 수 없다. */
+const LOCKING_STATUSES = new Set(['queued', 'building', 'planning', 'awaiting_plan_approval', 'provisioning', 'deploying', 'verifying']);
 const PAGE_SIZE = 10;
 type StatusFilter = 'all' | 'active' | 'success' | 'failed';
 const statusFilters: readonly StatusFilter[] = ['all', 'active', 'success', 'failed'];
@@ -64,7 +66,13 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, s
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ started: number; failures: Array<{ id: string; reason: string }> } | null>(null);
-  const selectable = (item: DeploymentListItem) => deploymentStatusView(item.status).outcome !== 'active';
+  const finished = (item: DeploymentListItem) => deploymentStatusView(item.status).outcome !== 'active';
+  // 같은 프로젝트에 진행 중인 배포가 있으면 재배포를 고를 수 없게 한다. 서버도 환경을 잡고 있는 배포가 있으면
+  // 재배포를 거절한다 (apps/api deployment-service redeploy: DEPLOYMENT_LOCKED). 눌러 보고 실패하지 않도록 미리 막는다.
+  // 2시간 넘게 멈춘 배포는 진행 중으로 치지 않지만, 환경을 잡고 있는 상태면 서버가 거절하므로 그대로 막는다.
+  const blocked = (item: DeploymentListItem) => items.some((other) => other.id !== item.id && other.projectName === item.projectName
+    && !finished(other) && (LOCKING_STATUSES.has(other.status) || !isStalled(true, other.createdAt, now)));
+  const selectable = (item: DeploymentListItem) => finished(item) && !blocked(item);
   const chosen = items.filter((item) => picked.has(item.id) && selectable(item));
 
   function toggle(item: DeploymentListItem) {
@@ -133,6 +141,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, s
     <p className="dashboard-status" role="status" aria-live="polite">
       {selection === 'multi' && visible.some(selectable) && chosen.length === 0 && <>{t.redeploy.hintMulti} </>}
       {selection === 'single' && visible.some(selectable) && chosen.length === 0 && <>{t.redeploy.hintSingle} </>}
+      {visible.some((item) => finished(item) && blocked(item)) && <>{t.redeploy.blockedHint} </>}
       {filtered.length === 0 ? t.dashboard.noMatches : t.dashboard.showing(filtered.length, first + 1, first + visible.length)}
       {filtering && <> <button type="button" className="dashboard-tools__clear" onClick={() => { setQuery(''); setStatusFilter('all'); setPage(1); }}>{t.dashboard.clearSearch}</button></>}
     </p>
@@ -140,10 +149,13 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, s
     {visible.length > 0 && <section className="deployment-list" aria-label={t.dashboard.listLabel}>
       {visible.map((deployment) => <div key={deployment.id} className="deployment-pick">
         {/* 진행 중인 배포는 재배포할 수 없어 고르는 칸을 비워 둔다(줄 맞춤용 자리만 남긴다). */}
-        {selectable(deployment)
-          ? <input type="checkbox" className="deployment-pick__box" checked={picked.has(deployment.id)} disabled={busy} onChange={() => toggle(deployment)}
-            aria-label={t.redeploy.pick(`${displayProjectName(deployment.projectName)} ${t.dashboard.deploymentNo(deployment.id)}`)} />
-          : <span className="deployment-pick__box" aria-hidden="true" />}
+        {!finished(deployment)
+          ? <span className="deployment-pick__box" aria-hidden="true" />
+          : blocked(deployment)
+            ? <input type="checkbox" className="deployment-pick__box" checked={false} disabled readOnly title={t.redeploy.blocked}
+              aria-label={`${t.redeploy.pick(`${displayProjectName(deployment.projectName)} ${t.dashboard.deploymentNo(deployment.id)}`)} — ${t.redeploy.blocked}`} />
+            : <input type="checkbox" className="deployment-pick__box" checked={picked.has(deployment.id)} disabled={busy} onChange={() => toggle(deployment)}
+              aria-label={t.redeploy.pick(`${displayProjectName(deployment.projectName)} ${t.dashboard.deploymentNo(deployment.id)}`)} />}
         <DeploymentRow deployment={deployment} now={now} onNavigate={onNavigate} />
       </div>)}
     </section>}

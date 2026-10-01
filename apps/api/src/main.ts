@@ -4,7 +4,7 @@
  * DB 연결 실패 시 warn 후 재시도 (dev 편의).
  */
 
-import { loadConfig } from "./config.js";
+import { decodeSecretMasterKey, loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { createPool, createPgBoss } from "@camellia/db";
 import { createStorage } from "@camellia/storage";
@@ -26,6 +26,10 @@ async function main() {
     apiKey: config.API_KEY,
     nodeEnv: config.NODE_ENV,
     logLevel: config.LOG_LEVEL,
+    secretMasterKey: decodeSecretMasterKey(
+      config.SECRET_MASTER_KEY,
+      config.NODE_ENV,
+    ),
   });
 
   // pg-boss 시작 (DB 없어도 서버는 뜨게)

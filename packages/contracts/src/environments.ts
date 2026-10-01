@@ -32,6 +32,7 @@ export const CreateEnvironmentBodySchema = z.object({
   projectId: z.number().int().positive(),
   name: z.string().min(1).max(128),
   type: z.enum(["aws", "onprem"]),
+  isDefault: z.boolean().optional(),
   awsConfig: AwsConfigSchema.optional(),
   onpremConfig: OnpremConfigSchema.optional(),
 });
@@ -47,6 +48,7 @@ export const EnvironmentSchema = z
     projectId: PgBigIntSchema,
     name: z.string(),
     type: z.enum(["aws", "onprem"]),
+    isDefault: z.boolean(),
     /** 등록한 값 그대로 (type=aws 일 때). 없으면 필드 없음 */
     awsConfig: AwsConfigSchema.strict().optional(),
     /** 등록한 값 그대로 (type=onprem 일 때, agentRegistrationToken 포함). 없으면 필드 없음 */

@@ -86,6 +86,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
 
     const result = await svc.create({
       projectId: projectIdNum,
+      targetVendor: target as TargetVendor,
       targetProfile: resolvedProfileId,
       fileBuffer,
     });

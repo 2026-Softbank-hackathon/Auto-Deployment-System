@@ -41,6 +41,8 @@ function makeDeployment(id: number, projectId: number, status = "received") {
     project_id: projectId,
     status,
     target_profile: "aws-ecs-basic",
+    target_environment_id: 10,
+    registry_environment_id: 10,
     public_url: null,
     created_at: NOW,
     updated_at: NOW,
@@ -156,6 +158,9 @@ describe("GET /api/v1/projects", () => {
 
 describe("POST /api/v1/deployments", () => {
   function setupDeploymentMocks() {
+    mockPool.on(/SELECT id FROM environments/, (params) => ({
+      rows: [{ id: params[1] === "onprem" ? 20 : 10 }],
+    }));
     mockPool.on(/INSERT INTO deployments/, () => ({ rows: [{ id: 42 }] }));
     mockPool.on(/INSERT INTO source_versions/, () => ({ rows: [{ id: 1 }] }));
     mockPool.on(/BEGIN|COMMIT|ROLLBACK/, () => ({ rows: [] }));
@@ -215,8 +220,12 @@ describe("POST /api/v1/deployments", () => {
 
   it("vendor onprem → DB target_profile = onprem-docker-basic", async () => {
     let capturedProfile: string | undefined;
+    let capturedTargetEnvironment: number | undefined;
+    let capturedRegistryEnvironment: number | undefined;
     mockPool.on(/INSERT INTO deployments/, (params) => {
       capturedProfile = params[1] as string;
+      capturedTargetEnvironment = params[2] as number;
+      capturedRegistryEnvironment = params[3] as number;
       return { rows: [{ id: 2 }] };
     });
     setupDeploymentMocks();
@@ -235,6 +244,31 @@ describe("POST /api/v1/deployments", () => {
 
     expect(res.statusCode).toBe(202);
     expect(capturedProfile).toBe("onprem-docker-basic");
+    expect(capturedTargetEnvironment).toBe(20);
+    expect(capturedRegistryEnvironment).toBe(10);
+  });
+
+  it("기본 target Environment가 없으면 업로드를 저장하지 않고 409", async () => {
+    const form = new FormData();
+    form.append("project_id", "1");
+    form.append("target", "aws");
+    form.append("source", Buffer.from("PK fake zip"), {
+      filename: "app.zip",
+      contentType: "application/zip",
+    });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/deployments",
+      headers: form.getHeaders(),
+      payload: form.getBuffer(),
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe(
+      "TARGET_ENVIRONMENT_REQUIRED",
+    );
+    expect(mockStorage.store.size).toBe(0);
   });
 
   it("구 profile ID (aws-ecs-basic) 를 target 으로 보내면 400 VALIDATION_ERROR", async () => {
@@ -261,7 +295,7 @@ describe("POST /api/v1/deployments", () => {
 describe("GET /api/v1/deployments/:id", () => {
   it("returns deployment with currentStep and approvalPending", async () => {
     const dep = makeDeployment(42, 1, "awaiting_target_confirmation");
-    mockPool.on(/SELECT id, project_id, status, target_profile, public_url/, () => ({
+    mockPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
       rows: [dep],
     }));
     mockPool.on(/FROM deployment_steps/, () => ({ rows: [] }));
@@ -276,7 +310,7 @@ describe("GET /api/v1/deployments/:id", () => {
   });
 
   it("returns 404 for unknown deployment", async () => {
-    mockPool.on(/SELECT id, project_id, status, target_profile, public_url/, () => ({
+    mockPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
       rows: [],
     }));
 
@@ -394,15 +428,12 @@ describe("POST /api/v1/deployments/:id/approvals", () => {
           status: "awaiting_target_confirmation",
           project_id: 1,
           target_profile: "aws-ecs-basic",
+          target_environment_id: 10,
         },
       ],
     }));
     // approvals insert
     mockPool.on(/INSERT INTO approvals/, () => ({ rows: [] }));
-    // project name
-    mockPool.on(/FROM projects WHERE id/, () => ({
-      rows: [{ name: "todo-app" }],
-    }));
     // env_locks insert
     mockPool.on(/INSERT INTO env_locks/, () => ({ rows: [] }));
     // UPDATE deployments status

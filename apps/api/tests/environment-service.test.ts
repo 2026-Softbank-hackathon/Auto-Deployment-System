@@ -13,7 +13,11 @@ import type { Pool } from "@camellia/db";
 import { EnvironmentService } from "../src/services/environment-service.js";
 
 function makePool(fn: (sql: string, params: unknown[]) => { rows: unknown[]; rowCount: number } | Promise<{ rows: unknown[]; rowCount: number }>): Pool {
-  return { query: vi.fn(fn) } as unknown as Pool;
+  const query = vi.fn(fn);
+  return {
+    query,
+    connect: vi.fn(async () => ({ query, release: vi.fn() })),
+  } as unknown as Pool;
 }
 
 describe("EnvironmentService.create (aws access_key)", () => {
@@ -24,7 +28,7 @@ describe("EnvironmentService.create (aws access_key)", () => {
         return { rows: [{ name: "aws-key-1" }, { name: "aws-secret-1" }], rowCount: 2 };
       }
       if (sql.includes("INSERT INTO environments"))
-        return { rows: [{ id: 10, created_at: new Date("2026-09-30T09:00:00Z") }], rowCount: 1 };
+        return { rows: [{ id: 10, is_default: true, created_at: new Date("2026-09-30T09:00:00Z") }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     });
     const svc = new EnvironmentService(pool);
@@ -41,6 +45,7 @@ describe("EnvironmentService.create (aws access_key)", () => {
     });
     expect(dto.id).toBe(10);
     expect(dto.type).toBe("aws");
+    expect(dto.isDefault).toBe(true);
     expect(dto.awsConfig?.region).toBe("ap-northeast-2");
     expect(dto.agentStatus).toBeNull();
   });
@@ -88,7 +93,7 @@ describe("EnvironmentService.create (assume_role)", () => {
     const pool = makePool(async (sql) => {
       if (sql.includes("SELECT 1 FROM projects")) return { rows: [{}], rowCount: 1 };
       if (sql.includes("INSERT INTO environments"))
-        return { rows: [{ id: 11, created_at: new Date() }], rowCount: 1 };
+        return { rows: [{ id: 11, is_default: true, created_at: new Date() }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     });
     const svc = new EnvironmentService(pool);
@@ -114,6 +119,33 @@ describe("EnvironmentService.create (onprem)", () => {
     await expect(
       svc.create({ projectId: 1, name: "op", type: "onprem" }),
     ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it("명시적 default 환경을 만들면 기존 default를 해제한다", async () => {
+    const calls: string[] = [];
+    const pool = makePool(async (sql) => {
+      calls.push(sql.replace(/\s+/g, " ").trim());
+      if (sql.includes("SELECT 1 FROM projects")) return { rows: [{}], rowCount: 1 };
+      if (sql.includes("SELECT id FROM environments")) {
+        return { rows: [{ id: 10 }], rowCount: 1 };
+      }
+      if (sql.includes("INSERT INTO environments")) {
+        return { rows: [{ id: 12, is_default: true, created_at: new Date() }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+
+    const dto = await svc.create({
+      projectId: 1,
+      name: "onprem-new",
+      type: "onprem",
+      isDefault: true,
+      onpremConfig: { agentRegistrationToken: "token", hostname: "host" },
+    });
+
+    expect(dto.isDefault).toBe(true);
+    expect(calls.some((sql) => sql.includes("SET is_default = FALSE"))).toBe(true);
   });
 });
 

@@ -21,7 +21,8 @@ type StepLog = { step: DeploymentLogStep; text: string };
 /** 승인 기록에 남기는 메모 — 사람이 누른 승인과 구분한다. */
 const AUTO_APPROVAL_NOTE = 'one-click auto-approval (web)';
 /** 사용자 입력 없이 통과시키는 승인 대기 상태 → 게이트 */
-const autoApprovalGates: Record<string, ApprovalGate> = { awaiting_target_confirmation: 'target', awaiting_plan_approval: 'plan' };
+// plan 승인은 서버가 빌드 직후 자동으로 처리한다 (apps/worker handlers/build.ts autoApprovePlanAndQueueProvision). 프론트는 대상 확인만 호출한다.
+const autoApprovalGates: Record<string, ApprovalGate> = { awaiting_target_confirmation: 'target' };
 
 /** 지켜보던 배포가 성공했을 때, 결과 화면으로 넘어가기 전 코로가 컵에 착지하는 모습을 보여 주는 시간 */
 const SUCCESS_LANDING_MS = 1400;
@@ -237,7 +238,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
       {approvalError !== null && <div className="notice error run-failure" role="alert">
-        <strong>{approvalError.gate === 'plan' ? t.run.approvePlanFailed : t.run.approveFailed}</strong>
+        <strong>{t.run.approveFailed}</strong>
         <p>{approvalError.cause instanceof DeploymentApiError && approvalError.cause.code === 'DEPLOYMENT_LOCKED' ? t.run.approveLocked : errorMessage(approvalError.cause, t, t.run.approveFailed)}</p>
         <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
       </div>}

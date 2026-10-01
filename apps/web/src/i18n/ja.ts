@@ -284,7 +284,6 @@ export const ja: Messages = {
     diagnosisStep: (step) => `停止したと推定される段階: ${step}`,
     diagnosisPatches: (n) => `修正候補 ${n}件 — あくまで提案で、自動では適用されません。`,
     approveFailed: 'デプロイ先を確定できませんでした。',
-    approvePlanFailed: 'デプロイ計画を確定できませんでした。',
     approveLocked: '同じ環境で進行中のデプロイがあります。そのデプロイが終わってから再試行してください。',
     approveRetry: '再試行',
     newDeploy: '新しくデプロイする',

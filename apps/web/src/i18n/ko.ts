@@ -282,7 +282,6 @@ export const ko = {
     diagnosisStep: (step: string) => `멈춘 단계로 추정: ${step}`,
     diagnosisPatches: (n: number) => `수정 후보 ${n}건 — 제안이며 자동으로 적용되지 않아요.`,
     approveFailed: '배포 대상을 확정하지 못했어요.',
-    approvePlanFailed: '배포 계획을 확정하지 못했어요.',
     approveLocked: '같은 환경에 진행 중인 배포가 있어요. 그 배포가 끝난 뒤 다시 시도해 주세요.',
     approveRetry: '다시 시도',
     newDeploy: '새로 배포하기',

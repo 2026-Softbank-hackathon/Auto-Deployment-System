@@ -20,7 +20,7 @@ export function SetupCard({ id, title, tone, status, children }: { id?: string; 
 
 /**
  * 지금 고른 프로젝트의 연결 카드 두 장: AWS 연결(키 · 리전), 온프레미스 연결(서버 · Agent).
- * 연결 설정 화면과 프로젝트 상세의 설정 탭이 같이 쓴다.
+ * 프로젝트 상세의 설정 탭에서 쓴다.
  */
 export function ConnectionCards() {
   const { t } = useI18n();

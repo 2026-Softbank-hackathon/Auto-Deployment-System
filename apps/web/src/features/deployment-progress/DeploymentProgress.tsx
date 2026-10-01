@@ -77,9 +77,9 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
   </ol>;
 }
 
-interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void; /** AWS 키를 바꾸러 설정으로 간다 */ onFixAwsKey?: () => void }
+interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void }
 
-export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment, onFixAwsKey }: DeploymentProgressProps) {
+export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment, onFixSettings }: DeploymentProgressProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -254,7 +254,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
         {failureMessage && <p className="run-failure__code">{t.run.failureCode(failureMessage)}</p>}
         <FailureDiagnosis deploymentId={deploymentId} />
         <div className="run-failure__actions">
-          {fixableByAwsKey(failure) && onFixAwsKey && <Keycap onClick={onFixAwsKey}>{t.run.fixAwsKey}</Keycap>}
+          {fixableByAwsKey(failure) && onFixSettings && <Keycap onClick={() => onFixSettings(projectId)}>{t.run.fixAwsKey}</Keycap>}
           {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
         </div>
       </div>}

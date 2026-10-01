@@ -47,10 +47,10 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   const targetReady = status.ready && project !== null && status.awsReady && missingFor(target, projectState.phase === 'ready' ? projectState.environments : []).length === 0;
   const canDeploy = Boolean(file) && targetReady;
 
-  // 등록한 앱이 하나도 없으면(처음 쓰는 경우) 연결 설정 화면으로 바로 보낸다.
+  // 등록한 프로젝트가 하나도 없으면(처음 쓰는 경우) 내 프로젝트로 보내 프로젝트부터 만들게 한다.
   // 앱은 있는데 AWS 연결만 없을 때는 보내지 않는다. 여기서 다른 앱으로 바꿀 수 있어야 하기 때문이다.
   const needsFirstSetup = status.ready && status.project === null;
-  useEffect(() => { if (needsFirstSetup) onRedirect('/setup'); }, [needsFirstSetup, onRedirect]);
+  useEffect(() => { if (needsFirstSetup) onRedirect('/projects'); }, [needsFirstSetup, onRedirect]);
 
   async function startDeployment() {
     if (!file || !project || !targetReady || isStarting) return;
@@ -93,7 +93,7 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
       <div className="deploy-card__footer">
         <p className={`deploy-card__hint ${canDeploy ? 'is-ready' : ''}`} aria-live="polite">{hint}</p>
         {mustSetUp
-          ? <DeployKeycap size="lg" href={target === 'onprem' && status.awsReady ? '/setup#onprem' : '/setup'} onClick={(event: MouseEvent<HTMLAnchorElement>) => followAppLink(event, onNavigate)}>{t.deploy.goSetup}</DeployKeycap>
+          ? <DeployKeycap size="lg" href={project ? `/projects/${encodeURIComponent(project.id)}/settings` : '/projects'} onClick={(event: MouseEvent<HTMLAnchorElement>) => followAppLink(event, onNavigate)}>{t.deploy.goSetup}</DeployKeycap>
           : <DeployKeycap size="lg" sound="start" disabled={!canDeploy} busy={isStarting} onClick={() => void startDeployment()}>{t.deploy.button}</DeployKeycap>}
       </div>
     </section>

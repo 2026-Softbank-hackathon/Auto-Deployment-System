@@ -6,7 +6,6 @@ import { DeploymentResult } from '../features/deployment-progress/DeploymentResu
 import { DashboardPage } from '../pages/DashboardPage';
 import { ProjectDetailPage } from '../pages/ProjectDetailPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
-import { SetupPage } from '../pages/SetupPage';
 import { SimpleDeployPage } from '../pages/SimpleDeployPage';
 import { DeploymentNotifier } from '../features/notifications/DeploymentNotifier';
 import { DeployProjectProvider } from '../features/deployment-start/useDeployProject';
@@ -41,9 +40,8 @@ export function App() {
         {route.page === 'dashboard' && <DashboardPage onNavigate={navigate} />}
         {route.page === 'projects' && <ProjectsPage onNavigate={navigate} />}
         {route.page === 'project' && <ProjectDetailPage projectId={route.projectId} tab={route.tab} onNavigate={navigate} />}
-        {route.page === 'setup' && <SetupPage onNavigate={navigate} />}
         {route.page === 'deploy' && <SimpleDeployPage onNavigate={navigate} onRedirect={redirect} onStarted={(deploymentId) => navigate(`/deployments/${encodeURIComponent(deploymentId)}`)} />}
-        {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixAwsKey={() => navigate('/setup')} />}
+        {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={(projectId) => navigate(projectId ? `/projects/${encodeURIComponent(projectId)}/settings` : '/projects')} />}
         {route.page === 'result' && <DeploymentResult deploymentId={route.deploymentId} onBack={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}`)} onNewDeployment={() => navigate('/deploy')} />}
       </main>
     </div>

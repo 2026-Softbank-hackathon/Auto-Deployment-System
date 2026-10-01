@@ -276,6 +276,23 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .target-toggle:disabled .target-toggle__options { opacity: 0.6; }
 
 /* 분석 경고 목록 · 이전 분석 재사용 */
+.analysis-detail { display: grid; gap: 10px; }
+.analysis-detail h3 { margin: 0; font-size: 15px; }
+.analysis-service { display: grid; gap: 6px; margin: 0; padding: 12px 14px; border: var(--border); border-radius: var(--radius-input); }
+.analysis-service > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; font-size: 14px; }
+.analysis-service dt { color: var(--ink-soft); }
+.analysis-service dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.analysis-service__head dt { font-family: var(--font-mono); font-weight: 700; color: var(--ink); }
+.analysis-service code, .analysis-lines code { font-family: var(--font-mono); font-size: 13px; }
+.analysis-lines { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 18px; font-size: 14px; overflow-wrap: anywhere; }
+/* 환경변수 목록 */
+.env-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.env-list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 8px 12px; padding: 8px 12px; border: var(--border); border-radius: var(--radius-input); }
+.env-list code { font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
+.env-list__name { font-weight: 700; color: var(--ink); }
+.env-list__value { color: var(--ink-soft); }
+.env-list__actions { display: flex; gap: 4px; }
+@media (max-width: 560px) { .env-list li { grid-template-columns: minmax(0, 1fr); } }
 .analysis-reused { font-size: 14px; color: var(--koro-text); }
 .analysis-warnings ul { display: grid; gap: 10px; margin: 10px 0 0; padding: 0; list-style: none; }
 .analysis-warnings li { display: grid; gap: 2px; }

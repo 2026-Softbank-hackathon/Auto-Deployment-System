@@ -3,7 +3,7 @@ import type { Pool } from "@camellia/db";
 import type { VerifyJobPayload } from "./handlers/verify.js";
 
 type CloudflareOperations = Pick<CloudflareClient,
-  "ensureNamedTunnel" | "setTunnelOrigin" | "switchServiceOrigin">;
+  "ensureNamedTunnel" | "ensureCname" | "setTunnelOrigin" | "switchServiceOrigin">;
 
 export type OriginActivationOptions = {
   cloudflare?: CloudflareOperations;
@@ -34,6 +34,28 @@ export class DeploymentOriginActivator {
     private readonly pool: Pool,
     private readonly options: OriginActivationOptions,
   ) {}
+
+  async prepareOnpremVerification(input: {
+    deploymentId: number;
+    projectId: number;
+  }): Promise<void> {
+    if (!Number.isSafeInteger(input.deploymentId) || input.deploymentId < 1) {
+      throw new OriginActivationError("ORIGIN_DEPLOYMENT_INVALID");
+    }
+    if (!Number.isSafeInteger(input.projectId) || input.projectId < 1) {
+      throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
+    }
+    const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
+    const tunnel = await safeCloudflare(() =>
+      cloudflare.ensureNamedTunnel(String(input.projectId))
+    );
+    await safeCloudflare(() => cloudflare.ensureCname({
+      zoneId,
+      hostname: `verify-d${input.deploymentId}.${domain}`,
+      target: tunnel.endpoint,
+      proxied: true,
+    }));
+  }
 
   async activate(payload: VerifyJobPayload): Promise<void> {
     const result = await this.pool.query<OriginContext>(
@@ -68,14 +90,7 @@ export class DeploymentOriginActivator {
 
     const projectId = String(row.project_id);
     if (!/^[1-9]\d*$/.test(projectId)) throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
-    const { cloudflare, zoneId, platformDomain } = this.options;
-    const domain = platformDomain?.trim().replace(/\.$/, "").toLowerCase();
-    if (!cloudflare || !zoneId?.trim() || !domain) {
-      throw new OriginActivationError("ORIGIN_CONFIGURATION_MISSING");
-    }
-    if (!domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
-      throw new OriginActivationError("ORIGIN_DOMAIN_INVALID");
-    }
+    const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
     const serviceHostname = `service-${projectId}.apps.${domain}`;
     let originHostname: string;
     let tunnelIngress: { tunnelId: string; hostname: string; serviceUrl: string } | undefined;
@@ -115,6 +130,23 @@ export class DeploymentOriginActivator {
     if (result.rows[0]?.status !== "verifying") {
       throw new OriginActivationError("ORIGIN_DEPLOYMENT_NOT_VERIFYING");
     }
+  }
+
+  private cloudflareConfiguration(): {
+    cloudflare: CloudflareOperations;
+    zoneId: string;
+    domain: string;
+  } {
+    const { cloudflare, zoneId, platformDomain } = this.options;
+    const normalizedZoneId = zoneId?.trim();
+    const domain = platformDomain?.trim().replace(/\.$/, "").toLowerCase();
+    if (!cloudflare || !normalizedZoneId || !domain) {
+      throw new OriginActivationError("ORIGIN_CONFIGURATION_MISSING");
+    }
+    if (!domain.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
+      throw new OriginActivationError("ORIGIN_DOMAIN_INVALID");
+    }
+    return { cloudflare, zoneId: normalizedZoneId, domain };
   }
 }
 

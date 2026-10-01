@@ -18,6 +18,7 @@ import type { ProjectSecretReader } from "./secret-reader.js";
 import type { RegistrySession } from "./docker-registry-session.js";
 import type { TerraformBackendConfig, TerraformCli } from "./terraform-cli.js";
 import type { DeploymentOriginActivator } from "./origin-activation.js";
+import type { PublicDnsActivationChecker } from "./public-dns-activation.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -37,5 +38,9 @@ export type WorkerDeps = {
   terraformCli?: Pick<TerraformCli, "apply">;
   terraformBackend?: TerraformBackendConfig;
   terraformModuleRoot?: string;
-  originActivator?: Pick<DeploymentOriginActivator, "activate">;
+  originActivator?: Pick<
+    DeploymentOriginActivator,
+    "activate" | "prepareOnpremVerification"
+  >;
+  dnsActivationChecker?: Pick<PublicDnsActivationChecker, "waitUntilResolvable">;
 };

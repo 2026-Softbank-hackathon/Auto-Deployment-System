@@ -4,6 +4,7 @@ import type { WorkerDeps } from "../deps.js";
 const REQUIRED_PASSES = 3 as const;
 const MAX_ATTEMPTS = 8;
 const RETRY_INTERVAL_MS = 5_000;
+const SUCCESS_INTERVAL_MS = 1_000;
 
 export const VerifyJobPayloadSchema = z.object({
   jobId: z.string().min(1).max(200),
@@ -95,6 +96,30 @@ export async function handleVerify(
     );
   }
 
+  if (payload.environmentType === "onprem") {
+    const checker = deps.dnsActivationChecker;
+    if (!checker) {
+      return failedBeforeChecks(
+        payload,
+        startedAt,
+        "dns_activation_unavailable",
+        healthUrl,
+      );
+    }
+    const dnsReady = await checker.waitUntilResolvable(
+      new URL(payload.targetUrl).hostname,
+      runtime.signal,
+    );
+    if (!dnsReady) {
+      return failedBeforeChecks(
+        payload,
+        startedAt,
+        runtime.signal?.aborted ? "cancelled" : "dns_activation_timeout",
+        healthUrl,
+      );
+    }
+  }
+
   deps.log?.info(
     {
       deploymentId: payload.deploymentId,
@@ -168,7 +193,7 @@ export async function handleVerify(
     }
 
     if (attempt < MAX_ATTEMPTS) {
-      await runtime.sleep(RETRY_INTERVAL_MS);
+      await runtime.sleep(check.passed ? SUCCESS_INTERVAL_MS : RETRY_INTERVAL_MS);
     }
   }
 

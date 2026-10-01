@@ -24,6 +24,7 @@ import { TerraformCli } from "./terraform-cli.js";
 import { loadTerraformBackendConfig } from "./terraform-config.js";
 import { CloudflareClient } from "@camellia/cloudflare";
 import { DeploymentOriginActivator } from "./origin-activation.js";
+import { PublicDnsActivationChecker } from "./public-dns-activation.js";
 
 const log = pino({ name: "worker" });
 
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
     zoneId: process.env["CLOUDFLARE_ZONE_ID"],
     platformDomain: process.env["DEMO_PLATFORM_DOMAIN"],
   });
+  const dnsActivationChecker = new PublicDnsActivationChecker();
   const terraformCli = new TerraformCli({
     executable: process.env["TERRAFORM_BINARY"]?.trim() || "terraform",
   });
@@ -73,6 +75,7 @@ async function main(): Promise<void> {
     buildHandler,
     registrySession,
     originActivator,
+    dnsActivationChecker,
     awsRegistryFactory,
     terraformCli,
     terraformBackend: loadTerraformBackendConfig(),

@@ -35,6 +35,10 @@ export type EcrCredential = {
   expiresAt: string;
 };
 
+export type AgentJobHeartbeatResult = {
+  jobCancelled?: boolean;
+};
+
 export type OnpremExecutionResult =
   | {
       deploymentId: number;
@@ -69,9 +73,8 @@ export interface AgentControlPlaneClient {
     input: TunnelStartInput,
     options?: { signal?: AbortSignal },
   ): Promise<TunnelSession>;
-  isJobCancelled(jobId: string): Promise<boolean>;
   reportResult(jobId: string, result: OnpremExecutionResult): Promise<void>;
-  sendHeartbeat(): Promise<void>;
+  sendHeartbeat(currentJobId?: string): Promise<AgentJobHeartbeatResult>;
 }
 
 export interface OnpremJobExecutor {

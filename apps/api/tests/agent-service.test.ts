@@ -189,43 +189,15 @@ describe("AgentService.authenticate", () => {
 // ── recordHeartbeat ───────────────────────────────────────────────────────────
 
 describe("AgentService.recordHeartbeat", () => {
-  it("currentJobId 없으면 빈 객체 반환", async () => {
+  it("Agent 생존 시각만 갱신하고 Job 상태를 직접 조회하지 않는다", async () => {
     const pool = makePool(async () => ({ rows: [], rowCount: 1 }));
     const svc = new AgentService(pool);
-    const result = await svc.recordHeartbeat(1);
-    expect(result).toEqual({});
-  });
+    await svc.recordHeartbeat(1);
 
-  it("currentJobId 있고 deployment 상태 cancelled → deploymentCancelled: true", async () => {
-    const pool = makePool(async (sql) => {
-      if (/UPDATE agents/.test(sql)) return { rows: [], rowCount: 1 };
-      if (/FROM deployments/.test(sql)) return { rows: [{ status: "cancelled" }], rowCount: 1 };
-      return { rows: [], rowCount: 0 };
-    });
-    const svc = new AgentService(pool);
-    const result = await svc.recordHeartbeat(1, "42");
-    expect(result).toEqual({ deploymentCancelled: true });
-  });
-
-  it("currentJobId 있고 deployment 상태 deploying → deploymentCancelled 없음", async () => {
-    const pool = makePool(async (sql) => {
-      if (/UPDATE agents/.test(sql)) return { rows: [], rowCount: 1 };
-      if (/FROM deployments/.test(sql)) return { rows: [{ status: "deploying" }], rowCount: 1 };
-      return { rows: [], rowCount: 0 };
-    });
-    const svc = new AgentService(pool);
-    const result = await svc.recordHeartbeat(1, "42");
-    expect(result).toEqual({});
-  });
-
-  it("currentJobId 있지만 deployment 없으면 빈 객체", async () => {
-    const pool = makePool(async (sql) => {
-      if (/UPDATE agents/.test(sql)) return { rows: [], rowCount: 1 };
-      if (/FROM deployments/.test(sql)) return { rows: [], rowCount: 0 };
-      return { rows: [], rowCount: 0 };
-    });
-    const svc = new AgentService(pool);
-    const result = await svc.recordHeartbeat(1, "99");
-    expect(result).toEqual({});
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE agents SET last_seen_at"),
+      [1],
+    );
   });
 });

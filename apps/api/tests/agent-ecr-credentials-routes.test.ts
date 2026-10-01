@@ -60,6 +60,8 @@ describe("POST /jobs/:jobId/ecr-credential", () => {
       password: "ONE_TIME_ECR_PASSWORD",
       expiresAt: "2026-10-01T10:00:00.000Z",
     });
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["pragma"]).toBe("no-cache");
     expect(authenticate).toHaveBeenCalledWith("agent-key");
     expect(issue).toHaveBeenCalledWith({
       agent: { agentId: 7, environmentId: 12 },

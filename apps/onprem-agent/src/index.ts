@@ -2,6 +2,7 @@ export * from "./agent.js";
 export * from "./agent-identity.js";
 export * from "./background-process.js";
 export * from "./command-runner.js";
+export * from "./control-plane-client.js";
 export * from "./compose.js";
 export * from "./config.js";
 export * from "./contracts.js";

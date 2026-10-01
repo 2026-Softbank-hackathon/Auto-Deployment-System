@@ -11,7 +11,7 @@ import type {
 
 export class FakeControlPlaneClient implements AgentControlPlaneClient {
   readonly reportedResults: OnpremExecutionResult[] = [];
-  heartbeatCount = 0;
+  readonly heartbeats: Array<string | undefined> = [];
   private readonly jobs: OnpremAgentJob[];
   private readonly credentials = new Map<string, EcrCredential>();
   private readonly tunnelSessions = new Map<string, TunnelSession>();
@@ -53,10 +53,6 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
     return session;
   }
 
-  async isJobCancelled(jobId: string): Promise<boolean> {
-    return this.cancellations.has(jobId);
-  }
-
   async reportResult(
     _jobId: string,
     result: OnpremExecutionResult,
@@ -64,8 +60,11 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
     this.reportedResults.push(result);
   }
 
-  async sendHeartbeat(): Promise<void> {
-    this.heartbeatCount += 1;
+  async sendHeartbeat(currentJobId?: string): Promise<{ jobCancelled?: boolean }> {
+    this.heartbeats.push(currentJobId);
+    return currentJobId && this.cancellations.has(currentJobId)
+      ? { jobCancelled: true }
+      : {};
   }
 }
 

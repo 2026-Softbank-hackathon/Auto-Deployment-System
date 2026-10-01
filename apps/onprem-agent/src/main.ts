@@ -1,9 +1,17 @@
 import { AgentIdentityHttpClient, ensureAgentCredential } from "./agent-identity.js";
+import { AgentService, installShutdownHandlers } from "./agent.js";
+import { NodeBackgroundProcessRunner } from "./background-process.js";
+import { DockerComposeRuntime } from "./compose.js";
 import { loadAgentConfig } from "./config.js";
 import { NodeCommandRunner } from "./command-runner.js";
+import { AgentControlPlaneHttpClient } from "./control-plane-client.js";
 import { FileAgentCredentialStore } from "./credential-store.js";
 import { DockerPrerequisiteChecker } from "./docker-readiness.js";
+import { EcrImageManager } from "./ecr.js";
+import { DockerOnpremJobExecutor } from "./executor.js";
 import { StructuredLogger } from "./logger.js";
+import { CloudflaredTunnelProvider } from "./tunnel.js";
+import { join } from "node:path";
 
 const logger = new StructuredLogger();
 
@@ -30,7 +38,8 @@ async function main(): Promise<void> {
         client: identityClient,
         registrationToken,
       }));
-    await identityClient.sendHeartbeat(credential);
+    const controlPlaneClient = new AgentControlPlaneHttpClient(credential);
+    await controlPlaneClient.sendHeartbeat();
     logger.info("agent.identity.authenticated", {
       agentId: credential.agentId,
       environmentId: credential.environmentId,
@@ -44,13 +53,34 @@ async function main(): Promise<void> {
       return;
     }
 
-    await new DockerPrerequisiteChecker(new NodeCommandRunner()).assertReady();
-    logger.error("agent.control_plane_not_configured", {
-      agentId: credential.agentId,
-      message:
-        "서버 Job claim API가 확정되지 않아 실제 작업 수신은 아직 연결하지 않았습니다.",
+    const commandRunner = new NodeCommandRunner();
+    await new DockerPrerequisiteChecker(commandRunner).assertReady();
+    const tunnelProvider = new CloudflaredTunnelProvider({
+      sessions: controlPlaneClient,
+      processes: new NodeBackgroundProcessRunner(),
     });
-    process.exitCode = 1;
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new EcrImageManager(controlPlaneClient, commandRunner),
+      runtimeManager: new DockerComposeRuntime(commandRunner, {
+        stateRoot: join(config.stateDirectory, "deployments"),
+      }),
+      tunnelProvider,
+    });
+    const service = new AgentService(controlPlaneClient, executor, {
+      pollIntervalMs: config.pollIntervalMs,
+      heartbeatIntervalMs: config.heartbeatIntervalMs,
+    });
+    const shutdown = new AbortController();
+    const removeShutdownHandlers = installShutdownHandlers(shutdown);
+    logger.info("agent.started", {
+      agentId: credential.agentId,
+      environmentId: credential.environmentId,
+    });
+    try {
+      await service.run(shutdown.signal);
+    } finally {
+      removeShutdownHandlers();
+    }
   } catch (error) {
     logger.error("agent.configuration_failed", {
       message:

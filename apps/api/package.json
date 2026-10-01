@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@camellia/aws-registry": "workspace:*",
+    "@camellia/cloudflare": "workspace:*",
     "@camellia/contracts": "workspace:*",
     "@camellia/db": "workspace:*",
     "@camellia/ir-schema": "workspace:*",

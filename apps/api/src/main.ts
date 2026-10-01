@@ -18,6 +18,7 @@ import { decodeSecretMasterKey, loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { createPool, createPgBoss } from "@camellia/db";
 import { createStorage } from "@camellia/storage";
+import { CloudflareClient } from "@camellia/cloudflare";
 
 const config = loadConfig();
 
@@ -28,6 +29,13 @@ async function main() {
   // DB: 연결 실패해도 서버는 뜨되 warn 로그 출력
   const pool = createPool(config.DATABASE_URL ?? "postgresql://localhost/camellia_dev");
   const boss = createPgBoss(config.DATABASE_URL ?? "postgresql://localhost/camellia_dev");
+  const tunnelManager =
+    config.CLOUDFLARE_ACCOUNT_ID && config.CLOUDFLARE_API_TOKEN
+      ? new CloudflareClient({
+          accountId: config.CLOUDFLARE_ACCOUNT_ID,
+          apiToken: config.CLOUDFLARE_API_TOKEN,
+        })
+      : undefined;
 
   const server = await buildServer({
     pool,
@@ -42,6 +50,8 @@ async function main() {
     ),
     sessionTtlSec: config.SESSION_TTL_SEC,
     platformDomain: config.DEMO_PLATFORM_DOMAIN,
+    cloudflareZoneId: config.CLOUDFLARE_ZONE_ID,
+    agentTunnelManager: tunnelManager,
   });
 
   // pg-boss 시작 (DB 없어도 서버는 뜨게)

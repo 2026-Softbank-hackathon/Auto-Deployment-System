@@ -19,6 +19,9 @@ const ConfigSchema = z.object({
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   /** 플랫폼 도메인 (고정 서비스 URL 발급용). 예: `camellia.app`. 미세팅 시 publicUrl=null */
   DEMO_PLATFORM_DOMAIN: z.string().optional(),
+  CLOUDFLARE_API_TOKEN: z.string().optional(),
+  CLOUDFLARE_ZONE_ID: z.string().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

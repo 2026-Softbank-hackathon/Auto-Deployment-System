@@ -29,8 +29,10 @@ import { AiUsageService } from "./services/ai-usage-service.js";
 import { SecretService } from "./services/secret-service.js";
 import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
+import { AgentService } from "./services/agent-service.js";
 
 import projectsRoutes from "./routes/projects.js";
+import agentsRoutes from "./routes/agents.js";
 import projectEnvRoutes from "./routes/project-env.js";
 import deploymentsRoutes from "./routes/deployments.js";
 import deploymentEventsRoutes from "./routes/deployment-events.js";
@@ -110,6 +112,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
+  const agentService = new AgentService(opts.pool);
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -238,6 +241,10 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(environmentsRoutes, {
       prefix: "/environments",
       environmentService,
+    });
+
+    v1.register(agentsRoutes, {
+      agentService,
     });
   }, { prefix: "/api/v1" });
 

@@ -52,6 +52,14 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
       return;
     }
 
+    // Agent 등록·Heartbeat: 등록 토큰 / 장기 키 자체가 크레덴셜 — 세션 인증 불필요
+    if (
+      request.method === "POST" &&
+      (path === "/api/v1/agents/register" || path === "/api/v1/agents/heartbeat")
+    ) {
+      return;
+    }
+
     const headerKey =
       headerValue(request.headers["x-api-key"]) ??
       headerValue(request.headers["authorization"])?.replace(/^Bearer\s+/i, "");

@@ -19,6 +19,11 @@ function requestPath(url: string): string {
   return url.split("?")[0] ?? url;
 }
 
+/** Node 헤더 값은 string | string[] 일 수 있다 — 단일 문자열로 정규화 */
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = async (
   fastify,
   opts
@@ -48,7 +53,8 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
     }
 
     const headerKey =
-      request.headers["x-api-key"] ?? request.headers["authorization"]?.replace(/^Bearer\s+/i, "");
+      headerValue(request.headers["x-api-key"]) ??
+      headerValue(request.headers["authorization"])?.replace(/^Bearer\s+/i, "");
 
     // dev bypass: no API_KEY configured AND not production
     if (!apiKey && isDev) {

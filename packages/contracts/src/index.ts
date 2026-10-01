@@ -15,3 +15,4 @@ export * from "./environments.js";
 export * from "./events.js";
 export * from "./auth.js";
 export * from "./agents.js";
+export * from "./audit-logs.js";

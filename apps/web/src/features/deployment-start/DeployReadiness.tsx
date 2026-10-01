@@ -9,13 +9,14 @@ type DeployProjectState = ReturnType<typeof useDeployProject>['state'];
 
 /**
  * 고른 대상에 배포할 준비가 됐는지 한 줄로 보여 준다. 설정이 안 됐으면 처음 설정(SetupDialog)을 열게 안내하고,
- * 온프레미스 환경은 아직 등록 화면이 없어서 안내만 한다.
+ * 온프레미스 환경이 없으면 온프레미스 연결(OnpremDialog)을 열게 안내한다.
  */
-export function DeployReadiness({ target, state, onRetry, onOpenSetup }: {
+export function DeployReadiness({ target, state, onRetry, onOpenSetup, onOpenOnprem }: {
   target: DeployTarget;
   state: DeployProjectState;
   onRetry: () => void;
   onOpenSetup: () => void;
+  onOpenOnprem: () => void;
 }) {
   const { t } = useI18n();
   if (state.phase === 'loading') return <p className="deploy-readiness" aria-live="polite">{t.deploy.readiness.checking}</p>;
@@ -43,7 +44,10 @@ export function DeployReadiness({ target, state, onRetry, onOpenSetup }: {
       </p>
       <Keycap variant="ghost" aria-haspopup="dialog" onClick={onOpenSetup}>{t.deploy.setup.settings}</Keycap>
     </div>}
-    {target === 'onprem' && onprem && <p className="deploy-readiness__ok">✓ {t.deploy.readiness.onpremReady}{onprem.hostname ? ` · ${onprem.hostname}` : ''}</p>}
+    {target === 'onprem' && onprem && <div className="deploy-readiness__row">
+      <p className="deploy-readiness__ok">✓ {t.deploy.readiness.onpremReady}{onprem.hostname ? ` · ${onprem.hostname}` : ''}</p>
+      <Keycap variant="ghost" aria-haspopup="dialog" onClick={onOpenOnprem}>{t.deploy.onprem.agentButton}</Keycap>
+    </div>}
     {missing.includes('aws') && <div className="notice deploy-readiness__need">
       <strong>{t.deploy.setup.needed}</strong>
       <p>{target === 'onprem' ? t.deploy.readiness.awsNeededOnprem : t.deploy.setup.neededCopy}</p>
@@ -51,7 +55,8 @@ export function DeployReadiness({ target, state, onRetry, onOpenSetup }: {
     </div>}
     {missing.includes('onprem') && <div className="notice deploy-readiness__need">
       <strong>{t.deploy.readiness.onpremNeeded}</strong>
-      <p>{t.deploy.readiness.onpremNeededCopy}</p>
+      <p>{state.project ? t.deploy.readiness.onpremNeededCopy : t.deploy.readiness.onpremNeedsApp}</p>
+      {state.project && <div><Keycap variant="secondary" aria-haspopup="dialog" onClick={onOpenOnprem}>{t.deploy.onprem.open}</Keycap></div>}
     </div>}
   </div>;
 }

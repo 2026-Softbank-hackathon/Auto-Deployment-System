@@ -350,3 +350,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .run-failure__code { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); overflow-wrap: anywhere; }
 .run-failure .run-failure__code { color: var(--ink-soft); }
 .run-failure__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 온프레미스 Agent 등록 명령 */
+.onprem-command { margin: 0; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: var(--ink); background: var(--paper-sunken); border: var(--border); border-radius: var(--radius-input); white-space: pre; }
+.onprem-command:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }

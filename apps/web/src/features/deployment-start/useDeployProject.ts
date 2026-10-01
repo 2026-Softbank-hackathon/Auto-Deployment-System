@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createProject, getProject, listEnvironments, listProjects, listSecretNames, registerAwsEnvironment, type EnvironmentSummary } from '../../api/deployment-api';
+import { createOnpremEnvironment, createProject, getProject, listEnvironments, listProjects, listSecretNames, registerAwsEnvironment, type EnvironmentSummary } from '../../api/deployment-api';
 import type { DeployTarget } from './TargetToggle';
 
 /**
@@ -84,5 +84,15 @@ export function useDeployProject() {
     }
   }, [state, refresh]);
 
-  return { state, refresh, createDeployProject, registerAws };
+  /** 온프레미스 환경을 호스트 이름으로 등록한다. 프로젝트가 먼저 있어야 한다. */
+  const registerOnprem = useCallback(async (hostname: string) => {
+    if (state.phase !== 'ready' || !state.project) throw new Error('project is not ready');
+    try {
+      return await createOnpremEnvironment(state.project.id, hostname);
+    } finally {
+      await refresh();
+    }
+  }, [state, refresh]);
+
+  return { state, refresh, createDeployProject, registerAws, registerOnprem };
 }

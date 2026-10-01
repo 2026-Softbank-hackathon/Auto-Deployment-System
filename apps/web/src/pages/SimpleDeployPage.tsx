@@ -5,6 +5,7 @@ import { Keycap } from '../components/ui/Keycap';
 import type { Navigate } from '../app/navigation';
 import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
 import { DeployReadiness } from '../features/deployment-start/DeployReadiness';
+import { OnpremDialog } from '../features/deployment-start/OnpremDialog';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { SetupDialog } from '../features/deployment-start/SetupDialog';
 import { isDeployTarget, TargetToggle, type DeployTarget } from '../features/deployment-start/TargetToggle';
@@ -26,7 +27,11 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const [target, setTarget] = useState<DeployTarget>(defaultTarget);
   const [error, setError] = useState<unknown>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const { state: projectState, refresh: refreshProject, createDeployProject, registerAws } = useDeployProject();
+  const { state: projectState, refresh: refreshProject, createDeployProject, registerAws, registerOnprem } = useDeployProject();
+  // 온프레미스 연결 모달 (0 = 닫힘)
+  const [onpremRound, setOnpremRound] = useState(0);
+  const [onpremOpen, setOnpremOpen] = useState(false);
+  const openOnprem = () => { setOnpremRound((round) => round + 1); setOnpremOpen(true); };
   // 처음 설정 모달. 열 때마다 번호를 올려 새로 시작한다(0 = 닫힘).
   const [setupRound, setSetupRound] = useState(0);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -36,6 +41,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const environmentsReady = projectState.phase === 'ready' && project !== null && missingFor(target, projectState.environments).length === 0
     && !awsKeysMissing(projectState.environments, projectState.secretNames);
   const canDeploy = Boolean(file) && environmentsReady;
+  const onpremEnvironment = projectState.phase === 'ready' ? projectState.environments.find((environment) => environment.type === 'onprem' && environment.isDefault) ?? null : null;
   const awsEnvironment = projectState.phase === 'ready' ? projectState.environments.find((environment) => environment.type === 'aws' && environment.isDefault) ?? null : null;
 
   // AWS 연결이 아직 없으면 화면에 들어왔을 때 처음 설정을 한 번 자동으로 띄운다. 닫으면 다시 띄우지 않는다.
@@ -90,12 +96,13 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
         {credentialRejected && <div><Keycap variant="secondary" aria-haspopup="dialog" onClick={openSetup}>{t.deploy.readiness.keysMissingAction}</Keycap></div>}
       </div>}
       <TargetToggle value={target} onChange={setTarget} disabled={isStarting} />
-      <DeployReadiness target={target} state={projectState} onRetry={() => void refreshProject()} onOpenSetup={openSetup} />
+      <DeployReadiness target={target} state={projectState} onRetry={() => void refreshProject()} onOpenSetup={openSetup} onOpenOnprem={openOnprem} />
       <div className="deploy-card__footer">
         <p className={`deploy-card__hint ${canDeploy ? 'is-ready' : ''}`} aria-live="polite">{hint}</p>
         <DeployKeycap size="lg" sound="start" disabled={!canDeploy} busy={isStarting} onClick={() => void startDeployment()}>{t.deploy.button}</DeployKeycap>
       </div>
     </section>
     {setupOpen && <SetupDialog key={setupRound} project={project} awsEnvironment={awsEnvironment} onCreateProject={createDeployProject} onRegisterAws={registerAws} onClose={() => setSetupOpen(false)} />}
+    {onpremOpen && <OnpremDialog key={onpremRound} environment={onpremEnvironment} onRegisterHost={registerOnprem} onClose={() => setOnpremOpen(false)} />}
   </>;
 }

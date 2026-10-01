@@ -210,6 +210,34 @@ export async function listEnvironments(projectId: string): Promise<EnvironmentSu
   });
 }
 
+const ONPREM_ENVIRONMENT_NAME = 'onprem-default';
+
+/**
+ * 온프레미스 환경 등록 (API-23). 계약상 onpremConfig.agentRegistrationToken이 필수라 임의 값을 넣는다.
+ * Agent 인증에는 쓰이지 않는다 — 실제 등록 토큰은 issueAgentRegistrationToken으로 따로 발급한다.
+ */
+export async function createOnpremEnvironment(projectId: string, hostname: string): Promise<EnvironmentSummary> {
+  const placeholder = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const response = await fetch(endpoint('/api/v1/environments'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId: Number(projectId), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: true, onpremConfig: { agentRegistrationToken: placeholder, hostname } }),
+    credentials: 'include',
+  });
+  const body = asRecord(await readJson(response), '환경 등록');
+  return { id: String(body.id), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: body.isDefault === true, region: null, hostname, secretNames: [] };
+}
+
+export interface AgentRegistrationToken { token: string; expiresAt: string }
+
+/** On-Prem Agent 1회용 등록 토큰 발급 (10분 유효). 값은 이 응답에서 한 번만 받는다. */
+export async function issueAgentRegistrationToken(environmentId: string): Promise<AgentRegistrationToken> {
+  const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}/agent-registration-token`), { method: 'POST', credentials: 'include' });
+  const body = asRecord(await readJson(response), '등록 토큰');
+  if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new Error('등록 토큰 응답 형식이 올바르지 않습니다.');
+  return { token: body.token, expiresAt: body.expiresAt };
+}
+
 /** API-29 — 프로젝트에 저장된 시크릿 이름 목록 (값은 응답에 없다). */
 export async function listSecretNames(projectId: string): Promise<string[]> {
   const response = await fetch(endpoint(`/api/v1/secrets?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });

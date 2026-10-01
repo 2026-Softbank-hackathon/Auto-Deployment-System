@@ -317,3 +317,31 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 
 .deploy-readiness__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .aws-key-form__actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 처음 설정 모달 */
+.setup-dialog {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; overflow-y: auto;
+  color: var(--ink); background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-lift);
+}
+.setup-dialog::backdrop { background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.setup-dialog__head { display: flex; align-items: center; gap: 12px; }
+.setup-dialog__head h2 { flex: 1; margin: 0; font-family: var(--font-display); font-size: 22px; }
+.setup-dialog__close { width: 44px; height: 44px; border: 0; border-radius: var(--radius-input); background: transparent; color: var(--ink-soft); font-size: 26px; line-height: 1; cursor: pointer; }
+.setup-dialog__close:hover { color: var(--ink); background: var(--paper-sunken); }
+.setup-dialog__close:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.setup-steps { display: flex; gap: 8px; margin: 20px 0 0; padding: 0; list-style: none; }
+.setup-steps__item { flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--ink-soft); border: 1.5px dashed var(--line-strong); border-radius: var(--radius-input); }
+.setup-steps__item.is-current { border: 2.5px solid var(--koro); color: var(--koro-text); font-weight: 700; }
+.setup-steps__item.is-done { border-style: solid; border-color: var(--line); color: var(--moss-text); }
+.setup-steps__no { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--paper-sunken); font-family: var(--font-mono); font-size: 12px; }
+.setup-dialog__body { display: grid; gap: 12px; margin-top: 20px; }
+.setup-dialog__body h3 { margin: 0; font-size: 18px; }
+.setup-dialog__body p { margin: 0; color: var(--ink-soft); }
+.setup-dialog__body .setup-dialog__app { font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
+.setup-dialog__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.deploy-readiness__ok { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.deploy-readiness__app { padding: 2px 8px; border: var(--border); border-radius: var(--radius-tape); font-family: var(--font-mono); color: var(--ink); font-weight: 500; }
+@media (max-width: 760px) {
+  .setup-dialog { padding: 20px 16px; }
+  .setup-steps { flex-direction: column; }
+}

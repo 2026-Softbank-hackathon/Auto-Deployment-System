@@ -50,18 +50,23 @@ export function useDeployProject() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  /** AWS 키를 등록하거나 바꾼다. 프로젝트가 아직 없으면 먼저 만든다. */
-  const registerAws = useCallback(async (input: { accessKeyId: string; secretAccessKey: string; region: string }, projectName: string) => {
-    const current = state.phase === 'ready' ? state.project : null;
-    const currentAws = state.phase === 'ready' ? state.environments.find((environment) => environment.type === 'aws' && environment.isDefault) ?? null : null;
-    const project = current ?? await createProject(projectName);
+  /** 처음 설정 1단계 — 앱 이름으로 프로젝트를 만든다. 같은 이름이 있으면 서버가 409를 돌려준다. */
+  const createDeployProject = useCallback(async (name: string) => {
+    const project = await createProject(name);
     storeId(project.id);
+    setState({ phase: 'ready', project, environments: [] });
+  }, []);
+
+  /** AWS 키를 등록하거나 바꾼다. 프로젝트가 먼저 있어야 한다. */
+  const registerAws = useCallback(async (input: { accessKeyId: string; secretAccessKey: string; region: string }) => {
+    if (state.phase !== 'ready' || !state.project) throw new Error('project is not ready');
+    const currentAws = state.environments.find((environment) => environment.type === 'aws' && environment.isDefault) ?? null;
     try {
-      await registerAwsEnvironment(project.id, input, currentAws);
+      await registerAwsEnvironment(state.project.id, input, currentAws);
     } finally {
       await refresh();
     }
   }, [state, refresh]);
 
-  return { state, refresh, registerAws };
+  return { state, refresh, createDeployProject, registerAws };
 }

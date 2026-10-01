@@ -9,11 +9,13 @@ const regions = ['ap-northeast-2', 'ap-northeast-1', 'ap-northeast-3', 'us-east-
  * AWS 키 등록 폼. 입력한 키는 서버 시크릿 저장소로만 보내고, 등록이 끝나면 화면 상태에서 지운다.
  * 브라우저 저장소 · 로그 · URL에는 남기지 않는다.
  */
-export function AwsKeyForm({ onSubmit, initialRegion, onCancel }: {
+export function AwsKeyForm({ onSubmit, initialRegion, onCancel, autoFocus }: {
   onSubmit: (input: { accessKeyId: string; secretAccessKey: string; region: string }) => Promise<void>;
   /** 키를 바꿀 때 — 지금 등록된 리전 */
   initialRegion?: string | null;
   onCancel?: () => void;
+  /** 모달 안에서 열릴 때 첫 입력란에 바로 초점을 둔다 */
+  autoFocus?: boolean;
 }) {
   const { t } = useI18n();
   const [accessKeyId, setAccessKeyId] = useState('');
@@ -44,7 +46,7 @@ export function AwsKeyForm({ onSubmit, initialRegion, onCancel }: {
   return <form className="aws-key-form" onSubmit={(event) => void submit(event)} autoComplete="off">
     <div className="aws-key-form__field">
       <label htmlFor={ids.key}>{t.deploy.aws.accessKeyId}</label>
-      <input id={ids.key} name="aws-access-key-id" value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} required autoComplete="off" spellCheck={false} disabled={saving} />
+      <input id={ids.key} name="aws-access-key-id" value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} required autoFocus={autoFocus} autoComplete="off" spellCheck={false} disabled={saving} />
     </div>
     <div className="aws-key-form__field">
       <label htmlFor={ids.secret}>{t.deploy.aws.secretAccessKey}</label>

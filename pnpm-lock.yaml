@@ -167,15 +167,27 @@ importers:
 
   apps/worker:
     dependencies:
+      '@camellia/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@camellia/analyzer':
         specifier: workspace:*
         version: link:../../packages/analyzer
+      '@camellia/aws-registry':
+        specifier: workspace:*
+        version: link:../../packages/aws-registry
+      '@camellia/build-handler':
+        specifier: workspace:*
+        version: link:../../packages/build-handler
       '@camellia/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@camellia/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@camellia/ir-schema':
+        specifier: workspace:*
+        version: link:../../packages/ir-schema
       '@camellia/storage':
         specifier: workspace:*
         version: link:../../packages/storage

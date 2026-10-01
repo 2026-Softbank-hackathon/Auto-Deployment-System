@@ -195,6 +195,7 @@ export async function buildServer(opts: BuildServerOptions) {
       prefix: "/deployments",
       approvalService,
       sseBroker,
+      boss: opts.boss,
     });
 
     v1.register(deploymentAnalysisReportRoutes, {

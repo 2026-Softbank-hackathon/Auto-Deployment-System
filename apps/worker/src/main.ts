@@ -11,6 +11,13 @@ import { createPool, createPgBoss, getEnv } from "@camellia/db";
 import { LocalStorage } from "@camellia/storage";
 import { createPgNotifier } from "./notifier.js";
 import { registerAll } from "./register.js";
+import { BuildHandler } from "@camellia/build-handler";
+import { AwsEcrRegistry } from "@camellia/aws-registry";
+import {
+  decodeWorkerSecretMasterKey,
+  PostgresProjectSecretReader,
+} from "./secret-reader.js";
+import { DockerRegistrySession } from "./docker-registry-session.js";
 
 const log = pino({ name: "worker" });
 
@@ -26,8 +33,28 @@ async function main(): Promise<void> {
   const boss = createPgBoss(databaseUrl);
   const storage = new LocalStorage({ rootDir: storageRootDir });
   const notifier = createPgNotifier(pool);
+  const secretReader = new PostgresProjectSecretReader(
+    pool,
+    decodeWorkerSecretMasterKey(process.env["SECRET_MASTER_KEY"]),
+  );
+  const buildHandler = new BuildHandler();
+  const registrySession = new DockerRegistrySession();
+  const awsRegistryFactory = (input: {
+    region: string;
+    credentials: { accessKeyId: string; secretAccessKey: string };
+  }) => new AwsEcrRegistry(input);
 
-  const deps = { pool, boss, storage, notifier, log };
+  const deps = {
+    pool,
+    boss,
+    storage,
+    notifier,
+    log,
+    secretReader,
+    buildHandler,
+    registrySession,
+    awsRegistryFactory,
+  };
 
   boss.on("error", (err: unknown) => {
     log.error({ err }, "pg-boss error");

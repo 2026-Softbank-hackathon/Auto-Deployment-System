@@ -10,12 +10,14 @@ import { ApiError } from "../plugins/error-handler.js";
 import { ApprovalService } from "../services/approval-service.js";
 import { type SseBroker } from "../plugins/sse-broker.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
+import type PgBoss from "pg-boss";
 
 const deploymentApprovalsRoutes: FastifyPluginAsync<{
   approvalService: ApprovalService;
   sseBroker: SseBroker;
+  boss: PgBoss;
 }> = async (fastify, opts) => {
-  const { approvalService, sseBroker } = opts;
+  const { approvalService, sseBroker, boss } = opts;
 
   fastify.post<{ Params: { id: string } }>("/:id/approvals", {
     schema: {
@@ -50,6 +52,23 @@ const deploymentApprovalsRoutes: FastifyPluginAsync<{
         reason: body.decision === "reject" ? (body.note ?? "사용자 거절") : undefined,
       } satisfies DeploymentEventData<"state_changed">,
     });
+
+    if (body.gate === "target" && body.decision === "approve") {
+      try {
+        await boss.send("build", { deployment_id: id });
+      } catch {
+        await approvalService.failBuildQueue(id);
+        sseBroker.publish(String(id), {
+          event: "state_changed",
+          data: { status: "failed" },
+        });
+        throw new ApiError(
+          500,
+          "INTERNAL_ERROR",
+          "빌드 작업을 시작하지 못했습니다.",
+        );
+      }
+    }
 
     return reply.status(200).send(result);
   });

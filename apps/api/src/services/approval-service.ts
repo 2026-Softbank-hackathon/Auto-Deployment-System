@@ -33,6 +33,7 @@ export class ApprovalService {
     const { deploymentId, gate, decision, note } = input;
 
     const client = await this.pool.connect();
+    let committed = false;
     try {
       await client.query("BEGIN");
 
@@ -111,8 +112,6 @@ export class ApprovalService {
             }
             throw err;
           }
-
-          // TODO(은영): build handler 연결 — queued 상태 이후 build 워커가 pick up
         }
       } else {
         newStatus = "failed";
@@ -126,6 +125,7 @@ export class ApprovalService {
       );
 
       await client.query("COMMIT");
+      committed = true;
 
       return {
         deploymentId: String(deploymentId),
@@ -135,10 +135,23 @@ export class ApprovalService {
         lockAcquired: gate === "target" ? lockAcquired : undefined,
       };
     } catch (err) {
-      await client.query("ROLLBACK");
+      if (!committed) await client.query("ROLLBACK");
       throw err;
     } finally {
       client.release();
     }
+  }
+
+  async failBuildQueue(deploymentId: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE deployments
+       SET status = 'failed', error = 'BUILD_QUEUE_FAILED',
+           failed_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND status = 'queued'`,
+      [deploymentId],
+    );
+    await this.pool.query(`DELETE FROM env_locks WHERE deployment_id = $1`, [
+      deploymentId,
+    ]);
   }
 }

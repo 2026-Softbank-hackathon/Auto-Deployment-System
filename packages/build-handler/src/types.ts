@@ -12,6 +12,7 @@ export type BuildRequest = {
     tag: string;
   };
   platform?: BuildPlatform;
+  commandEnvironment?: NodeJS.ProcessEnv;
 };
 
 export type ImageRef = {

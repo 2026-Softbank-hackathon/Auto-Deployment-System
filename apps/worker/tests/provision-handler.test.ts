@@ -91,7 +91,7 @@ function makeHarness(overrides: Partial<{
         agentJobQueries.push({ sql, params });
         return {
           rows: overrides.existingAgentJob
-            ? [{ job_id: "onprem-deployment-99", status: "pending", payload: { image: { digest: overrides.existingAgentJobDigest ?? IMAGE_DIGEST } } }]
+            ? [{ job_id: "99", status: "pending", payload: { image: { digest: overrides.existingAgentJobDigest ?? IMAGE_DIGEST } } }]
             : [],
         };
       }
@@ -218,9 +218,9 @@ describe("handleProvision", () => {
 
     const insert = harness.agentJobQueries.find(({ sql }) => sql.includes("INSERT INTO onprem_agent_jobs"));
     expect(insert).toBeDefined();
-    expect(insert?.params[0]).toBe("onprem-deployment-99");
+    expect(insert?.params[0]).toBe("99");
     expect(JSON.parse(String(insert?.params[4]))).toMatchObject({
-      jobId: "onprem-deployment-99",
+      jobId: "99",
       attempt: 1,
       deploymentId: 99,
       environmentId: "34",

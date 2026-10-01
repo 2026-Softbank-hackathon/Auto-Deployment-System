@@ -71,5 +71,7 @@ mv "$PLIST_TEMP" "$STAGED_PLIST"
 trap - EXIT HUP INT TERM
 
 echo "Agent 파일과 LaunchAgent plist를 설치했습니다."
-echo "등록·장기 인증키 설정 후 다음 명령으로 시작하십시오:"
+echo "1회용 등록 토큰으로 먼저 등록하십시오:"
+echo "  README의 최초 등록 명령을 사용해 $BIN_DIR/camellia-onprem-agent register를 실행하십시오."
+echo "Job API 연결이 완료된 뒤 다음 명령으로 서비스를 시작하십시오:"
 echo "  $BIN_DIR/camellia-onprem-agent-service start"

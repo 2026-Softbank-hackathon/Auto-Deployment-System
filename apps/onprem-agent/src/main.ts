@@ -31,13 +31,49 @@ async function main(): Promise<void> {
       );
     }
     const identityClient = new AgentIdentityHttpClient(controlPlaneUrl);
-    const credential =
-      storedCredential ??
-      (await ensureAgentCredential({
-        store: credentialStore,
-        client: identityClient,
-        registrationToken,
-      }));
+    const isRegisterOnly = process.argv.includes("--register-only");
+
+    async function resolveCredential() {
+      if (!registrationToken) {
+        return storedCredential ?? (await ensureAgentCredential({
+          store: credentialStore,
+          client: identityClient,
+        }));
+      }
+      if (!storedCredential) {
+        return await ensureAgentCredential({
+          store: credentialStore,
+          client: identityClient,
+          registrationToken,
+        });
+      }
+      if (!isRegisterOnly) {
+        logger.warn("agent.registration.token_ignored", {
+          reason: "stored credential exists; use register subcommand to replace",
+        });
+        return storedCredential;
+      }
+      // register-only + stored + token → 강제 재등록
+      const next = await identityClient.register(registrationToken);
+      if (next.environmentId !== storedCredential.environmentId
+          || next.agentId !== storedCredential.agentId) {
+        await credentialStore.save(next);
+        logger.info("agent.credential.replaced", {
+          previousAgentId: storedCredential.agentId,
+          previousEnvironmentId: storedCredential.environmentId,
+          agentId: next.agentId,
+          environmentId: next.environmentId,
+        });
+        return next;
+      }
+      logger.info("agent.credential.reconfirmed", {
+        agentId: next.agentId,
+        environmentId: next.environmentId,
+      });
+      return storedCredential;
+    }
+
+    const credential = await resolveCredential();
     const controlPlaneClient = new AgentControlPlaneHttpClient(credential);
     await controlPlaneClient.sendHeartbeat();
     logger.info("agent.identity.authenticated", {
@@ -45,7 +81,7 @@ async function main(): Promise<void> {
       environmentId: credential.environmentId,
     });
 
-    if (process.argv.includes("--register-only")) {
+    if (isRegisterOnly) {
       logger.info("agent.registration.completed", {
         agentId: credential.agentId,
         environmentId: credential.environmentId,

@@ -169,7 +169,7 @@ export function buildIr(input: IrBuildInput): IrBuildResult {
 /**
  * 서비스/앱 이름을 IR에 사용 가능한 소문자-하이픈 형식으로 정규화.
  */
-function sanitizeName(name: string): string {
+export function sanitizeName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")

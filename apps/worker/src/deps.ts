@@ -16,6 +16,7 @@ import type {
 } from "@camellia/aws-registry";
 import type { ProjectSecretReader } from "./secret-reader.js";
 import type { RegistrySession } from "./docker-registry-session.js";
+import type { TerraformBackendConfig, TerraformCli } from "./terraform-cli.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -32,4 +33,7 @@ export type WorkerDeps = {
   buildHandler?: Pick<BuildHandler, "build">;
   awsRegistryFactory?: AwsRegistryFactory;
   registrySession?: RegistrySession;
+  terraformCli?: Pick<TerraformCli, "apply">;
+  terraformBackend?: TerraformBackendConfig;
+  terraformModuleRoot?: string;
 };

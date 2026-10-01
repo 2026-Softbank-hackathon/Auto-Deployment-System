@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@camellia/aws-registry':
+        specifier: workspace:*
+        version: link:../../packages/aws-registry
       '@camellia/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare

@@ -16,6 +16,7 @@ import multipartPlugin from "./plugins/multipart.js";
 import sseBrokerPlugin from "./plugins/sse-broker.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import { startPgListener } from "./plugins/pg-listener.js";
+import auditLogPlugin from "./plugins/audit-log.js";
 
 import { ProjectService } from "./services/project-service.js";
 import { DeploymentService } from "./services/deployment-service.js";
@@ -30,8 +31,14 @@ import { SecretService } from "./services/secret-service.js";
 import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
 import { AgentService } from "./services/agent-service.js";
+import { AuditLogService } from "./services/audit-log-service.js";
+import {
+  AgentEcrCredentialService,
+  type AwsEcrRegistryFactory,
+} from "./services/agent-ecr-credential-service.js";
 
 import projectsRoutes from "./routes/projects.js";
+import auditLogsRoutes from "./routes/audit-logs.js";
 import agentsRoutes from "./routes/agents.js";
 import projectEnvRoutes from "./routes/project-env.js";
 import deploymentsRoutes from "./routes/deployments.js";
@@ -53,6 +60,7 @@ import {
   type TunnelManager,
 } from "./services/agent-job-service.js";
 import agentJobsRoutes, { type AgentIdentity } from "./routes/agent-jobs.js";
+import agentEcrCredentialRoutes from "./routes/agent-ecr-credentials.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -81,6 +89,8 @@ export interface BuildServerOptions {
   /** 플랫폼 관리 Cloudflare Named Tunnel 클라이언트. */
   agentTunnelManager?: TunnelManager;
   cloudflareZoneId?: string;
+  /** ECR client factory (테스트용 override). */
+  awsEcrRegistryFactory?: AwsEcrRegistryFactory;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -105,6 +115,7 @@ export async function buildServer(opts: BuildServerOptions) {
     apiKey: opts.apiKey,
     nodeEnv: opts.nodeEnv,
     agentJobClaimEnabled: true,
+    agentEcrCredentialEnabled: true,
   });
   await fastify.register(multipartPlugin);
   await fastify.register(sseBrokerPlugin);
@@ -133,13 +144,22 @@ export async function buildServer(opts: BuildServerOptions) {
     platformDomain: opts.platformDomain,
     boss: opts.boss,
   });
+  const agentEcrCredentialService = new AgentEcrCredentialService(
+    opts.pool,
+    secretService,
+    opts.awsEcrRegistryFactory,
+  );
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
   const agentService = new AgentService(opts.pool);
+  const auditLogService = new AuditLogService(opts.pool);
   const authenticateAgent = opts.agentAuthenticator ??
     ((token: string) => agentService.authenticate(token));
   const sseBroker = fastify.sseBroker;
+
+  // ── audit-log plugin ───────────────────────────────────────────────────────
+  await fastify.register(auditLogPlugin, { auditLogService });
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
   if (opts.enablePgListener !== false) {
@@ -280,6 +300,17 @@ export async function buildServer(opts: BuildServerOptions) {
       authenticate: authenticateAgent,
       pollTimeoutMs: opts.agentJobPollTimeoutMs,
       pollIntervalMs: opts.agentJobPollIntervalMs,
+    });
+
+    v1.register(auditLogsRoutes, {
+      prefix: "/audit-logs",
+      auditLogService,
+    });
+
+    v1.register(agentEcrCredentialRoutes, {
+      prefix: "/agents",
+      service: agentEcrCredentialService,
+      authenticate: authenticateAgent,
     });
   }, { prefix: "/api/v1" });
 

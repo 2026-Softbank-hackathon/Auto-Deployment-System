@@ -28,6 +28,7 @@ const authPlugin: FastifyPluginAsync<{
   apiKey?: string;
   nodeEnv?: string;
   agentJobClaimEnabled?: boolean;
+  agentEcrCredentialEnabled?: boolean;
 }> = async (
   fastify,
   opts
@@ -70,6 +71,14 @@ const authPlugin: FastifyPluginAsync<{
       request.method === "POST" &&
       (path === "/api/v1/agents/jobs/claim" ||
         /^\/api\/v1\/agents\/jobs\/[^/]+\/(?:tunnel|result)$/.test(path))
+    ) {
+      return;
+    }
+
+    if (
+      opts.agentEcrCredentialEnabled &&
+      request.method === "POST" &&
+      /^\/api\/v1\/agents\/jobs\/[^/]+\/ecr-credential$/.test(path)
     ) {
       return;
     }

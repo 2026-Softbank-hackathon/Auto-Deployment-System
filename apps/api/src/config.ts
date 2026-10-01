@@ -20,7 +20,22 @@ const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 export function loadConfig(): Config {
-  return ConfigSchema.parse(process.env);
+  const config = ConfigSchema.parse(process.env);
+  assertProductionSecurity(config);
+  return config;
+}
+
+/** production: API_KEY 필수 (SECRET_MASTER_KEY 검증은 main → decodeSecretMasterKey) */
+export function assertProductionSecurity(config: Config): void {
+  if (config.NODE_ENV !== "production") {
+    return;
+  }
+  if (!config.API_KEY?.trim()) {
+    throw new Error("NODE_ENV=production 에서는 API_KEY 가 필수입니다.");
+  }
+  if (!config.SECRET_MASTER_KEY?.trim()) {
+    throw new Error("NODE_ENV=production 에서는 SECRET_MASTER_KEY 가 필수입니다.");
+  }
 }
 
 export function decodeSecretMasterKey(

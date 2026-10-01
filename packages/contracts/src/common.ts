@@ -14,7 +14,7 @@ export const IsoDateTimeSchema = z.string().datetime();
 export const IdStringSchema = z.string().regex(/^\d+$/);
 
 /**
- * Postgres BIGINT 값 (environments · secrets 의 id/projectId, IR version 등).
+ * Postgres BIGINT 값 (environments · secrets 의 id/projectId 등).
  * 서비스 코드의 타입은 number 지만, DB 에서 읽은 값은 pg 드라이버가 문자열로 돌려줘서
  * 실제 응답에는 "12" 같은 문자열로 나가는 경우가 있다 (요청 값을 그대로 돌려주는 경우는 number).
  * 정리 전까지 둘 다 허용한다 — 프론트는 `Number(x)` / `String(x)` 로 맞춰 쓴다.

@@ -522,3 +522,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .row-menu__item.is-disabled { color: var(--ink-soft); cursor: not-allowed; }
 .row-menu__item.is-disabled:hover { background: transparent; }
 .row-menu__reason { font-size: 12px; font-weight: 400; white-space: normal; }
+
+/* 목록 위에 뜨는 확인 줄 (배포 취소 등) */
+.selection-bar { position: sticky; top: 8px; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; font-weight: 700; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
+.selection-bar > span { margin-right: auto; }

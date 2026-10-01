@@ -198,6 +198,17 @@ export async function redeployDeployment(deploymentId: string): Promise<{ deploy
   return { deploymentId: id };
 }
 
+/**
+ * 진행 중인 배포 취소. 서버가 상태를 cancelled로 바꾸고 환경 락을 풀어 준다(같은 환경에 다시 배포할 수 있게 된다).
+ * 이미 끝난 배포면 409.
+ */
+export async function cancelDeployment(deploymentId: string): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/cancel`), {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'cancelled by user (web)' }),
+  });
+  await assertOk(response);
+}
+
 export type ApprovalGate = 'target' | 'plan';
 
 /**

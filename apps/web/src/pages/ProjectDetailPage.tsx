@@ -22,6 +22,7 @@ const tabs: ReadonlyArray<{ tab: ProjectTab; path: string }> = [
 function Deployments({ projectId, projectName, onNavigate }: { projectId: string; projectName: string; onNavigate: Navigate }) {
   const { t } = useI18n();
   const [state, setState] = useState<{ items: ProjectDeploymentSummary[]; loadedAt: number } | { error: unknown } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let active = true;
     listProjectDeployments(projectId, { limit: DEPLOYMENTS_SHOWN }).then(
@@ -29,13 +30,13 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
       (error) => { if (active) setState({ error }); },
     );
     return () => { active = false; };
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   if (state === null) return <p className="dashboard-status" role="status">{t.dashboard.loading}</p>;
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
   return <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
-    searchPlaceholder={t.projects.searchPlaceholder} />;
+    searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} />;
 }
 
 /**

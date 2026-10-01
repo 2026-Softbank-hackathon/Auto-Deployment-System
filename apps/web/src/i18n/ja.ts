@@ -131,6 +131,13 @@ export const ja: Messages = {
     blocked: 'このプロジェクトには進行中のデプロイがあるため、再デプロイできません。',
     uploadAgain: 'ZIPをもう一度入れる',
   },
+  cancel: {
+    button: 'デプロイを中止',
+    confirm: (name) => `${name}を中止しますか？中止したデプロイは再開できません。`,
+    keep: '続行する',
+    cancelling: '中止しています…',
+    failed: 'デプロイを中止できませんでした。',
+  },
   notify: {
     title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },
     view: '確認する',

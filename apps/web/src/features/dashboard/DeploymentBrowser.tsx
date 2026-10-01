@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { redeployDeployment } from '../../api/deployment-api';
+import { cancelDeployment, redeployDeployment } from '../../api/deployment-api';
 import type { Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
@@ -36,9 +36,11 @@ function matchesStatus(item: DeploymentListItem, filter: StatusFilter): boolean 
  *
  * 행마다 "⋯" 메뉴가 있고, 끝난 배포(성공 · 실패 · 중단)는 거기서 재배포한다.
  */
-export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder }: {
+export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, onChanged }: {
   items: DeploymentListItem[]; now: number; onNavigate: Navigate;
   searchPlaceholder: string;
+  /** 배포 상태를 바꾼 뒤(취소) 목록을 다시 읽게 한다 */
+  onChanged?: () => void;
 }) {
   const { t } = useI18n();
   const searchId = useId();
@@ -65,7 +67,25 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder }:
     && !finished(other) && (LOCKING_STATUSES.has(other.status) || !isStalled(true, other.createdAt, now)));
 
   const [starting, setStarting] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ id: string; reason: string } | null>(null);
+  const [failure, setFailure] = useState<{ id: string; title: string; reason: string } | null>(null);
+  // 취소는 되돌릴 수 없어서 한 번 더 확인받는다.
+  const [cancelTarget, setCancelTarget] = useState<DeploymentListItem | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  async function cancel(item: DeploymentListItem) {
+    if (cancelling) return;
+    setCancelling(true);
+    setFailure(null);
+    try {
+      await cancelDeployment(item.id);
+      setCancelTarget(null);
+      onChanged?.();
+    } catch (error) {
+      setFailure({ id: item.id, title: t.cancel.failed, reason: serverReasonText(error, t, t.cancel.failed) });
+      setCancelTarget(null);
+    } finally {
+      setCancelling(false);
+    }
+  }
   async function redeploy(item: DeploymentListItem) {
     if (starting) return;
     setStarting(item.id);
@@ -74,15 +94,16 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder }:
       const created = await redeployDeployment(item.id);
       onNavigate(`/deployments/${encodeURIComponent(created.deploymentId)}`);
     } catch (error) {
-      setFailure({ id: item.id, reason: serverReasonText(error, t, t.redeploy.failed) });
+      setFailure({ id: item.id, title: t.redeploy.failed, reason: serverReasonText(error, t, t.redeploy.failed) });
       setStarting(null);
     }
   }
 
   // 메뉴에는 행의 기본 버튼과 겹치지 않는 동작만 둔다. 기본 버튼이 이미 진행 화면(지켜보기 · 원인 보기 · 자세히)이나
-  // 결과 화면으로 가므로, 같은 곳으로 가는 항목은 넣지 않는다. 진행 중인 배포는 메뉴가 비어 "⋯"가 나오지 않는다.
+  // 결과 화면으로 가므로, 같은 곳으로 가는 항목은 넣지 않는다.
   function menuItems(item: DeploymentListItem): RowMenuItem[] {
-    if (!finished(item)) return [];
+    // 진행 중인 배포는 취소만 할 수 있다. 취소하면 환경 락이 풀려 같은 프로젝트를 다시 배포할 수 있다.
+    if (!finished(item)) return [{ key: 'cancel', label: t.cancel.button, onSelect: () => { setFailure(null); setCancelTarget(item); } }];
     const opensLiveUrl = deploymentStatusView(item.status).outcome === 'success' && safeHttpUrl(item.publicUrl) !== null;
     return [
       { key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item), disabledReason: blocked(item) ? t.redeploy.blocked : undefined },
@@ -106,7 +127,12 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder }:
       </div>
     </div>
 
-    {failure && <div className="notice error" role="alert"><strong>{t.dashboard.deploymentNo(failure.id)} — {t.redeploy.failed}</strong><br />{failure.reason}</div>}
+    {cancelTarget && <div className="selection-bar" role="alertdialog" aria-label={t.cancel.button}>
+      <span>{t.cancel.confirm(`${displayProjectName(cancelTarget.projectName)} ${t.dashboard.deploymentNo(cancelTarget.id)}`)}</span>
+      <Keycap disabled={cancelling} onClick={() => void cancel(cancelTarget)}>{cancelling ? t.cancel.cancelling : t.cancel.button}</Keycap>
+      <Keycap variant="ghost" disabled={cancelling} onClick={() => setCancelTarget(null)}>{t.cancel.keep}</Keycap>
+    </div>}
+    {failure && <div className="notice error" role="alert"><strong>{t.dashboard.deploymentNo(failure.id)} — {failure.title}</strong><br />{failure.reason}</div>}
 
     <p className="dashboard-status" role="status" aria-live="polite">
       {filtered.length === 0 ? t.dashboard.noMatches : t.dashboard.showing(filtered.length, first + 1, first + visible.length)}

@@ -1,0 +1,13 @@
+# 팀 공유 state 를 쓰려면 backend.tf 로 복사하고 bucket 을 채운 뒤
+#   terraform init -migrate-state
+# 리포 규칙과 같이 S3 + use_lockfile(DynamoDB 없이 S3 잠금). state 에 Tunnel token 이 있으므로
+# 암호화 · 퍼블릭 차단된 bucket 을 쓴다.
+terraform {
+  backend "s3" {
+    bucket       = "<state bucket>"
+    key          = "camellia/platform/terraform.tfstate"
+    region       = "ap-northeast-2"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

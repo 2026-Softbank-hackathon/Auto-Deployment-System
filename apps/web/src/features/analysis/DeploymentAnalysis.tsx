@@ -6,6 +6,8 @@ function count(value: unknown): number { return Array.isArray(value) ? value.len
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
 function printable(value: unknown): string { return JSON.stringify(value, null, 2); }
 
+const finishedStatuses = ['succeeded', 'failed', 'cancelled', 'rejected'];
+
 export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploymentId: string; deploymentStatus: string | null }) {
   const { t } = useI18n();
   const [report, setReport] = useState<DeploymentAnalysisReportResponse | null>(null);
@@ -32,11 +34,14 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
   }, [deploymentId, deploymentStatus]);
 
   const stack = strings(report?.detectedStack);
+  // 이미 끝난 배포인데 분석 결과가 없으면 "진행 중"이 아니라 "결과 없음"이다.
+  const finished = deploymentStatus !== null && finishedStatuses.includes(deploymentStatus);
+  const missing = finished && !report;
   return <section className="panel analysis-panel">
-    <div className="panel-title"><div><h2>{t.analysis.title}</h2><p>{t.analysis.description}</p></div><span className="chip">{report ? t.analysis.done : t.analysis.running}</span></div>
+    <div className="panel-title"><div><h2>{t.analysis.title}</h2><p>{t.analysis.description}</p></div><span className="chip">{report ? t.analysis.done : missing ? t.analysis.none : t.analysis.running}</span></div>
     {error !== null && <div className="notice error"><strong>{t.analysis.error}</strong><br />{errorMessage(error, t, t.errors.analysisFailed)}</div>}
-    {!report && error === null && <p>{t.analysis.pending}</p>}
+    {!report && error === null && <p>{missing ? t.analysis.noneCopy : t.analysis.pending}</p>}
     {report && <><div className="summary-grid"><div><small>{t.analysis.stack}</small><strong>{stack.length ? stack.join(', ') : t.analysis.checking}</strong></div><div><small>{t.analysis.services}</small><strong>{t.analysis.count(count(report.services))}</strong></div><div><small>{t.analysis.resources}</small><strong>{t.analysis.count(count(report.resources))}</strong></div><div><small>{t.analysis.warnings}</small><strong>{t.analysis.cases(count(report.warnings))}</strong></div></div>{count(report.warnings) > 0 && <div className="notice"><strong>{t.analysis.riskTitle}</strong><br />{t.analysis.riskCopy}</div>}{count(report.unresolved) > 0 && <p className="muted-copy">{t.analysis.unresolved(count(report.unresolved))}</p>}</>}
-    <details className="technical-details"><summary>{t.analysis.irToggle}</summary>{ir ? <pre>{printable(ir.ir)}</pre> : <p>{t.analysis.irPending}</p>}</details>
+    <details className="technical-details"><summary>{t.analysis.irToggle}</summary>{ir ? <pre>{printable(ir.ir)}</pre> : <p>{finished ? t.analysis.irNone : t.analysis.irPending}</p>}</details>
   </section>;
 }

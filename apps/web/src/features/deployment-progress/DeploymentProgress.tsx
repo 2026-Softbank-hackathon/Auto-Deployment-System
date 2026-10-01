@@ -7,7 +7,7 @@ import { StatusTape } from '../../components/ui/StatusTape';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 import type { Messages } from '../../i18n/ko';
 import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
-import { displayProjectName, elapsed } from '../dashboard/format';
+import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
@@ -15,7 +15,7 @@ import { DeployScene } from './DeployScene';
 type ErrorState = { cause: unknown; fallback: 'statusFailed' | 'logsFailed' } | null;
 type StepLog = { step: DeploymentLogStep; text: string };
 
-/** 성공 후 결과 화면으로 넘어가기 전, 코로가 컵에 착지하는 모습을 보여 주는 시간 */
+/** 지켜보던 배포가 성공했을 때, 결과 화면으로 넘어가기 전 코로가 컵에 착지하는 모습을 보여 주는 시간 */
 const SUCCESS_LANDING_MS = 1400;
 
 function text(value: unknown): string | null { return typeof value === 'string' && value.trim() ? value : null; }
@@ -57,11 +57,12 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
       const done = view.stage !== null && index < view.stage;
       const current = view.outcome === 'active' && view.stage === index;
       const state = done ? 'done' : current ? 'current' : 'pending';
-      const note = done ? t.run.chipDone : current ? (view.waiting ? t.run.chipWaiting : t.run.chipCurrent) : t.run.chipPending;
+      // 실패·중단은 백엔드가 멈춘 단계를 주지 않는다(stage = null). 어디까지 갔는지 지어내지 않고 단계 이름만 보여 준다.
+      const note = view.stage === null ? null : done ? t.run.chipDone : current ? (view.waiting ? t.run.chipWaiting : t.run.chipCurrent) : t.run.chipPending;
       return <li key={stage} className={`stage-chip is-${state}`} aria-current={current ? 'step' : undefined}>
         <GadgetIcon kind={stage} size={18} />
         <span>{t.stages[stage]}</span>
-        <span className="stage-chip__note">{done ? `✓ ${note}` : note}</span>
+        {note && <span className="stage-chip__note">{done ? `✓ ${note}` : note}</span>}
       </li>;
     })}
   </ol>;
@@ -128,6 +129,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
   const view = deploymentStatusView(currentStatus ?? 'received');
 
   // 진행 중 → 성공/실패로 바뀌는 순간에만 효과음. 성공이면 코로가 컵에 착지하는 걸 보여 준 뒤 결과 화면으로 넘어간다.
+  // 이미 끝난 배포를 열었을 때는 넘어가지 않는다 (결과 화면의 "진행 화면" 버튼으로 돌아올 수 있어야 한다).
   const { play } = useSound();
   const onSucceededRef = useRef(onSucceeded);
   useEffect(() => { onSucceededRef.current = onSucceeded; }, [onSucceeded]);
@@ -137,8 +139,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
     previousStatus.current = currentStatus;
     const transitioned = Boolean(previous) && previous !== currentStatus && previous !== 'succeeded' && previous !== 'failed';
     if (transitioned && currentStatus === 'failed') play('failure');
-    if (currentStatus !== 'succeeded') return;
-    if (!transitioned) { onSucceededRef.current?.(); return; }
+    if (currentStatus !== 'succeeded' || !transitioned) return;
     play('success');
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     const timer = window.setTimeout(() => onSucceededRef.current?.(), reduced ? 0 : SUCCESS_LANDING_MS);
@@ -151,6 +152,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
   const elapsedText = createdAt ? elapsed(createdAt, finishedAt ? Date.parse(finishedAt) : now) : null;
   const title = view.outcome === 'active' ? t.run.titleActive : view.outcome === 'success' ? t.run.titleSucceeded : view.outcome === 'failed' ? t.run.titleFailed : t.run.titleStopped;
   const failureMessage = text(status?.error);
+  const publicUrl = safeHttpUrl(text(status?.publicUrl));
 
   async function loadLogs() {
     const results = await Promise.allSettled(deploymentLogSteps.map(async (step) => ({ step, text: await getDeploymentLogs(deploymentId, step) })));
@@ -182,7 +184,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
           {elapsedText && <span className="run-head__elapsed" aria-label={`${t.run.elapsedLabel} ${elapsedText}`}>{elapsedText}</span>}
         </div>
         <p className="run-head__meta">
-          <span>{currentStepLabel(currentStatus, t)}</span>
+          {view.outcome === 'active' && <span>{currentStepLabel(currentStatus, t)}</span>}
           <span className="run-head__id">{projectName ? `${displayProjectName(projectName)} · ` : ''}{t.dashboard.deploymentNo(deploymentId)}</span>
         </p>
       </div>
@@ -198,7 +200,11 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
         <p>{failureMessage ?? t.progress.failedCopy}</p>
         {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
       </div>}
-      {view.outcome === 'success' && text(status?.publicUrl) && <a className="primary open-url" href={text(status?.publicUrl) ?? undefined} target="_blank" rel="noreferrer">{t.progress.openApp}</a>}
+      {view.outcome === 'success' && <div className="run-success">
+        {publicUrl && <a className="run-success__url" href={publicUrl} target="_blank" rel="noreferrer">{hostOf(publicUrl)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
+        {publicUrl && <Keycap href={publicUrl} target="_blank" rel="noreferrer">{t.progress.openApp}</Keycap>}
+        {onSucceeded && <Keycap variant="secondary" onClick={onSucceeded}>{t.run.viewResult}</Keycap>}
+      </div>}
     </section>
 
     <section className="work-note" aria-label={t.run.workNote}>

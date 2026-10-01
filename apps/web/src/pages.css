@@ -200,6 +200,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 
 .run-failure { align-self: stretch; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0; }
 .run-failure p { color: var(--ink); }
+.run-success { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; }
+.run-success__url { flex-basis: 100%; text-align: center; font-family: var(--font-mono); font-size: 15px; color: var(--koro-text); overflow-wrap: anywhere; }
 
 .work-note { display: flex; flex-direction: column; background: var(--paper-sunken); border: var(--border); border-radius: var(--radius-card); }
 .work-note__bar { display: flex; align-items: center; gap: 18px; min-height: 72px; padding: 12px 24px; flex-wrap: wrap; }
@@ -239,4 +241,11 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .stage-chip + .stage-chip::before { width: 12px; }
   .work-note__bar { padding: 12px 16px; }
   .work-note__line { white-space: normal; flex-basis: 100%; }
+}
+
+/* 칩이 두 줄로 접히는 폭에서는 연결선이 줄 앞에 혼자 남으므로 간격으로만 구분한다. */
+@media (max-width: 1000px) {
+  .stage-chips { gap: 8px; }
+  .stage-chip + .stage-chip { margin-left: 0; }
+  .stage-chip + .stage-chip::before { display: none; }
 }

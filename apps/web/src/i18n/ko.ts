@@ -131,6 +131,9 @@ export const ko = {
     unresolved: (n: number) => `미결 항목 ${n}건을 AI 배포 정책으로 처리 중이에요.`,
     irToggle: '생성된 IR 보기',
     irPending: '분석이 완료되면 생성된 IR을 확인할 수 있어요.',
+    none: '결과 없음',
+    noneCopy: '이 배포에는 분석 결과가 남아 있지 않아요.',
+    irNone: '생성된 IR이 없어요.',
   },
   run: {
     titleActive: '배포 중',
@@ -153,6 +156,7 @@ export const ko = {
     expand: '펼치기',
     collapse: '접기',
     failedCause: '실패 원인',
+    viewResult: '결과 보기',
     newDeploy: '새로 배포하기',
   },
   activeBanner: {
@@ -167,7 +171,6 @@ export const ko = {
     checking: '확인 중',
     error: '결과를 불러오지 못했어요.',
     openTitle: '서비스를 열어볼 수 있어요',
-    openCopy: '배포가 완료되면 공개 URL을 제공합니다.',
     urlPending: '공개 URL을 준비하고 있어요. 잠시 후 새로고침해 주세요.',
     runningTitle: '배포가 아직 진행 중이에요',
     runningCopy: '최신 상태를 확인하거나 진행 화면으로 돌아가세요.',

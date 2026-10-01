@@ -133,6 +133,9 @@ export const ja: Messages = {
     unresolved: (n) => `未解決項目${n}件をAIデプロイポリシーで処理しています。`,
     irToggle: '生成されたIRを見る',
     irPending: '分析が完了すると、生成されたIRを確認できます。',
+    none: '結果なし',
+    noneCopy: 'このデプロイには分析結果が残っていません。',
+    irNone: '生成されたIRはありません。',
   },
   run: {
     titleActive: 'デプロイ中',
@@ -155,6 +158,7 @@ export const ja: Messages = {
     expand: '広げる',
     collapse: 'たたむ',
     failedCause: '失敗の原因',
+    viewResult: '結果を見る',
     newDeploy: '新しくデプロイ',
   },
   activeBanner: {
@@ -169,7 +173,6 @@ export const ja: Messages = {
     checking: '確認中',
     error: '結果を読み込めませんでした。',
     openTitle: 'サービスを開けます',
-    openCopy: 'デプロイが完了すると公開URLを提供します。',
     urlPending: '公開URLを準備しています。しばらくしてから更新してください。',
     runningTitle: 'デプロイはまだ進行中です',
     runningCopy: '最新の状態を確認するか、進行画面に戻ってください。',

@@ -11,6 +11,7 @@ import type { ZodTypeAny } from "zod";
 import { createPool, type Pool } from "@camellia/db";
 import type { Storage } from "@camellia/storage";
 import {
+  CreateEnvironmentResponseSchema,
   DeploymentSchema,
   EnvironmentListSchema,
   EnvironmentSchema,
@@ -86,7 +87,8 @@ describeWithPostgres("API 응답 계약 — 실제 Postgres", () => {
       type: "onprem",
       onpremConfig: { agentRegistrationToken: "tok", hostname: "mac.local" },
     });
-    expectContract(EnvironmentSchema, env);
+    // POST 응답만 등록 토큰을 1회 포함한다(#61) — 조회 응답은 아래 EnvironmentSchema 로 토큰 없음까지 확인
+    expectContract(CreateEnvironmentResponseSchema, env);
     expectContract(EnvironmentListSchema, await call("GET", `/api/v1/environments?projectId=${projectId}`));
     expectContract(EnvironmentSchema, await call("GET", `/api/v1/environments/${env.id}`));
 

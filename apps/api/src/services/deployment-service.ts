@@ -9,6 +9,7 @@ import type PgBoss from "pg-boss";
 import type { Storage } from "@camellia/storage";
 import type {
   ApprovalGate,
+  AwsConfig,
   CreateDeploymentResponse,
   Deployment,
   DeploymentStatus,
@@ -246,6 +247,7 @@ export class DeploymentService {
     }
 
     if (targetVendor === "aws") {
+      await this.validateRegistryCredentials(projectId, targetEnvironmentId);
       return {
         targetEnvironmentId,
         registryEnvironmentId: targetEnvironmentId,
@@ -262,6 +264,55 @@ export class DeploymentService {
       );
     }
 
+    await this.validateRegistryCredentials(projectId, registryEnvironmentId);
+
     return { targetEnvironmentId, registryEnvironmentId };
+  }
+
+  private async validateRegistryCredentials(
+    projectId: number,
+    environmentId: number,
+  ): Promise<void> {
+    const result = await this.pool.query<{ aws_config: AwsConfig | null }>(
+      `SELECT aws_config
+       FROM environments
+       WHERE id = $1 AND project_id = $2 AND type = 'aws'`,
+      [environmentId, projectId],
+    );
+    const config = result.rows[0]?.aws_config;
+
+    if (!config || config.credentialsType !== "access_key") return;
+
+    const secretNames = [
+      config.accessKeyIdSecretName,
+      config.secretAccessKeySecretName,
+    ].filter((name): name is string => typeof name === "string" && name.length > 0);
+
+    if (secretNames.length !== 2) {
+      throw new ApiError(
+        409,
+        "AWS_CREDENTIALS_INVALID",
+        "AWS 환경에 자격증명 시크릿 참조가 올바르게 설정되어 있지 않습니다.",
+        "AWS Environment의 자격증명 설정을 확인하세요.",
+      );
+    }
+
+    const secretResult = await this.pool.query<{ name: string }>(
+      `SELECT name
+       FROM secrets
+       WHERE project_id = $1 AND name = ANY($2::text[])`,
+      [projectId, secretNames],
+    );
+    const found = new Set(secretResult.rows.map((row) => row.name));
+    const missing = secretNames.filter((name) => !found.has(name));
+
+    if (missing.length > 0) {
+      throw new ApiError(
+        409,
+        "AWS_CREDENTIALS_MISSING",
+        "AWS 환경이 참조하는 자격증명 시크릿이 없습니다.",
+        `누락된 시크릿을 다시 등록하세요: ${missing.join(", ")}.`,
+      );
+    }
   }
 }

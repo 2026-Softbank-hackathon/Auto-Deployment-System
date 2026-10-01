@@ -115,6 +115,41 @@ describe("SecretService", () => {
     expect(list[0]).not.toHaveProperty("value");
   });
 
+  it("AWS Environment가 참조하는 시크릿은 삭제하지 않는다", async () => {
+    const queries: string[] = [];
+    const pool = {
+      query: vi.fn(async (sql: string) => {
+        queries.push(sql);
+        if (sql.includes("FROM environments")) return { rows: [{ id: 10 }], rowCount: 1 };
+        return { rows: [], rowCount: 0 };
+      }),
+    } as unknown as Pool;
+    const svc = new SecretService(pool, MASTER_KEY);
+
+    await expect(
+      svc.delete({ projectId: 1, name: "aws-secret" }),
+    ).rejects.toMatchObject({ statusCode: 409, code: "SECRET_IN_USE" });
+    expect(queries.some((sql) => sql.includes("DELETE FROM secrets"))).toBe(false);
+  });
+
+  it("AWS Environment에서 참조하지 않는 시크릿은 삭제한다", async () => {
+    const queries: string[] = [];
+    const pool = {
+      query: vi.fn(async (sql: string) => {
+        queries.push(sql);
+        if (sql.includes("FROM environments")) return { rows: [], rowCount: 0 };
+        if (sql.includes("DELETE FROM secrets")) return { rows: [], rowCount: 1 };
+        return { rows: [], rowCount: 0 };
+      }),
+    } as unknown as Pool;
+    const svc = new SecretService(pool, MASTER_KEY);
+
+    await expect(
+      svc.delete({ projectId: 1, name: "unused" }),
+    ).resolves.toBeUndefined();
+    expect(queries.some((sql) => sql.includes("DELETE FROM secrets"))).toBe(true);
+  });
+
   it("잘못된 masterKey 길이는 즉시 실패", () => {
     expect(() => new SecretService({} as Pool, Buffer.alloc(16))).toThrow(/32바이트/);
   });

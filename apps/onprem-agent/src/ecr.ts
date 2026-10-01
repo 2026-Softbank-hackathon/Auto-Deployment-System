@@ -72,7 +72,7 @@ export class EcrImageManager implements ImageManager {
       try {
         await this.runner.run({
           command: "docker",
-          args: ["pull", imageUri],
+          args: ["pull", "--platform", job.image.platform, imageUri],
           signal,
         });
       } catch (error) {

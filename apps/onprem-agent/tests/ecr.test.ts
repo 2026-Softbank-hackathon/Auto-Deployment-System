@@ -74,7 +74,12 @@ describe("ECR image 준비", () => {
     expect(JSON.stringify(runner.requests[0]?.args)).not.toContain(
       "top-secret-password",
     );
-    expect(runner.requests[1]?.args).toEqual(["pull", imageUri]);
+    expect(runner.requests[1]?.args).toEqual([
+      "pull",
+      "--platform",
+      job.image.platform,
+      imageUri,
+    ]);
   });
 
   it("pull 실패 시에도 logout한다", async () => {

@@ -62,7 +62,9 @@ describe("verify 결과 영속화", () => {
   it("running 상태의 verify 단계를 생성함", async () => {
     const query = vi.fn(async () => ({ rows: [{ id: 10 }] }));
 
-    const payload = makePayload();
+    const payload = makePayload({
+      health: { path: "/ready", expectedStatus: 204, timeoutMs: 3_000 },
+    });
     const claim = await claimVerifyStep(makePool(query), payload);
 
     expect(claim).toEqual({ owned: true, stepId: 10 });
@@ -75,9 +77,42 @@ describe("verify 결과 영속화", () => {
           jobId: "verify-job-1",
           environmentId: "env-aws-1",
           requestFingerprint: createVerifyRequestFingerprint(payload),
+          targetUrl: "https://example.com/ready",
         }),
       ],
     );
+  });
+
+  it("기본 URL의 query와 fragment를 running 단계에 저장하지 않음", async () => {
+    const query = vi.fn(async () => ({ rows: [{ id: 10 }] }));
+    const payload = makePayload({
+      targetUrl: "https://example.com/app?token=secret#internal",
+      health: { path: "/ready", expectedStatus: 200, timeoutMs: 3_000 },
+    });
+
+    await claimVerifyStep(makePool(query), payload);
+
+    const params = query.mock.calls[0]?.[1] as unknown[];
+    expect(JSON.parse(String(params[2]))).toMatchObject({
+      targetUrl: "https://example.com/ready",
+    });
+    expect(String(params[2])).not.toContain("secret");
+  });
+
+  it("유효하지 않은 health 경로는 running 단계에 targetUrl을 저장하지 않음", async () => {
+    const query = vi.fn(async () => ({ rows: [{ id: 10 }] }));
+    const payload = makePayload({
+      health: {
+        path: "//attacker.example/health",
+        expectedStatus: 200,
+        timeoutMs: 3_000,
+      },
+    });
+
+    await claimVerifyStep(makePool(query), payload);
+
+    const params = query.mock.calls[0]?.[1] as unknown[];
+    expect(JSON.parse(String(params[2]))).not.toHaveProperty("targetUrl");
   });
 
   it("완료된 동일 job이면 저장된 VerifyResult를 반환함", async () => {

@@ -31,8 +31,11 @@ function makeHarness(overrides: Partial<{
   existingAgentJobDigest: string;
   repositoryUri: string;
   imagePlatform: string;
+  statusAfterApplyFailure: string;
+  cleanupFailure: boolean;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
+  let transactionStatus = status;
   const ir = overrides.targetType === "onprem"
     ? { ...IR, deploy: { profile: "onprem-docker-basic" } }
     : IR;
@@ -40,6 +43,17 @@ function makeHarness(overrides: Partial<{
   const agentJobQueries: Array<{ sql: string; params: unknown[] }> = [];
   const client = {
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
+      queries.push({ sql, params });
+      if (sql === "BEGIN") transactionStatus = status;
+      if (sql === "ROLLBACK") status = transactionStatus;
+      if (sql.includes("DELETE FROM env_locks") && overrides.cleanupFailure) {
+        throw new Error("cleanup unavailable");
+      }
+      if (sql.includes("SET status = 'failed'")) {
+        if (status !== params[2]) return { rows: [] };
+        status = "failed";
+        return { rows: [{ id: params[1] }] };
+      }
       if (sql.includes("SELECT status FROM deployments")) {
         return { rows: [{ status }] };
       }
@@ -100,12 +114,15 @@ function makeHarness(overrides: Partial<{
   };
   const terraformCli = {
     apply: overrides.terraformFailure
-      ? vi.fn(async () => Promise.reject(overrides.terraformFailure))
+      ? vi.fn(async () => {
+          if (overrides.statusAfterApplyFailure) status = overrides.statusAfterApplyFailure;
+          throw overrides.terraformFailure;
+        })
       : vi.fn(async () => ({
           origin_url: { value: "http://alb.example.test", sensitive: false },
         })),
   };
-  const boss = { send: vi.fn(async () => "verify-job") };
+  const boss = { send: vi.fn(async (_queue: string, _payload: unknown) => "verify-job") };
   const notifier = { notify: vi.fn(async () => {}) };
   const secretReader = {
     read: vi.fn(async (_projectId: number, name: string) =>
@@ -132,6 +149,56 @@ function makeHarness(overrides: Partial<{
 }
 
 describe("handleProvision", () => {
+  it.each(["aws", "onprem"] as const)("%s planning 오류는 failed와 락 해제를 같은 트랜잭션으로 처리한다", async (targetType) => {
+    const harness = makeHarness({ status: "planning", targetType });
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.getStatus()).toBe("failed");
+    const operations = harness.queries.map(({ sql }) => sql);
+    const update = operations.findIndex((sql) => sql.includes("SET status = 'failed'"));
+    const unlock = operations.findIndex((sql) => sql.includes("DELETE FROM env_locks"));
+    expect(operations[update - 1]).toBe("BEGIN");
+    expect(unlock).toBe(update + 1);
+    expect(operations[unlock + 1]).toBe("COMMIT");
+    expect(harness.notifier.notify).toHaveBeenCalledWith(99, "state_changed", { status: "failed" });
+    expect(harness.boss.send).toHaveBeenCalledWith("diagnose", { deployment_id: 99 });
+    expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+    expect(harness.agentJobQueries).toHaveLength(0);
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+    expect(harness.notifier.notify.mock.calls.filter(([, event]) => event === "state_changed")).toHaveLength(1);
+  });
+
+  it.each(["succeeded", "failed", "cancelled", "rejected"])("종료 상태 %s의 뒤늦은 Job은 상태와 락을 변경하지 않는다", async (status) => {
+    const harness = makeHarness({ status });
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+    expect(harness.getStatus()).toBe(status);
+    expect(harness.pool.connect).not.toHaveBeenCalled();
+    expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+    expect(harness.boss.send).not.toHaveBeenCalled();
+    expect(harness.notifier.notify).not.toHaveBeenCalled();
+  });
+
+  it.each(["cancelled", "verifying"])("실패 처리 전 상태가 %s로 변경되면 덮어쓰거나 락을 풀지 않는다", async (statusAfterApplyFailure) => {
+    const harness = makeHarness({
+      terraformFailure: new TerraformCliError("TERRAFORM_APPLY_FAILED"), statusAfterApplyFailure,
+    });
+    await expect(handleProvision({ data: { deployment_id: 99 } }, harness.deps)).rejects.toThrow("TERRAFORM_APPLY_FAILED");
+    expect(harness.getStatus()).toBe(statusAfterApplyFailure);
+    expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(false);
+    expect(harness.notifier.notify).not.toHaveBeenCalledWith(99, "state_changed", { status: "failed" });
+    expect(harness.boss.send).not.toHaveBeenCalledWith("diagnose", expect.anything());
+  });
+
+  it("락 정리 DB 오류는 상태도 롤백하고 실패 SSE를 발행하지 않는다", async () => {
+    const harness = makeHarness({ status: "planning", cleanupFailure: true });
+    await expect(handleProvision({ data: { deployment_id: 99 } }, harness.deps)).rejects.toThrow("cleanup unavailable");
+    expect(harness.getStatus()).toBe("planning");
+    expect(harness.queries.some(({ sql }) => sql === "ROLLBACK")).toBe(true);
+    expect(harness.notifier.notify).not.toHaveBeenCalledWith(99, "state_changed", { status: "failed" });
+    expect(harness.boss.send).not.toHaveBeenCalledWith("diagnose", expect.anything());
+  });
+
   it("사용자 계정 credential로 digest를 적용하고 Verify payload를 큐잉한다", async () => {
     const harness = makeHarness();
 
@@ -191,6 +258,18 @@ describe("handleProvision", () => {
     expect(harness.notifier.notify).toHaveBeenCalledWith(99, "state_changed", {
       status: "failed",
     });
+  });
+
+  it("자신이 verifying으로 전이한 뒤 Verify 큐잉이 실패해도 failed와 락 해제를 처리한다", async () => {
+    const harness = makeHarness();
+    harness.boss.send.mockImplementation(async (queue) => {
+      if (queue === "verify") throw new Error("queue unavailable");
+      return "diagnose-job";
+    });
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+    expect(harness.getStatus()).toBe("failed");
+    expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(true);
+    expect(harness.notifier.notify).toHaveBeenCalledWith(99, "state_changed", { status: "failed" });
   });
 
   it("이미 verifying 상태인 중복 작업은 Terraform을 다시 실행하지 않는다", async () => {

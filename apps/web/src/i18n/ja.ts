@@ -158,7 +158,7 @@ export const ja: Messages = {
     error: '分析結果を確認できませんでした。',
     pending: '分析が終わると、検出したスタック、サービス、リソース、警告をここに表示します。',
     stack: '検出したスタック',
-    checking: '確認中',
+    stackUnknown: '検出されませんでした',
     services: 'サービス',
     resources: 'リソース',
     warnings: '警告',

@@ -156,7 +156,7 @@ export const ko = {
     error: '분석 결과를 확인하지 못했어요.',
     pending: '분석이 끝나면 감지된 스택, 서비스, 리소스와 경고를 여기에 표시합니다.',
     stack: '감지된 스택',
-    checking: '확인 중',
+    stackUnknown: '확인되지 않음',
     services: '서비스',
     resources: '리소스',
     warnings: '경고',

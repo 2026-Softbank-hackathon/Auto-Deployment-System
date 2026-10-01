@@ -9,13 +9,13 @@
 - job별로 격리된 Compose project와 loopback 동적 포트
 - 컨테이너 실행 상태와 로컬 HTTP health 확인
 - 중복 job, 완료 결과, 실행 중 같은 digest, 새 digest 교체, 실패 재시도, 취소 처리
-- 동적 `localUrl` 보고 뒤 받은 Named Tunnel session으로 `cloudflared` 실행
+- 동적 `localPort` 보고 뒤 받은 Named Tunnel session으로 `cloudflared` 실행
 - Tunnel Token을 `TUNNEL_TOKEN` 환경변수로만 전달하고 프로세스 준비·교체·정리
 - Intel Mac 사전검사와 macOS `LaunchAgent` 설치 기반
 - `TunnelProvider` 인터페이스와 테스트 전용 `FakeTunnelProvider`
 - `AgentControlPlaneClient` 인터페이스와 테스트 전용 `FakeControlPlaneClient`
 
-외부 노출 방식은 플랫폼 관리 Cloudflare Named Tunnel로 확정됐습니다. Agent는 Compose의 동적 포트로 로컬 헬스체크를 통과한 뒤 `jobId`와 `localUrl`을 서버 경계에 전달하고, 서버가 ingress를 설정한 뒤 반환한 `tunnelId`, `token`, 외부 `hostname`으로 `cloudflared`를 실행합니다. Agent 결과의 `endpoint`는 검증된 hostname에 `https://`를 적용해 생성합니다.
+외부 노출 방식은 플랫폼 관리 Cloudflare Named Tunnel로 확정됐습니다. Agent는 Compose의 동적 포트로 로컬 헬스체크를 통과한 뒤 `jobId`와 숫자 `localPort`를 서버 경계에 전달합니다. 서버는 `http://127.0.0.1:<localPort>`로 ingress를 설정한 뒤 `tunnelId`, `token`, 외부 `hostname`을 반환하고, Agent는 해당 정보로 `cloudflared`를 실행합니다. Agent 결과의 `localUrl`은 로컬 실행·헬스 결과로 유지하고, 외부 `endpoint`는 검증된 hostname에 `https://`를 적용해 생성합니다.
 
 서버 Agent API 경로는 아직 확정되지 않았습니다. 따라서 실제 HTTP Control Plane Client는 구현하지 않았고, `src/main.ts`도 설정·Docker·Compose·`cloudflared` 사전검사 후 미연결 상태를 명시하고 종료합니다. 임의의 서버 endpoint나 Fake endpoint를 실제 서버에 보고하지 않습니다.
 
@@ -73,4 +73,15 @@ Docker 통합 테스트는 Docker daemon과 이미지 빌드가 가능한 환경
 RUN_DOCKER_INTEGRATION=1 pnpm --filter @camellia/onprem-agent test:integration
 ```
 
-현재 개발 머신에는 `cloudflared`와 실제 Cloudflare 계정·Tunnel Token이 없으므로 실제 외부 Tunnel 연결은 검증 대상에서 제외합니다. 백그라운드 프로세스의 실제 시작·종료와 Docker Compose 통합은 로컬에서 별도로 검증합니다.
+실제 Cloudflare 통합 테스트는 플랫폼 API Token, Account·Zone, 테스트 도메인과 현재 OS에서 실행 가능한 `cloudflared`가 준비된 환경에서만 명시적으로 실행합니다. 테스트는 고유한 임시 Named Tunnel과 CNAME을 만들고 동적 `localPort`의 loopback origin이 외부 HTTPS endpoint로 노출되는지 확인한 뒤 생성한 리소스를 정리합니다.
+
+```bash
+set -a
+source .env.cloudflare.local
+set +a
+RUN_CLOUDFLARE_INTEGRATION=1 \
+CLOUDFLARED_PATH=/absolute/path/to/cloudflared \
+pnpm --filter @camellia/onprem-agent test:integration
+```
+
+`.env.cloudflare.local`은 저장소의 `.env.*` ignore 규칙에 포함되며 실제 Token을 커밋하거나 테스트 출력에 기록하지 않습니다. Docker와 Cloudflare 실통합을 함께 실행하려면 `RUN_DOCKER_INTEGRATION=1`도 지정합니다.

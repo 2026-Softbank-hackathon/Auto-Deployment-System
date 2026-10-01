@@ -2,7 +2,7 @@
 export const ko = {
   locale: 'ko-KR',
   header: {
-    titles: { dashboard: '대시보드', deploy: '간단 배포', progress: '배포 진행', result: '배포 결과', setup: '연결 설정', projects: '내 프로젝트' },
+    titles: { dashboard: '대시보드', deploy: '간단 배포', progress: '배포 진행', result: '배포 결과', setup: '연결 설정', projects: '내 프로젝트', project: '프로젝트' },
     language: '언어',
     sound: { label: '사운드', on: '켬', off: '끔' },
   },
@@ -97,6 +97,11 @@ export const ko = {
     envCount: (n: number) => `${n}개`,
     neverDeployed: '아직 배포하지 않았어요',
     deploy: '이 프로젝트로 배포',
+    openDetail: '상세 보기',
+    notFound: '프로젝트를 찾지 못했어요.',
+    detailDescription: '배포 내역, 환경변수, 연결 설정을 여기서 관리해요.',
+    tabsLabel: '프로젝트 메뉴',
+    tabs: { deployments: '배포 내역', env: '환경변수', settings: '설정' },
   },
   notify: {
     title: { success: '배포가 완료됐어요', failed: '배포에 실패했어요', stopped: '배포가 중단됐어요' },
@@ -120,7 +125,7 @@ export const ko = {
       save: '프로젝트 등록',
       nameTaken: '같은 이름의 프로젝트가 이미 있어요. 다른 이름을 써 주세요.',
       nameError: '프로젝트를 만들지 못했어요.',
-      doneCopy: '아래 연결은 이 프로젝트의 것이에요. 다른 프로젝트는 내 프로젝트나 간단 배포 화면에서 고를 수 있어요.',
+      doneCopy: '아래 연결은 이 프로젝트의 것이에요. 환경변수와 배포 내역은 프로젝트 상세에서 볼 수 있어요.',
       add: '새 프로젝트 추가',
       addCopy: '새 프로젝트의 이름을 정해 주세요. AWS 키와 서버 연결은 프로젝트마다 따로 저장돼서, 새 프로젝트에는 다시 등록해야 해요.',
     },

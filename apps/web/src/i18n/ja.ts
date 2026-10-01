@@ -4,7 +4,7 @@ import type { Messages } from './ko';
 export const ja: Messages = {
   locale: 'ja-JP',
   header: {
-    titles: { dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ', progress: 'デプロイ進行状況', result: 'デプロイ結果', setup: '接続設定', projects: 'マイプロジェクト' },
+    titles: { dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ', progress: 'デプロイ進行状況', result: 'デプロイ結果', setup: '接続設定', projects: 'マイプロジェクト', project: 'プロジェクト' },
     language: '言語',
     sound: { label: 'サウンド', on: 'オン', off: 'オフ' },
   },
@@ -99,6 +99,11 @@ export const ja: Messages = {
     envCount: (n) => `${n}個`,
     neverDeployed: 'まだデプロイしていません',
     deploy: 'このプロジェクトでデプロイ',
+    openDetail: '詳細を見る',
+    notFound: 'プロジェクトが見つかりませんでした。',
+    detailDescription: 'デプロイ履歴、環境変数、接続設定をここで管理します。',
+    tabsLabel: 'プロジェクトメニュー',
+    tabs: { deployments: 'デプロイ履歴', env: '環境変数', settings: '設定' },
   },
   notify: {
     title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },
@@ -122,7 +127,7 @@ export const ja: Messages = {
       save: 'プロジェクトを登録',
       nameTaken: '同じ名前のプロジェクトがすでにあります。別の名前を入力してください。',
       nameError: 'プロジェクトを作成できませんでした。',
-      doneCopy: '下の接続はこのプロジェクトのものです。別のプロジェクトは、マイプロジェクトまたはかんたんデプロイ画面で選べます。',
+      doneCopy: '下の接続はこのプロジェクトのものです。環境変数とデプロイ履歴はプロジェクト詳細で確認できます。',
       add: '新しいプロジェクトを追加',
       addCopy: '新しいプロジェクトの名前を決めてください。AWSキーとサーバー接続はプロジェクトごとに保存されるため、新しいプロジェクトでは改めて登録が必要です。',
     },

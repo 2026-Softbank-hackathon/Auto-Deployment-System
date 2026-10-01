@@ -113,6 +113,7 @@ export const ko = {
     neverDeployed: '아직 배포하지 않았어요',
     deploy: '이 프로젝트로 배포',
     openDetail: '상세 보기',
+    searchPlaceholder: '배포 번호, 주소',
     needsAws: '배포하려면 AWS 연결을 먼저 등록해 주세요.',
     needsKeyAgain: '저장된 AWS 키를 쓸 수 없어요. 배포하려면 키를 다시 등록해 주세요.',
     goSettings: '설정 탭으로',

@@ -115,6 +115,7 @@ export const ja: Messages = {
     neverDeployed: 'まだデプロイしていません',
     deploy: 'このプロジェクトでデプロイ',
     openDetail: '詳細を見る',
+    searchPlaceholder: 'デプロイ番号、URL',
     needsAws: 'デプロイするには、先にAWS接続を登録してください。',
     needsKeyAgain: '保存されたAWSキーを使用できません。デプロイするにはキーを再登録してください。',
     goSettings: '設定タブへ',

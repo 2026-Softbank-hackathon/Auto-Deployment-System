@@ -75,5 +75,5 @@ export function useDeploymentList() {
 
   const retry = useCallback(() => { setState({ phase: 'loading' }); void refresh(); }, [refresh]);
 
-  return { state, retry, /** 화면을 비우지 않고 다시 읽는다 */ refresh: () => { void refresh(); } };
+  return { state, retry };
 }

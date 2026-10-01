@@ -55,7 +55,7 @@ function Counts({ items, now }: { items: DeploymentListItem[]; now: number }) {
 
 export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
-  const { state, retry, refresh } = useDeploymentList();
+  const { state, retry } = useDeploymentList();
   const hasItems = state.phase === 'ready' && state.items.length > 0;
 
   return <>
@@ -77,7 +77,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
       <Counts items={state.items} now={state.loadedAt} />
       {state.partialFailures > 0 && <p className="dashboard-status">{t.dashboard.partialFailures(state.partialFailures)}</p>}
 
-      <DeploymentBrowser items={state.items} now={state.loadedAt} onNavigate={onNavigate} searchPlaceholder={t.dashboard.searchPlaceholder} selection="multi" onRedeployed={refresh} />
+      <DeploymentBrowser items={state.items} now={state.loadedAt} onNavigate={onNavigate} searchPlaceholder={t.dashboard.searchPlaceholder} />
     </>}
   </>;
 }

@@ -200,12 +200,13 @@ export async function handleAnalyze(
       `분석 완료 — 서비스 ${analysis.services.length}개, 경고 ${analysis.warnings.length}개, IR ${irValid ? "유효" : "검증 실패"}`
     );
 
-    // 6. analysis_reports INSERT
+    // 6. analysis_reports INSERT (source_version_id 포함 — ANL-08 캐시 조회가 이 값으로 JOIN 한다)
     await pool.query(
-      `INSERT INTO analysis_reports(deployment_id, services_json, resources_json, warnings_json, unresolved_json, ir_valid, ir_errors_json)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      `INSERT INTO analysis_reports(deployment_id, source_version_id, services_json, resources_json, warnings_json, unresolved_json, ir_valid, ir_errors_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [
         deployment_id,
+        source_version_id ?? null,
         JSON.stringify(analysis.services),
         JSON.stringify(analysis.resources),
         JSON.stringify(analysis.warnings),

@@ -32,6 +32,10 @@ import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
 import { AgentService } from "./services/agent-service.js";
 import { AuditLogService } from "./services/audit-log-service.js";
+import {
+  AgentEcrCredentialService,
+  type AwsEcrRegistryFactory,
+} from "./services/agent-ecr-credential-service.js";
 
 import projectsRoutes from "./routes/projects.js";
 import auditLogsRoutes from "./routes/audit-logs.js";
@@ -53,6 +57,7 @@ import authRoutes from "./routes/auth.js";
 import { SessionService } from "./services/session-service.js";
 import { AgentJobService } from "./services/agent-job-service.js";
 import agentJobsRoutes, { type AgentIdentity } from "./routes/agent-jobs.js";
+import agentEcrCredentialRoutes from "./routes/agent-ecr-credentials.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -78,6 +83,8 @@ export interface BuildServerOptions {
   agentJobPollTimeoutMs?: number;
   /** Agent job poll 간격 (테스트용 override 포함). 기본 500ms */
   agentJobPollIntervalMs?: number;
+  /** ECR client factory (테스트용 override). */
+  awsEcrRegistryFactory?: AwsEcrRegistryFactory;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -102,6 +109,7 @@ export async function buildServer(opts: BuildServerOptions) {
     apiKey: opts.apiKey,
     nodeEnv: opts.nodeEnv,
     agentJobClaimEnabled: true,
+    agentEcrCredentialEnabled: true,
   });
   await fastify.register(multipartPlugin);
   await fastify.register(sseBrokerPlugin);
@@ -125,6 +133,11 @@ export async function buildServer(opts: BuildServerOptions) {
   const environmentService = new EnvironmentService(opts.pool);
   const envVarService = new EnvVarService(opts.pool);
   const agentJobService = new AgentJobService(opts.pool);
+  const agentEcrCredentialService = new AgentEcrCredentialService(
+    opts.pool,
+    secretService,
+    opts.awsEcrRegistryFactory,
+  );
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
@@ -280,6 +293,12 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(auditLogsRoutes, {
       prefix: "/audit-logs",
       auditLogService,
+    });
+
+    v1.register(agentEcrCredentialRoutes, {
+      prefix: "/agents",
+      service: agentEcrCredentialService,
+      authenticate: authenticateAgent,
     });
   }, { prefix: "/api/v1" });
 

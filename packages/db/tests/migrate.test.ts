@@ -32,6 +32,8 @@ describe("migration files", () => {
       "007_build_artifacts.sql",
       "008_agents.sql",
       "009_onprem_agent_jobs.sql",
+      "010_audit_logs.sql",
+      "011_agent_ecr_credentials.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

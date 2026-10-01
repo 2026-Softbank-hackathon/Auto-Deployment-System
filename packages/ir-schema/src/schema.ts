@@ -149,6 +149,14 @@ const ServiceSchema = z
       .describe(
         "주입받을 환경변수 이름 목록. 값은 secrets 저장소 또는 프로필에서 주입 (값 자체는 IR에 포함 안 함)"
       ),
+    env_defaults: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        "환경변수 default 값 매핑 (분석기가 `.env.example`에서 추출). " +
+        "프로젝트에 env_vars 미등록 시 이 default 사용 — 원클릭 복원 (이슈 #137). " +
+        "secret 성격 값은 저장 금지, 공개 가능한 설정값만."
+      ),
     secrets: z
       .array(z.string())
       .optional()

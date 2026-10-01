@@ -85,6 +85,7 @@ export function createCommonPlan(
       command: service.command,
       containerPort: service.port,
       environmentNames: service.env ?? [],
+      environmentDefaults: service.env_defaults ?? {},
       secretNames: service.secrets ?? [],
       compute: {
         vcpu: compute.vcpu,

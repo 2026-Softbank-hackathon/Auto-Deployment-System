@@ -4,7 +4,7 @@ import { followAppLink, type Navigate } from '../app/navigation';
 import type { ProjectTab } from '../app/routes';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { Keycap } from '../components/ui/Keycap';
-import { DeploymentRow } from '../features/dashboard/DeploymentRow';
+import { DeploymentBrowser } from '../features/dashboard/DeploymentBrowser';
 import { displayProjectName } from '../features/dashboard/format';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { RedeployButton } from '../features/deployment-progress/RedeployButton';
@@ -13,7 +13,8 @@ import { ConnectionCards } from '../features/setup/ConnectionCards';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
-const DEPLOYMENTS_SHOWN = 20;
+/** 서버가 한 번에 주는 최대 건수. 이 안에서 검색 · 페이지 나누기를 한다. */
+const DEPLOYMENTS_SHOWN = 100;
 const tabs: ReadonlyArray<{ tab: ProjectTab; path: string }> = [
   { tab: 'deployments', path: '' },
   { tab: 'env', path: '/env' },
@@ -36,11 +37,10 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
   if (state === null) return <p className="dashboard-status" role="status">{t.dashboard.loading}</p>;
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
-  return <section className="deployment-list" aria-label={t.dashboard.listLabel}>
-    {state.items.map((deployment) => <DeploymentRow key={deployment.id} deployment={{ ...deployment, projectName }} now={state.loadedAt} onNavigate={onNavigate}
-      extraAction={deploymentStatusView(deployment.status).outcome === 'active' ? undefined
-        : <RedeployButton compact variant="ghost" deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} />} />)}
-  </section>;
+  return <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
+    searchPlaceholder={t.projects.searchPlaceholder}
+    extraAction={(deployment) => deploymentStatusView(deployment.status).outcome === 'active' ? undefined
+      : <RedeployButton compact variant="ghost" deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} />} />;
 }
 
 /**

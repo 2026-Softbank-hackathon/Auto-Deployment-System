@@ -6,6 +6,7 @@ import { createDeploymentPlan, AdapterError } from "@camellia/adapters";
 import { AwsRegistryError } from "@camellia/aws-registry";
 import { BuildError, type BuildResult } from "@camellia/build-handler";
 import { AwsConfigSchema } from "@camellia/contracts";
+import type { Pool } from "@camellia/db";
 import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
@@ -39,7 +40,7 @@ export async function handleBuild(
     activeStatus = context.status;
 
     if (context.status === "planning" && context.existing_artifact_id !== null) {
-      await deps.boss.send("provision", { deployment_id: deploymentId });
+      await autoApprovePlanAndQueueProvision(deps, deploymentId);
       return;
     }
     if (!(["queued", "building"] as Status[]).includes(context.status)) {
@@ -252,7 +253,76 @@ async function completeBuildStage(
   await deps.notifier?.notify(deploymentId, "state_changed", {
     status: "planning",
   });
+  await autoApprovePlanAndQueueProvision(deps, deploymentId);
+}
+
+/**
+ * Plan 자동 승인:
+ *   planning → awaiting_plan_approval → provisioning 를 한 트랜잭션으로 처리하고
+ *   approvals 테이블에 'auto-approved' 레코드를 남긴다. COMMIT 후 provision job을 큐잉한다.
+ *
+ * 중간 실패 시 ROLLBACK → DB 상태는 planning 유지 → 호출자(handleBuild) catch 블록이
+ * failed 전이 + env_lock 해제를 담당한다.
+ */
+export async function autoApprovePlanAndQueueProvision(
+  deps: WorkerDeps,
+  deploymentId: number,
+): Promise<void> {
+  await autoApprovePlanInline(deps.pool, deploymentId);
+  await deps.notifier?.notify(deploymentId, "state_changed", {
+    status: "awaiting_plan_approval",
+  });
+  await deps.notifier?.notify(deploymentId, "state_changed", {
+    status: "provisioning",
+  });
   await deps.boss.send("provision", { deployment_id: deploymentId });
+}
+
+export async function autoApprovePlanInline(
+  pool: Pool,
+  deploymentId: number,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const res = await client.query<{ status: string }>(
+      "SELECT status FROM deployments WHERE id = $1 FOR UPDATE",
+      [deploymentId],
+    );
+    const current = res.rows[0]?.status;
+    if (current !== "planning") {
+      throw new Error("AUTO_APPROVE_STATE_INVALID");
+    }
+
+    await client.query(
+      `UPDATE deployments
+         SET status = 'awaiting_plan_approval', updated_at = NOW()
+       WHERE id = $1`,
+      [deploymentId],
+    );
+
+    await client.query(
+      `INSERT INTO approvals (deployment_id, gate, decision, note, decided_at)
+       VALUES ($1, 'plan', 'approve', 'auto-approved: no manual plan review required', NOW())
+       ON CONFLICT (deployment_id, gate) DO NOTHING`,
+      [deploymentId],
+    );
+
+    await client.query(
+      `UPDATE deployments
+         SET status = 'provisioning', updated_at = NOW()
+       WHERE id = $1`,
+      [deploymentId],
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 function imageTagForDeployment(version: string, deploymentId: number): string {

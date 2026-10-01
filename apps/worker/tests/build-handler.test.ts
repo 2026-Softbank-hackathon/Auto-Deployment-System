@@ -31,16 +31,32 @@ function makeHarness(overrides: Partial<{
   existingArtifactId: number | null;
   credentialsType: "access_key" | "assume_role";
   buildFailure: Error;
+  autoApproveFailure: Error;
 }> = {}) {
   let currentStatus = overrides.status ?? "queued";
   const queries: Array<{ sql: string; params: unknown[] }> = [];
+  const clientQueries: Array<{ sql: string; params: unknown[] }> = [];
   const client = {
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
+      clientQueries.push({ sql, params });
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+        return { rows: [] };
+      }
       if (sql.includes("SELECT status FROM deployments")) {
         return { rows: [{ status: currentStatus }] };
       }
+      if (sql.includes("INSERT INTO approvals")) {
+        if (overrides.autoApproveFailure) throw overrides.autoApproveFailure;
+        return { rows: [], rowCount: 1 };
+      }
       if (sql.includes("UPDATE deployments")) {
-        currentStatus = params[0] as string;
+        // transitionTo 는 params[0] 로 status 전달, autoApprovePlanInline 은 리터럴로 박음.
+        const literalMatch = sql.match(/status\s*=\s*'([^']+)'/);
+        if (literalMatch) {
+          currentStatus = literalMatch[1]!;
+        } else if (typeof params[0] === "string") {
+          currentStatus = params[0];
+        }
       }
       return { rows: [] };
     }),
@@ -164,6 +180,7 @@ function makeHarness(overrides: Partial<{
     buildHandler,
     log,
     queries,
+    clientQueries,
     getStatus: () => currentStatus,
   };
 }
@@ -203,7 +220,7 @@ describe("handleBuild", () => {
       query.sql.includes("INSERT INTO build_artifacts"),
     );
     expect(artifact?.params[3]).toBe(DIGEST);
-    expect(harness.getStatus()).toBe("planning");
+    expect(harness.getStatus()).toBe("provisioning");
     expect(harness.boss.send).toHaveBeenCalledWith("provision", {
       deployment_id: 42,
     });
@@ -216,7 +233,7 @@ describe("handleBuild", () => {
 
     expect(harness.buildHandler.build).not.toHaveBeenCalled();
     expect(harness.secretReader.read).not.toHaveBeenCalled();
-    expect(harness.getStatus()).toBe("planning");
+    expect(harness.getStatus()).toBe("provisioning");
     expect(harness.boss.send).toHaveBeenCalledWith("provision", {
       deployment_id: 42,
     });
@@ -249,7 +266,7 @@ describe("handleBuild", () => {
     );
   });
 
-  it("planning까지 저장된 재시도는 provision job만 복구한다", async () => {
+  it("planning까지 저장된 재시도는 자동 승인을 거쳐 provisioning 으로 복구한다", async () => {
     const harness = makeHarness({ status: "planning", existingArtifactId: 7 });
 
     await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
@@ -258,6 +275,64 @@ describe("handleBuild", () => {
     expect(harness.boss.send).toHaveBeenCalledWith("provision", {
       deployment_id: 42,
     });
-    expect(harness.getStatus()).toBe("planning");
+    expect(harness.getStatus()).toBe("provisioning");
+    const approvalInsert = harness.clientQueries.find((query) =>
+      query.sql.includes("INSERT INTO approvals"),
+    );
+    expect(approvalInsert).toBeDefined();
+  });
+
+  it("Plan 자동 승인 후 approvals 테이블에 auto-approve 레코드를 남긴다", async () => {
+    const harness = makeHarness();
+
+    await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+    const approvalInsert = harness.clientQueries.find((query) =>
+      query.sql.includes("INSERT INTO approvals"),
+    );
+    expect(approvalInsert).toBeDefined();
+    expect(approvalInsert?.params).toEqual([42]);
+    expect(approvalInsert?.sql).toContain("'plan'");
+    expect(approvalInsert?.sql).toContain("'approve'");
+    expect(approvalInsert?.sql).toContain("auto-approved");
+    expect(approvalInsert?.sql).toContain(
+      "ON CONFLICT (deployment_id, gate) DO NOTHING",
+    );
+  });
+
+  it("Plan 자동 승인 성공 시 state_changed SSE 를 building → planning → awaiting_plan_approval → provisioning 순서로 발행한다", async () => {
+    const harness = makeHarness();
+
+    await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+    const stateChanges = harness.notifier.notify.mock.calls
+      .filter(([, event]) => event === "state_changed")
+      .map(([, , payload]) => (payload as { status: string }).status);
+    expect(stateChanges).toEqual([
+      "building",
+      "planning",
+      "awaiting_plan_approval",
+      "provisioning",
+    ]);
+  });
+
+  it("자동 승인 중 approvals INSERT 가 실패하면 ROLLBACK 하고 handleBuild catch 가 failed 전이 + env_lock 해제", async () => {
+    const harness = makeHarness({
+      autoApproveFailure: new Error("approvals constraint violation"),
+    });
+
+    await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+    expect(harness.clientQueries.some((query) => query.sql === "ROLLBACK")).toBe(
+      true,
+    );
+    expect(harness.boss.send).not.toHaveBeenCalledWith(
+      "provision",
+      expect.anything(),
+    );
+    expect(
+      harness.queries.some((query) => query.sql.includes("DELETE FROM env_locks")),
+    ).toBe(true);
+    expect(harness.getStatus()).toBe("failed");
   });
 });

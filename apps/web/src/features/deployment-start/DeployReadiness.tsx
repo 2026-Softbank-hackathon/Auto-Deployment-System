@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import type { EnvironmentSummary } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
@@ -18,6 +19,8 @@ export function DeployReadiness({ target, state, onRetry, onRegisterAws }: {
   onRegisterAws: (input: { accessKeyId: string; secretAccessKey: string; region: string }) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const [changing, setChanging] = useState(false);
+  const changeFormId = useId();
   if (state.phase === 'loading') return <p className="deploy-readiness" aria-live="polite">{t.deploy.readiness.checking}</p>;
   if (state.phase === 'error') return <div className="notice error deploy-readiness" role="alert">
     <strong>{t.deploy.readiness.checkError}</strong><br />{errorMessage(state.error, t, t.deploy.readiness.checkError)}
@@ -30,7 +33,15 @@ export function DeployReadiness({ target, state, onRetry, onRegisterAws }: {
   const onprem = defaultOf('onprem');
 
   return <div className="deploy-readiness" aria-live="polite">
-    {aws && <p className="deploy-readiness__ok">✓ {t.deploy.readiness.awsReady}{aws.region ? ` · ${aws.region}` : ''}</p>}
+    {aws && <div className="deploy-readiness__row">
+      <p className="deploy-readiness__ok">✓ {t.deploy.readiness.awsReady}{aws.region ? ` · ${aws.region}` : ''}</p>
+      {!changing && <Keycap variant="ghost" aria-expanded={false} aria-controls={changeFormId} onClick={() => setChanging(true)}>{t.deploy.aws.change}</Keycap>}
+    </div>}
+    {aws && changing && <div id={changeFormId} className="notice deploy-readiness__need">
+      <strong>{t.deploy.aws.changeTitle}</strong>
+      <p>{t.deploy.aws.changeCopy}</p>
+      <AwsKeyForm initialRegion={aws.region} onCancel={() => setChanging(false)} onSubmit={async (input) => { await onRegisterAws(input); setChanging(false); }} />
+    </div>}
     {target === 'onprem' && onprem && <p className="deploy-readiness__ok">✓ {t.deploy.readiness.onpremReady}{onprem.hostname ? ` · ${onprem.hostname}` : ''}</p>}
     {missing.includes('aws') && <div className="notice deploy-readiness__need">
       <strong>{t.deploy.readiness.awsNeeded}</strong>

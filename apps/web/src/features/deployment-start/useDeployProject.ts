@@ -50,13 +50,14 @@ export function useDeployProject() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  /** AWS 키를 등록한다. 프로젝트가 아직 없으면 먼저 만든다. */
+  /** AWS 키를 등록하거나 바꾼다. 프로젝트가 아직 없으면 먼저 만든다. */
   const registerAws = useCallback(async (input: { accessKeyId: string; secretAccessKey: string; region: string }, projectName: string) => {
     const current = state.phase === 'ready' ? state.project : null;
+    const currentAws = state.phase === 'ready' ? state.environments.find((environment) => environment.type === 'aws' && environment.isDefault) ?? null : null;
     const project = current ?? await createProject(projectName);
     storeId(project.id);
     try {
-      await registerAwsEnvironment(project.id, input);
+      await registerAwsEnvironment(project.id, input, currentAws);
     } finally {
       await refresh();
     }

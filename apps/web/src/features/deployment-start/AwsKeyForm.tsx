@@ -9,11 +9,18 @@ const regions = ['ap-northeast-2', 'ap-northeast-1', 'ap-northeast-3', 'us-east-
  * AWS 키 등록 폼. 입력한 키는 서버 시크릿 저장소로만 보내고, 등록이 끝나면 화면 상태에서 지운다.
  * 브라우저 저장소 · 로그 · URL에는 남기지 않는다.
  */
-export function AwsKeyForm({ onSubmit }: { onSubmit: (input: { accessKeyId: string; secretAccessKey: string; region: string }) => Promise<void> }) {
+export function AwsKeyForm({ onSubmit, initialRegion, onCancel }: {
+  onSubmit: (input: { accessKeyId: string; secretAccessKey: string; region: string }) => Promise<void>;
+  /** 키를 바꿀 때 — 지금 등록된 리전 */
+  initialRegion?: string | null;
+  onCancel?: () => void;
+}) {
   const { t } = useI18n();
   const [accessKeyId, setAccessKeyId] = useState('');
   const [secretAccessKey, setSecretAccessKey] = useState('');
-  const [region, setRegion] = useState<string>(regions[0]);
+  const [region, setRegion] = useState<string>(initialRegion ?? regions[0]);
+  // 목록에 없는 리전으로 등록돼 있었다면 그 값도 고를 수 있게 한다.
+  const regionOptions = initialRegion && !(regions as readonly string[]).includes(initialRegion) ? [initialRegion, ...regions] : regions;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const ids = { key: useId(), secret: useId(), region: useId() };
@@ -46,11 +53,14 @@ export function AwsKeyForm({ onSubmit }: { onSubmit: (input: { accessKeyId: stri
     <div className="aws-key-form__field">
       <label htmlFor={ids.region}>{t.deploy.aws.region}</label>
       <select id={ids.region} value={region} onChange={(event) => setRegion(event.target.value)} disabled={saving}>
-        {regions.map((value) => <option key={value} value={value}>{value}</option>)}
+        {regionOptions.map((value) => <option key={value} value={value}>{value}</option>)}
       </select>
     </div>
     <p className="aws-key-form__note">{t.deploy.aws.note}</p>
     {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.aws.saveError}</strong><br />{errorMessage(error, t, t.deploy.aws.saveError)}</div>}
-    <Keycap type="submit" variant="secondary" disabled={saving || !accessKeyId.trim() || !secretAccessKey.trim()}>{saving ? t.deploy.aws.saving : t.deploy.aws.save}</Keycap>
+    <div className="aws-key-form__actions">
+      <Keycap type="submit" variant="secondary" disabled={saving || !accessKeyId.trim() || !secretAccessKey.trim()}>{saving ? t.deploy.aws.saving : t.deploy.aws.save}</Keycap>
+      {onCancel && <Keycap variant="ghost" onClick={onCancel} disabled={saving}>{t.deploy.aws.cancel}</Keycap>}
+    </div>
   </form>;
 }

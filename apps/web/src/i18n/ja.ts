@@ -62,6 +62,10 @@ export const ja: Messages = {
       save: 'AWSキーを登録',
       saving: '登録しています…',
       saveError: 'AWSキーを登録できませんでした。',
+      change: 'キーを変更',
+      changeTitle: 'AWSキーの変更',
+      changeCopy: '新しいキーを保存すると、次のデプロイから適用されます。リージョンを変えると、新しいデプロイ環境がデフォルトとして登録されます。',
+      cancel: 'キャンセル',
     },
     readiness: {
       checking: 'デプロイ先の準備状況を確認しています…',
@@ -150,6 +154,7 @@ export const ja: Messages = {
     none: '結果なし',
     noneCopy: 'このデプロイには分析結果が残っていません。',
     irNone: '生成されたIRはありません。',
+    aiUsage: (tokensIn, tokensOut, cost) => `AI使用量 — 入力 ${tokensIn} · 出力 ${tokensOut} トークン · $${cost}`,
   },
   run: {
     titleActive: 'デプロイ中',

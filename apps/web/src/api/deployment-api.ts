@@ -225,20 +225,33 @@ async function saveSecret(projectId: string, name: string, value: string): Promi
 /**
  * AWS 키 등록 — 시크릿 2개 저장(API-28) 후 그 이름을 참조하는 기본 AWS 환경을 만든다(API-23).
  * 키 값은 시크릿 저장 요청에만 실리고, 환경에는 시크릿 이름과 리전만 들어간다.
+ * 이미 등록된 환경(current)이 있으면 키만 바꾼다. 리전이 달라졌을 때만 새 기본 환경을 만든다(이전 환경은 기본에서 내려간다).
  */
-export async function registerAwsEnvironment(projectId: string, input: { accessKeyId: string; secretAccessKey: string; region: string }): Promise<void> {
+export async function registerAwsEnvironment(projectId: string, input: { accessKeyId: string; secretAccessKey: string; region: string }, current?: EnvironmentSummary | null): Promise<void> {
   await saveSecret(projectId, AWS_ACCESS_KEY_ID_SECRET, input.accessKeyId);
   await saveSecret(projectId, AWS_SECRET_ACCESS_KEY_SECRET, input.secretAccessKey);
+  if (current && current.region === input.region) return;
+  const name = current ? `aws-${input.region}-${Date.now()}` : AWS_ENVIRONMENT_NAME;
   const response = await fetch(endpoint('/api/v1/environments'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      projectId: Number(projectId), name: AWS_ENVIRONMENT_NAME, type: 'aws', isDefault: true,
+      projectId: Number(projectId), name, type: 'aws', isDefault: true,
       awsConfig: { credentialsType: 'access_key', accessKeyIdSecretName: AWS_ACCESS_KEY_ID_SECRET, secretAccessKeySecretName: AWS_SECRET_ACCESS_KEY_SECRET, region: input.region },
     }),
     credentials: 'include',
   });
   await assertOk(response);
+}
+
+export interface DeploymentAiUsageResponse { totalTokenIn: number; totalTokenOut: number; totalCostUsd: number }
+
+/** API-32 — 이 배포에 쓴 AI 토큰 · 비용. */
+export async function getDeploymentAiUsage(deploymentId: string): Promise<DeploymentAiUsageResponse> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/ai-usage`), { credentials: 'include' });
+  const body = asRecord(await readJson(response), 'AI 사용량');
+  const number = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+  return { totalTokenIn: number(body.totalTokenIn), totalTokenOut: number(body.totalTokenOut), totalCostUsd: number(body.totalCostUsd) };
 }
 
 /** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */

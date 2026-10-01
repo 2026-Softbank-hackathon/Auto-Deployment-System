@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
-import { DeploymentApiError, getDeploymentAnalysisReport, getDeploymentIr, type DeploymentAnalysisReportResponse, type DeploymentIrResponse } from '../../api/deployment-api';
+import { DeploymentApiError, getDeploymentAiUsage, getDeploymentAnalysisReport, getDeploymentIr, type DeploymentAiUsageResponse, type DeploymentAnalysisReportResponse, type DeploymentIrResponse } from '../../api/deployment-api';
 
 function count(value: unknown): number { return Array.isArray(value) ? value.length : 0; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
@@ -23,6 +23,7 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
   const { t } = useI18n();
   const [report, setReport] = useState<DeploymentAnalysisReportResponse | null>(null);
   const [ir, setIr] = useState<DeploymentIrResponse | null>(null);
+  const [aiUsage, setAiUsage] = useState<DeploymentAiUsageResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -33,7 +34,10 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
         getDeploymentAnalysisReport(deploymentId),
         getDeploymentIr(deploymentId),
       ]);
+      // AI 사용량은 부가 정보라 실패해도 화면에 오류를 띄우지 않는다.
+      const usage = await getDeploymentAiUsage(deploymentId).catch(() => null);
       if (!active) return;
+      setAiUsage(usage);
       setLoaded(true);
       if (reportResult.status === 'fulfilled') setReport(reportResult.value);
       if (irResult.status === 'fulfilled') setIr(irResult.value);
@@ -58,6 +62,7 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
     {error !== null && <div className="notice error"><strong>{t.analysis.error}</strong><br />{errorMessage(error, t, t.errors.analysisFailed)}</div>}
     {!report && error === null && <p>{missing ? t.analysis.noneCopy : t.analysis.pending}</p>}
     {report && <><div className="summary-grid"><div><small>{t.analysis.stack}</small><strong>{stack.length ? stack.join(', ') : t.analysis.checking}</strong></div><div><small>{t.analysis.services}</small><strong>{t.analysis.count(count(report.services))}</strong></div><div><small>{t.analysis.resources}</small><strong>{t.analysis.count(count(report.resources))}</strong></div><div><small>{t.analysis.warnings}</small><strong>{t.analysis.cases(count(report.warnings))}</strong></div></div>{reused && <p className="analysis-reused">{t.analysis.reused}</p>}{warnings.length > 0 && <div className="notice analysis-warnings"><strong>{t.analysis.riskTitle}</strong><ul>{warnings.map((warning, index) => <li key={`${warning.code}-${warning.path ?? index}`}><span className="analysis-warnings__label">{t.analysis.warningLabels[warning.code] ?? warning.code}</span><span>{warning.message}</span>{warning.path && <code>{warning.path}</code>}</li>)}</ul></div>}{count(report.unresolved) > 0 && <p className="muted-copy">{t.analysis.unresolved(count(report.unresolved))}</p>}</>}
+    {aiUsage && aiUsage.totalTokenIn + aiUsage.totalTokenOut > 0 && <p className="muted-copy analysis-ai-usage">{t.analysis.aiUsage(aiUsage.totalTokenIn.toLocaleString(t.locale), aiUsage.totalTokenOut.toLocaleString(t.locale), aiUsage.totalCostUsd.toFixed(4))}</p>}
     <details className="technical-details"><summary>{t.analysis.irToggle}</summary>{ir ? <pre>{printable(ir.ir)}</pre> : <p>{finished ? t.analysis.irNone : t.analysis.irPending}</p>}</details>
   </section>;
 }

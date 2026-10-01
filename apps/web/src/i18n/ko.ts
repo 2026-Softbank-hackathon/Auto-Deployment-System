@@ -60,6 +60,10 @@ export const ko = {
       save: 'AWS 키 등록',
       saving: '등록하고 있어요…',
       saveError: 'AWS 키를 등록하지 못했어요.',
+      change: '키 변경',
+      changeTitle: 'AWS 키 변경',
+      changeCopy: '새 키를 저장하면 다음 배포부터 적용돼요. 리전을 바꾸면 새 배포 환경이 기본으로 등록돼요.',
+      cancel: '취소',
     },
     readiness: {
       checking: '배포할 곳 준비 상태를 확인하고 있어요…',
@@ -148,6 +152,7 @@ export const ko = {
     none: '결과 없음',
     noneCopy: '이 배포에는 분석 결과가 남아 있지 않아요.',
     irNone: '생성된 IR이 없어요.',
+    aiUsage: (tokensIn: string, tokensOut: string, cost: string) => `AI 사용량 — 입력 ${tokensIn} · 출력 ${tokensOut} 토큰 · $${cost}`,
   },
   run: {
     titleActive: '배포 중',

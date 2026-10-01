@@ -314,4 +314,6 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .aws-key-form__field input:focus-visible, .aws-key-form__field select:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
 .aws-key-form__note, .aws-key-form > .notice { grid-column: 1 / -1; }
 .aws-key-form__note { font-size: 13px; color: var(--ink-soft); }
-.aws-key-form > button { justify-self: start; }
+
+.deploy-readiness__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.aws-key-form__actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }

@@ -526,3 +526,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 /* 목록 위에 뜨는 확인 줄 (배포 취소 등) */
 .selection-bar { position: sticky; top: 8px; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; font-weight: 700; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
 .selection-bar > span { margin-right: auto; }
+
+/* 진행 화면의 배포 취소 */
+.run-cancel { display: grid; justify-items: center; gap: 8px; }
+.run-cancel__confirm { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink); }
+.run-cancel__error { margin: 0; font-size: 14px; color: var(--brick-text); }

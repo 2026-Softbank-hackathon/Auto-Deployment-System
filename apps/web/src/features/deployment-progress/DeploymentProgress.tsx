@@ -16,6 +16,7 @@ import { clearReview, reviewRequested } from './review-flag';
 import { failureKind, fixableByAwsKey } from './failure-reason';
 import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
+import { CancelDeployment } from './CancelDeployment';
 import { HealthProgress } from './HealthProgress';
 
 type ErrorState = { cause: unknown; fallback: 'statusFailed' | 'logsFailed' } | null;
@@ -281,6 +282,8 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
       <figure className="run-scene"><DeployScene view={view} /></figure>
 
       <HealthProgress deploymentId={deploymentId} status={currentStatus} />
+
+      {view.outcome === 'active' && <CancelDeployment deploymentId={deploymentId} onCancelled={() => void refresh()} />}
 
       {view.outcome === 'failed' && <div className="notice error run-failure" role="alert">
         <strong>{t.run.failedCause}</strong>

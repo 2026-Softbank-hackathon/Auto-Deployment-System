@@ -1,18 +1,19 @@
 /**
  * packages/analyzer/src/ai/fill-unresolved.ts
  *
- * 핵심: unresolved 배열 → tool_use 결과 → 필드 채움 → IR 재검증.
+ * 핵심: unresolved 배열 → 구조화 출력(JSON) → 필드 채움 → IR 재검증.
  *
- * 근거: D-47 (AI 빈칸 채우기), D-50 (시크릿 값 미전송), CST-01 (사용량 기록)
+ * 근거: D-47 (AI 빈칸 채우기), D-50 (시크릿 값 미전송), CST-01 (사용량 기록),
+ *       D-56 (Bedrock 전환 · Claude Opus 5.5 — 강제 tool_choice 대신 구조화 출력)
  */
 
 import { IrSchema } from "@camellia/ir-schema";
 import type { Ir } from "@camellia/ir-schema";
 import type { AnalysisResult, UnresolvedField } from "../types.js";
-import { createClient } from "./anthropic-client.js";
-import type { AnthropicLike } from "./anthropic-client.js";
+import { createClient, resolveAiProvider, resolveModel } from "./anthropic-client.js";
+import type { AiProvider, AnthropicLike } from "./anthropic-client.js";
 import { getSystemBlocksWithCache } from "./prompts.js";
-import { FILL_UNRESOLVED_TOOL, isFillUnresolvedInput } from "./tools.js";
+import { FILL_UNRESOLVED_SCHEMA, isFillUnresolvedInput } from "./tools.js";
 import { buildTokenUsage } from "./tokens.js";
 import type { TokenUsage } from "./tokens.js";
 import { redactPayload } from "./redact.js";
@@ -24,9 +25,9 @@ import { redactPayload } from "./redact.js";
 export type FillOptions = {
   /** 주입 가능한 클라이언트 (테스트용). 지정 시 apiKey 무시. */
   client?: AnthropicLike;
-  /** 명시적 API 키. 미지정 시 env ANTHROPIC_API_KEY 사용. */
+  /** 명시적 Claude API 키 (anthropic 제공자 강제). 미지정 시 env(AI_PROVIDER 등)로 결정. */
   apiKey?: string;
-  /** 사용할 모델. 기본값: "claude-opus-4-5" */
+  /** 사용할 모델. 기본값: 제공자별 Claude Opus 5.5 (AI_MODEL_ANALYZE 로 덮어쓰기) */
   model?: string;
   /** 실패 시 최대 재시도 횟수. 기본값: 2 */
   maxRetries?: number;
@@ -55,7 +56,7 @@ export type AiFillResult = {
   still_unresolved: UnresolvedField[];
   /** 이 세션의 AI 호출 사용량 목록 (CST-01) */
   usage: TokenUsage[];
-  /** API key 없음 등으로 AI 단계를 건너뛴 경우 true */
+  /** AI 비활성 · 호출 실패 · 거절 등으로 AI 결과를 쓰지 못한 경우 true */
   skipped?: boolean;
   /** skip 이유 */
   skip_reason?: string;
@@ -65,8 +66,17 @@ export type AiFillResult = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MODEL = "claude-opus-4-5";
 const DEFAULT_MAX_RETRIES = 2;
+/**
+ * Opus 5.5 는 thinking 을 끌 수 없고 thinking 토큰도 max_tokens 에 포함된다.
+ * 답 자체는 수백 토큰이지만 생각할 여유를 두고, 스트리밍 없이 안전한 상한(~16K)으로 둔다.
+ */
+const MAX_TOKENS = 16000;
+/**
+ * 몇 개 필드를 규칙 기반 힌트로 채우는 짧은 추출 작업 → low.
+ * (Opus 5.5 기본값은 medium. low 가 지연 · 비용이 가장 작고, 결과는 IrSchema 로 다시 검증한다)
+ */
+const EFFORT = "low" as const;
 const BACKOFF_BASE_MS = 500;
 
 // ---------------------------------------------------------------------------
@@ -76,7 +86,7 @@ const BACKOFF_BASE_MS = 500;
 /**
  * AnalysisResult의 unresolved 필드를 AI로 채운다.
  *
- * API key가 없으면 skipped=true로 즉시 반환한다.
+ * AI 제공자가 없으면(AI_PROVIDER · ANTHROPIC_API_KEY 모두 미설정) skipped=true로 즉시 반환한다.
  */
 export async function fillUnresolved(
   analysis: AnalysisResult,
@@ -84,14 +94,12 @@ export async function fillUnresolved(
 ): Promise<AiFillResult> {
   const ir_before = analysis.ir_draft;
 
-  // API key 없으면 skip
-  const hasKey =
-    opts.client !== undefined ||
-    opts.apiKey !== undefined ||
-    (process.env["ANTHROPIC_API_KEY"] !== undefined &&
-      process.env["ANTHROPIC_API_KEY"] !== "");
+  // 제공자 결정: 주입 client > 명시 apiKey(anthropic) > env
+  const envProvider = resolveAiProvider();
+  const provider: AiProvider | null =
+    opts.apiKey !== undefined ? "anthropic" : envProvider.provider;
 
-  if (!hasKey) {
+  if (opts.client === undefined && provider === null) {
     return {
       ir_before,
       ir_after: ir_before,
@@ -101,7 +109,7 @@ export async function fillUnresolved(
       still_unresolved: analysis.unresolved,
       usage: [],
       skipped: true,
-      skip_reason: "no ANTHROPIC_API_KEY",
+      skip_reason: envProvider.reason ?? "AI disabled",
     };
   }
 
@@ -124,7 +132,7 @@ export async function fillUnresolved(
     client = opts.client;
   } else {
     try {
-      client = await createClient({ apiKey: opts.apiKey });
+      client = await createClient({ provider: provider ?? undefined, apiKey: opts.apiKey });
     } catch (err) {
       return {
         ir_before,
@@ -135,12 +143,12 @@ export async function fillUnresolved(
         still_unresolved: analysis.unresolved,
         usage: [],
         skipped: true,
-        skip_reason: `Failed to load @anthropic-ai/sdk: ${String(err)}`,
+        skip_reason: `Failed to create Claude client: ${String(err)}`,
       };
     }
   }
 
-  const model = opts.model ?? DEFAULT_MODEL;
+  const model = opts.model ?? resolveModel("analyze", provider ?? "anthropic");
   const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
   const usageList: TokenUsage[] = [];
 
@@ -148,6 +156,8 @@ export async function fillUnresolved(
   let irDraft: Partial<Ir> = JSON.parse(JSON.stringify(ir_before));
   const resolved: ResolvedField[] = [];
   let lastError: unknown = null;
+  // refusal · max_tokens 로 멈춘 경우 이유 (같은 요청 재시도는 의미가 없어 루프를 끝낸다)
+  let stopNote: string | null = null;
 
   // Build user payload: redacted service/resource info for the prompt
   const userPayload = {
@@ -179,10 +189,13 @@ export async function fillUnresolved(
     try {
       const response = await client.messages.create({
         model,
-        max_tokens: 1024,
+        max_tokens: MAX_TOKENS,
         system: getSystemBlocksWithCache(),
-        tools: [FILL_UNRESOLVED_TOOL],
-        tool_choice: { type: "any" },
+        // 강제 tool_choice(any/tool)는 Opus 5.5 에서 400 → JSON 만 필요하므로 구조화 출력
+        output_config: {
+          effort: EFFORT,
+          format: { type: "json_schema", schema: FILL_UNRESOLVED_SCHEMA },
+        },
         messages: [
           {
             role: "user",
@@ -207,18 +220,29 @@ export async function fillUnresolved(
       usageList.push(usageEntry);
       opts.onUsage?.(usageEntry);
 
-      // Extract tool_use blocks
-      const toolUseBlock = response.content.find(
-        (block): block is Extract<typeof block, { type: "tool_use" }> =>
-          block.type === "tool_use"
-      );
-
-      if (!toolUseBlock || !isFillUnresolvedInput(toolUseBlock.input)) {
-        // No tool use returned — treat as empty fill, exit loop
+      // stop_reason 을 content 보다 먼저 본다: refusal 은 content 가 비었거나 일부만 있고,
+      // max_tokens 는 JSON 이 중간에 잘린다. 둘 다 같은 요청 재시도로는 나아지지 않는다.
+      if (response.stop_reason === "refusal") {
+        stopNote = `model stopped with refusal (category: ${response.stop_details?.category ?? "none"})`;
+        break;
+      }
+      if (response.stop_reason === "max_tokens") {
+        stopNote = `model stopped with max_tokens (${MAX_TOKENS}) before finishing the JSON`;
         break;
       }
 
-      const fields = toolUseBlock.input.fields;
+      // 구조화 출력: JSON 은 text 블록에 온다 (앞에 thinking 블록이 올 수 있어 type 으로 찾는다)
+      const textBlock = response.content.find(
+        (block): block is Extract<typeof block, { type: "text" }> => block.type === "text"
+      );
+      const parsed = textBlock ? parseJson(textBlock.text) : undefined;
+
+      if (!isFillUnresolvedInput(parsed)) {
+        // 기대한 JSON 이 아님 — 빈 채우기로 보고 종료
+        break;
+      }
+
+      const fields = parsed.fields;
 
       // Apply fields to ir draft
       const newResolved: ResolvedField[] = [];
@@ -283,6 +307,20 @@ export async function fillUnresolved(
         };
       }
     }
+  }
+
+  if (stopNote !== null && resolved.length === 0) {
+    return {
+      ir_before,
+      ir_after: ir_before,
+      ir_valid_after: analysis.ir_valid,
+      ir_errors_after: analysis.ir_errors,
+      resolved: [],
+      still_unresolved: analysis.unresolved,
+      usage: usageList,
+      skipped: true,
+      skip_reason: stopNote,
+    };
   }
 
   // Validate final state
@@ -361,6 +399,14 @@ function computeStillUnresolved(
 ): UnresolvedField[] {
   const resolvedPaths = new Set(resolved.map((r) => r.path));
   return unresolved.filter((u) => !resolvedPaths.has(u.path));
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function sleep(ms: number): Promise<void> {

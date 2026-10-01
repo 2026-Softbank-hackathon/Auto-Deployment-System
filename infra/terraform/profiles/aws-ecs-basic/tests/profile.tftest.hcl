@@ -35,6 +35,11 @@ run "plans_http_app_with_immutable_digest" {
     condition     = jsondecode(aws_ecs_task_definition.app.container_definitions)[0].image == var.container_image
     error_message = "The ECS task definition must use the exact immutable image digest."
   }
+
+  assert {
+    condition     = aws_ecs_service.app.wait_for_steady_state
+    error_message = "Terraform must wait for the ECS service to reach steady state before Verify starts."
+  }
 }
 
 run "rejects_mutable_image_reference" {

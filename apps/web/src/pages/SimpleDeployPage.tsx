@@ -7,7 +7,8 @@ import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
-const demoTargetProfile = import.meta.env.VITE_DEMO_TARGET_PROFILE ?? 'aws-ecs-basic';
+/** 배포 대상 벤더(aws | onprem). 프로필은 서버가 벤더에서 고른다. */
+const demoTarget = import.meta.env.VITE_DEMO_TARGET ?? 'aws';
 
 function automaticProjectName(fileName: string): string {
   const baseName = fileName.replace(/\.zip$/i, '').trim() || 'deployment';
@@ -27,7 +28,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
     setError(null);
     try {
       const project = await createProject(automaticProjectName(file.name));
-      const deployment = await createDeployment(file, project.id, demoTargetProfile);
+      const deployment = await createDeployment(file, project.id, demoTarget);
       onStarted(deployment.deploymentId);
     } catch (requestError) {
       setError(requestError);

@@ -249,3 +249,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .stage-chip + .stage-chip { margin-left: 0; }
   .stage-chip + .stage-chip::before { display: none; }
 }
+
+/* 좁은 화면에서는 장면 안 장치 이름표가 3px 안팎으로 줄어 읽을 수 없다. 단계 이름은 위쪽 칩이 대신한다. */
+@media (max-width: 760px) {
+  .scene-label { display: none; }
+}

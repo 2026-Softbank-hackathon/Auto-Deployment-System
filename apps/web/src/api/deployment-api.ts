@@ -62,13 +62,13 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
 
 /**
  * Current backend contract for the P0 demo upload endpoint.
- * The target profile remains frontend configuration and the project is created automatically.
+ * `target` is the vendor (aws | onprem); the server resolves it to a profile. The project is created automatically.
  */
-export async function createDeployment(source: File, projectId: string, targetProfile: string): Promise<CreateDeploymentResponse> {
+export async function createDeployment(source: File, projectId: string, target: string): Promise<CreateDeploymentResponse> {
   const form = new FormData();
   form.append('source', source);
   form.append('project_id', projectId);
-  form.append('target', targetProfile);
+  form.append('target', target);
 
   const response = await fetch(endpoint('/api/v1/deployments'), {
     method: 'POST',

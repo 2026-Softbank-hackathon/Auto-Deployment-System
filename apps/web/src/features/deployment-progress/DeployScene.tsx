@@ -48,7 +48,7 @@ export function DeployScene({ view }: { view: DeploymentStatusView }) {
   const label = fallen ? t.run.sceneFailed
     : view.outcome === 'success' ? t.run.sceneSucceeded
       : view.outcome !== 'active' ? t.run.sceneStopped
-        : view.waiting ? t.run.sceneWaiting(stageName) : t.run.sceneActive(stageName);
+        : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName) : t.run.sceneActive(stageName);
 
   const koroPosition = { transform: `translate(${cx - KORO_SIZE / 2}px, ${cy - KORO_SIZE / 2}px)` } as CSSProperties;
 

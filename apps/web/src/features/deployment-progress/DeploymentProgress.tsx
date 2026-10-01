@@ -58,7 +58,7 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
       const current = view.outcome === 'active' && view.stage === index;
       const state = done ? 'done' : current ? 'current' : 'pending';
       // 실패·중단은 백엔드가 멈춘 단계를 주지 않는다(stage = null). 어디까지 갔는지 지어내지 않고 단계 이름만 보여 준다.
-      const note = view.stage === null ? null : done ? t.run.chipDone : current ? (view.waiting ? t.run.chipWaiting : t.run.chipCurrent) : t.run.chipPending;
+      const note = view.stage === null ? null : done ? t.run.chipDone : current ? (view.waiting === 'approval' ? t.run.chipWaiting : view.waiting === 'queue' ? t.run.chipQueued : t.run.chipCurrent) : t.run.chipPending;
       return <li key={stage} className={`stage-chip is-${state}`} aria-current={current ? 'step' : undefined}>
         <GadgetIcon kind={stage} size={18} />
         <span>{t.stages[stage]}</span>

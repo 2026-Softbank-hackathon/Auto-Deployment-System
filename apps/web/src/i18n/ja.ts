@@ -159,7 +159,7 @@ export const ja: Messages = {
     onprem: {
       title: 'オンプレミス接続',
       copy: 'オンプレミスサーバーにもデプロイする場合は、サーバーを登録してください。AWSだけを使う場合は省略できます。',
-      requirements: ['Intel Mac (x86_64)', 'Node.js 20以上', 'Docker · Docker Compose v2', 'cloudflared'],
+      requirements: ['macOS (Intel · Apple Silicon)', 'Node.js 20以上', 'Docker · Docker Compose v2', 'cloudflared'],
       hostLabel: 'ホスト名',
       register: 'サーバーを登録',
       hostError: 'オンプレミスサーバーを登録できませんでした。',

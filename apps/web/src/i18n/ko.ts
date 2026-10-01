@@ -157,7 +157,7 @@ export const ko = {
     onprem: {
       title: '온프레미스 연결',
       copy: '온프레미스 서버에도 배포하려면 서버를 등록해 주세요. AWS만 쓸 거면 건너뛰어도 돼요.',
-      requirements: ['Intel Mac (x86_64)', 'Node.js 20 이상', 'Docker · Docker Compose v2', 'cloudflared'],
+      requirements: ['macOS (Intel · Apple Silicon)', 'Node.js 20 이상', 'Docker · Docker Compose v2', 'cloudflared'],
       hostLabel: '호스트 이름',
       register: '서버 등록',
       hostError: '온프레미스 서버를 등록하지 못했어요.',

@@ -87,9 +87,35 @@ export async function handleAnalyze(
   log?.info({ deployment_id, source_storage_key }, "analyze job started");
   const stepLog = createStepLogger(deps, deployment_id, "analyze");
 
-  // 1. 상태 전이: received → analyzing
-  await transitionTo(pool, deployment_id, "analyzing");
-  await notifier?.notify(deployment_id, "state_changed", { status: "analyzing" });
+  // 1. 상태 전이: received → analyzing (재진입 처리 — pg-boss retry 등).
+  //    - received  : 정상 전이 + SSE 알림
+  //    - analyzing : 재진입 (worker crash·job retry) — 로그만, 분석 계속 (idempotent)
+  //    - 그 외     : 이미 다른 상태로 진행됨 → 조기 return (skip)
+  const currentRes = await pool.query<{ status: string }>(
+    "SELECT status FROM deployments WHERE id = $1",
+    [deployment_id],
+  );
+  const currentStatus = currentRes.rows[0]?.status;
+  if (currentStatus === undefined) {
+    throw new Error("ANALYZE_DEPLOYMENT_NOT_FOUND");
+  }
+  if (currentStatus === "received") {
+    await transitionTo(pool, deployment_id, "analyzing");
+    await notifier?.notify(deployment_id, "state_changed", {
+      status: "analyzing",
+    });
+  } else if (currentStatus === "analyzing") {
+    log?.info(
+      { deployment_id, status: currentStatus },
+      "analyze reentry — already analyzing, continuing",
+    );
+  } else {
+    log?.warn(
+      { deployment_id, status: currentStatus },
+      "analyze skip — deployment already past analyzing",
+    );
+    return;
+  }
   await stepLog.line("분석 시작");
 
   // 2. ANL-08 캐시 조회: 같은 sha256 을 가진 기존 배포의 분석 결과 재사용

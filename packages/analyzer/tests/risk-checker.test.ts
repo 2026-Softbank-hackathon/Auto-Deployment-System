@@ -94,4 +94,13 @@ describe("risk-checker (ANL-06)", () => {
     const res = await checkRisks(dir);
     expect(res.warnings).toEqual([]);
   });
+
+  it("하위 디렉터리 파일 경고 경로는 OS 와 무관하게 / 구분", async () => {
+    await writeFiles(dir, {
+      "src/config.js": `const key = "AKIAIOSFODNN7EXAMPLE";\n`,
+      "docker/Dockerfile": `FROM node:20\nCMD ["node","app.js"]\n`,
+    });
+    const res = await checkRisks(dir);
+    expect(res.warnings.map((w) => w.path).sort()).toEqual(["docker/Dockerfile", "src/config.js:1"]);
+  });
 });

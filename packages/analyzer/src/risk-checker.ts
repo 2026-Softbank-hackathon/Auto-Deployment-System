@@ -10,10 +10,10 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { relative } from "node:path";
 import fg from "fast-glob";
 
 import type { Warning } from "./types.js";
+import { relativePosix as relative } from "./paths.js";
 
 // 하드코딩 시크릿 정규식. 값은 캡처하지 않고 위치·키 이름만 남긴다.
 const SECRET_PATTERNS: Array<{ code: string; label: string; re: RegExp }> = [

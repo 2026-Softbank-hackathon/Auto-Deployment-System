@@ -15,6 +15,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import fg from "fast-glob";
 import type { UnresolvedField, Warning } from "../types.js";
+import { relativePosix, toPosix } from "../paths.js";
 
 export type NodeDetectResult = {
   detected: boolean;
@@ -109,7 +110,7 @@ export async function detectNodejs(serviceDir: string): Promise<NodeDetectResult
   // Also check the main file if specified
   if (typeof pkg["main"] === "string") {
     const mainAbs = join(serviceDir, pkg["main"] as string);
-    if (!entryFiles.includes(mainAbs)) {
+    if (!entryFiles.includes(toPosix(mainAbs))) {
       entryFiles.push(mainAbs);
     }
   }
@@ -119,7 +120,7 @@ export async function detectNodejs(serviceDir: string): Promise<NodeDetectResult
     const detected = await scanPortListen(file);
     if (detected !== undefined) {
       port = detected;
-      const rel = file.replace(serviceDir + "/", "");
+      const rel = relativePosix(serviceDir, file);
       detectedFrom.push(`${rel} (.listen(${port}))`);
       break;
     }

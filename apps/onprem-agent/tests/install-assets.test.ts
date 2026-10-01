@@ -9,12 +9,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 const installRoot = join(process.cwd(), "install", "macos");
 const repositoryRoot = join(process.cwd(), "..", "..");
+const serviceScriptPath = join(installRoot, "service.sh");
 const execFileAsync = promisify(execFile);
 const temporaryDirectories: string[] = [];
 
@@ -66,13 +67,85 @@ describe("macOS 설치 자산", () => {
   });
 
   it("서비스 스크립트는 사용자 LaunchAgent만 관리한다", async () => {
-    const script = await readFile(join(installRoot, "service.sh"), "utf8");
+    const script = await readFile(serviceScriptPath, "utf8");
 
     expect(script).toContain('DOMAIN="gui/$(id -u)"');
     expect(script).toContain('launchctl bootstrap "$DOMAIN" "$PLIST_PATH"');
     expect(script).toContain('launchctl bootout "$DOMAIN/$LABEL"');
     expect(script).not.toContain("LaunchDaemons");
     expect(script).not.toContain("sudo");
+  });
+
+  it("disabled 상태에서도 enable 후 bootstrap하여 서비스를 시작한다", async () => {
+    const fixture = await createServiceFixture();
+    await writeFile(fixture.disabledPath, "disabled\n");
+
+    await execFileAsync("sh", [serviceScriptPath, "start"], {
+      env: fixture.environment,
+    });
+
+    const calls = (await readFile(fixture.logPath, "utf8")).trim().split("\n");
+    const enableIndex = calls.indexOf(
+      "enable gui/501/com.camellia.onprem-agent",
+    );
+    const bootstrapIndex = calls.findIndex((call) =>
+      call.startsWith("bootstrap gui/501 "),
+    );
+    expect(enableIndex).toBeGreaterThanOrEqual(0);
+    expect(bootstrapIndex).toBeGreaterThan(enableIndex);
+  });
+
+  it("stop은 bootout만 수행하고 disabled 상태를 남기지 않는다", async () => {
+    const fixture = await createServiceFixture();
+    await writeFile(fixture.loadedPath, "loaded\n");
+
+    await execFileAsync("sh", [serviceScriptPath, "stop"], {
+      env: fixture.environment,
+    });
+
+    const calls = (await readFile(fixture.logPath, "utf8")).trim().split("\n");
+    expect(calls.map((call) => call.split(" ")[0])).toEqual([
+      "bootout",
+      "print",
+      "print",
+    ]);
+    expect(calls).not.toContain("disable gui/501/com.camellia.onprem-agent");
+  });
+
+  it("restart는 로드된 서비스를 kickstart한다", async () => {
+    const fixture = await createServiceFixture();
+    await writeFile(fixture.loadedPath, "loaded\n");
+
+    await execFileAsync("sh", [serviceScriptPath, "restart"], {
+      env: fixture.environment,
+    });
+
+    const calls = (await readFile(fixture.logPath, "utf8")).trim().split("\n");
+    expect(calls.map((call) => call.split(" ")[0])).toEqual([
+      "print",
+      "kickstart",
+    ]);
+  });
+
+  it("stop 직후 start는 launchd 정리가 끝날 때까지 bootstrap을 재시도한다", async () => {
+    const fixture = await createServiceFixture();
+    await writeFile(fixture.loadedPath, "loaded\n");
+
+    await execFileAsync("sh", [serviceScriptPath, "stop"], {
+      env: fixture.environment,
+    });
+    await writeFile(fixture.bootstrapFailuresPath, "1\n");
+    await execFileAsync("sh", [serviceScriptPath, "start"], {
+      env: fixture.environment,
+    });
+
+    const calls = (await readFile(fixture.logPath, "utf8")).trim().split("\n");
+    expect(calls.filter((call) => call.startsWith("bootstrap "))).toHaveLength(
+      2,
+    );
+    expect(calls.at(-1)).toBe(
+      "kickstart -k gui/501/com.camellia.onprem-agent",
+    );
   });
 
   it("제거 시 고정된 설치 경로만 휴지통으로 이동하고 로그를 보존한다", async () => {
@@ -82,6 +155,7 @@ describe("macOS 설치 자산", () => {
     expect(script).toContain('TRASH_ROOT="$HOME/.Trash"');
     expect(script).toContain('CREDENTIAL_PATH="$INSTALL_ROOT/credentials.json"');
     expect(script).toContain('rm -f "$CREDENTIAL_PATH"');
+    expect(script).toContain('launchctl disable "$DOMAIN/$LABEL"');
     expect(script).toContain('mv "$INSTALL_ROOT" "$TRASH_TARGET"');
     expect(script).not.toContain("rm -rf");
     expect(script).not.toContain("CAMELLIA_AGENT_INSTALL_ROOT");
@@ -216,4 +290,104 @@ async function createReleaseFixture(
   await chmod(join(binPath, "curl"), 0o755);
 
   return { root, binPath, releasePath };
+}
+
+async function createServiceFixture() {
+  const root = await mkdtemp(join(tmpdir(), "camellia-agent-service-"));
+  temporaryDirectories.push(root);
+  const homePath = join(root, "home");
+  const binPath = join(root, "bin");
+  const logPath = join(root, "launchctl.log");
+  const disabledPath = join(root, "disabled");
+  const loadedPath = join(root, "loaded");
+  const pendingBootoutPath = join(root, "pending-bootout");
+  const bootstrapFailuresPath = join(root, "bootstrap-failures");
+  const stagedPlistPath = join(
+    homePath,
+    "Library",
+    "Application Support",
+    "Camellia",
+    "onprem-agent",
+    "com.camellia.onprem-agent.plist",
+  );
+
+  await mkdir(binPath, { recursive: true });
+  await mkdir(join(homePath, "Library", "LaunchAgents"), { recursive: true });
+  await mkdir(dirname(stagedPlistPath), { recursive: true });
+  await writeFile(stagedPlistPath, "fixture plist\n");
+  await writeFile(logPath, "");
+  await writeFile(
+    join(binPath, "id"),
+    '#!/bin/sh\nif [ "${1:-}" = "-u" ]; then echo 501; else exit 1; fi\n',
+  );
+  await chmod(join(binPath, "id"), 0o755);
+  await writeFile(
+    join(binPath, "launchctl"),
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "$FAKE_LAUNCHCTL_LOG"
+case "$1" in
+  print)
+    if [ -f "$FAKE_LAUNCHCTL_PENDING_BOOTOUT" ]; then
+      rm -f "$FAKE_LAUNCHCTL_PENDING_BOOTOUT" "$FAKE_LAUNCHCTL_LOADED"
+      exit 0
+    fi
+    test -f "$FAKE_LAUNCHCTL_LOADED"
+    ;;
+  bootout)
+    if [ -f "$FAKE_LAUNCHCTL_LOADED" ]; then
+      : > "$FAKE_LAUNCHCTL_PENDING_BOOTOUT"
+    fi
+    ;;
+  disable)
+    : > "$FAKE_LAUNCHCTL_DISABLED"
+    ;;
+  enable)
+    rm -f "$FAKE_LAUNCHCTL_DISABLED"
+    ;;
+  bootstrap)
+    if [ -f "$FAKE_LAUNCHCTL_DISABLED" ]; then
+      echo "Bootstrap failed: 5: Input/output error" >&2
+      exit 5
+    fi
+    if [ -f "$FAKE_LAUNCHCTL_BOOTSTRAP_FAILURES" ]; then
+      COUNT=$(cat "$FAKE_LAUNCHCTL_BOOTSTRAP_FAILURES")
+      if [ "$COUNT" -gt 0 ]; then
+        printf '%s\\n' "$((COUNT - 1))" > "$FAKE_LAUNCHCTL_BOOTSTRAP_FAILURES"
+        echo "Bootstrap failed: 5: Input/output error" >&2
+        exit 5
+      fi
+    fi
+    if [ -f "$FAKE_LAUNCHCTL_PENDING_BOOTOUT" ]; then
+      echo "Bootstrap failed: 5: Input/output error" >&2
+      exit 5
+    fi
+    : > "$FAKE_LAUNCHCTL_LOADED"
+    ;;
+  kickstart)
+    test -f "$FAKE_LAUNCHCTL_LOADED"
+    ;;
+esac
+`,
+  );
+  await chmod(join(binPath, "launchctl"), 0o755);
+  await writeFile(join(binPath, "sleep"), "#!/bin/sh\nexit 0\n");
+  await chmod(join(binPath, "sleep"), 0o755);
+
+  return {
+    bootstrapFailuresPath,
+    disabledPath,
+    loadedPath,
+    logPath,
+    environment: {
+      ...process.env,
+      HOME: homePath,
+      PATH: `${binPath}:${process.env.PATH ?? ""}`,
+      FAKE_LAUNCHCTL_LOG: logPath,
+      FAKE_LAUNCHCTL_DISABLED: disabledPath,
+      FAKE_LAUNCHCTL_LOADED: loadedPath,
+      FAKE_LAUNCHCTL_PENDING_BOOTOUT: pendingBootoutPath,
+      FAKE_LAUNCHCTL_BOOTSTRAP_FAILURES: bootstrapFailuresPath,
+    },
+  };
 }

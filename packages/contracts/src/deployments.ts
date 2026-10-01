@@ -236,6 +236,28 @@ export const DiagnosisSchema = z
   .strict();
 export type Diagnosis = z.infer<typeof DiagnosisSchema>;
 
+// ── POST /deployments/:id/redeploy ───────────────────────────────────────────
+
+/**
+ * 이전에 올린 소스(IR 포함)를 재사용해 바로 빌드부터 재배포한다.
+ * `targetEnvironmentId` 를 주면 해당 환경으로 override (이슈 #140 과 공유).
+ */
+export const RedeployBodySchema = z.object({
+  /** 재배포할 환경 ID override. 없으면 소스 deployment 의 환경 그대로. */
+  targetEnvironmentId: IdStringSchema.optional(),
+});
+export type RedeployBody = z.input<typeof RedeployBodySchema>;
+
+export const RedeployResponseSchema = z
+  .object({
+    /** 새로 생성된 deployment ID */
+    deploymentId: IdStringSchema,
+    status: z.literal("queued"),
+    eventsUrl: z.string(),
+  })
+  .strict();
+export type RedeployResponse = z.infer<typeof RedeployResponseSchema>;
+
 // ── GET /deployments/:id/ai-usage ─────────────────────────────────────────────
 
 export const AiUsageBreakdownSchema = z

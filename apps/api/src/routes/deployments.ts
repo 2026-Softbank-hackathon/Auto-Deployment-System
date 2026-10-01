@@ -5,7 +5,7 @@
 
 import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
-import { TARGET_VENDORS, type TargetVendor } from "@camellia/contracts";
+import { TARGET_VENDORS, type TargetVendor, RedeployBodySchema } from "@camellia/contracts";
 import { DeploymentService } from "../services/deployment-service.js";
 import { resolveProfile } from "../services/profile-resolver.js";
 import { idParams } from "../plugins/swagger.js";
@@ -101,6 +101,38 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");
     }
     return svc.get(id);
+  });
+
+  // POST /deployments/:id/redeploy
+  fastify.post<{ Params: { id: string }; Body: unknown }>("/:id/redeploy", {
+    schema: {
+      tags: ["deployments"],
+      summary: "이전 소스 · IR 그대로 재배포 (분석 · target 승인 skip)",
+      params: idParams,
+      body: {
+        type: "object",
+        properties: {
+          targetEnvironmentId: { type: "string", pattern: "^\\d+$", description: "환경 override (없으면 소스 배포 환경 그대로)" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");
+    }
+
+    const parsed = RedeployBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new ApiError(400, "VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "잘못된 요청");
+    }
+
+    const targetEnvironmentId = parsed.data.targetEnvironmentId
+      ? Number(parsed.data.targetEnvironmentId)
+      : undefined;
+
+    const result = await svc.redeploy(id, { targetEnvironmentId });
+    return reply.status(202).send(result);
   });
 };
 

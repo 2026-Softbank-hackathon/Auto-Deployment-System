@@ -32,6 +32,8 @@ export const ja: Messages = {
     resultFailed: 'デプロイ結果を読み込めませんでした。',
     logsFailed: 'ログを読み込めませんでした。',
     analysisFailed: '分析結果を読み込めませんでした。',
+    badResponse: 'サーバーの応答を読み取れませんでした。しばらくしてからもう一度お試しください。',
+    serverDetail: (message) => `サーバーからの説明(韓国語): ${message}`,
   },
   deploy: {
     title: 'かんたんデプロイ',
@@ -336,6 +338,7 @@ export const ja: Messages = {
     sceneFailed: 'コロがレールから落ちてしまった',
     sceneStopped: 'コロがスタート台で止まっている',
     workNote: '作業ノート',
+    koreanOnly: 'ログとAI診断は現在、韓国語でのみ表示されます。',
     noNote: 'まだ作業の記録はありません。',
     expand: '開く',
     collapse: '閉じる',

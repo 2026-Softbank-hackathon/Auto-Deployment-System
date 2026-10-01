@@ -30,6 +30,9 @@ export const ko = {
     resultFailed: '배포 결과를 불러오지 못했습니다.',
     logsFailed: '로그를 불러오지 못했습니다.',
     analysisFailed: '분석 결과를 불러오지 못했습니다.',
+    badResponse: '서버 응답을 이해하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    /** 서버 문구(한국어)를 다른 언어 화면에서 덧붙일 때의 형식. 한국어 화면은 원문을 그대로 쓰므로 null */
+    serverDetail: null as ((message: string) => string) | null,
   },
   deploy: {
     title: '간단하게 배포하기',
@@ -334,6 +337,8 @@ export const ko = {
     sceneFailed: '코로가 레일 밖으로 떨어졌다',
     sceneStopped: '코로가 출발대에서 멈춰 있다',
     workNote: '작업 노트',
+    /** 로그 · AI 진단이 화면 언어와 다른 언어로 나온다는 안내. 한국어 화면에서는 필요 없어 빈 문자열 */
+    koreanOnly: '',
     noNote: '아직 기록된 작업이 없어요.',
     expand: '펼치기',
     collapse: '접기',

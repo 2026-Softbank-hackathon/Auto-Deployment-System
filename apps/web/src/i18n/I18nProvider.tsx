@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { DeploymentApiError } from '../api/deployment-api';
+import { DeploymentApiError, ResponseShapeError } from '../api/deployment-api';
 import { ja } from './ja';
 import { ko, type Messages } from './ko';
 import { preloadLanguageFonts, runLanguageTransition } from './language-transition';
@@ -56,10 +56,20 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 export function useI18n(): I18nContextValue { return useContext(I18nContext); }
 
 /**
- * 프론트가 만든 오류는 현재 언어로 바꾼다. 서버가 보낸 문구·응답 형식 오류 등은 원문 그대로 둔다.
+ * 프론트가 만든 오류는 현재 언어로 바꾼다. 서버가 보낸 문구는 serverReason으로 따로 다룬다.
  */
 export function errorMessage(error: unknown, t: Messages, fallback: string): string {
   if (error instanceof DeploymentApiError) return t.errors.requestFailed(error.status);
+  if (error instanceof ResponseShapeError) return t.errors.badResponse;
   if (error instanceof TypeError) return t.errors.network;
   return error instanceof Error ? error.message : fallback;
+}
+
+/**
+ * 서버가 거절한 사유. 서버 문구는 한국어로만 온다(#147).
+ * 한국어 화면에서는 그대로 보여 주고, 다른 언어에서는 번역된 일반 문구 뒤에 원문을 "서버 설명"으로 덧붙인다.
+ */
+export function serverReason(error: unknown, t: Messages, fallback: string): string {
+  if (!(error instanceof DeploymentApiError) || !error.serverMessage) return errorMessage(error, t, fallback);
+  return t.errors.serverDetail ? `${t.errors.requestFailed(error.status)} ${t.errors.serverDetail(error.serverMessage)}` : error.serverMessage;
 }

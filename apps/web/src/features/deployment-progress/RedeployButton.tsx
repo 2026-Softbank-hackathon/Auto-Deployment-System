@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { DeploymentApiError, redeployDeployment } from '../../api/deployment-api';
+import { redeployDeployment } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
-import { errorMessage, useI18n } from '../../i18n/I18nProvider';
+import { serverReason, useI18n } from '../../i18n/I18nProvider';
 
 /**
  * 재배포 (#138): 이전에 올린 소스와 분석 결과(IR)를 그대로 써서 빌드부터 다시 배포한다. ZIP을 다시 올리지 않는다.
@@ -29,7 +29,7 @@ export function RedeployButton({ deploymentId, onStarted, variant = 'secondary',
   }
 
   // 서버가 준 사유(진행 중 · 분석 결과 없음 · 환경 사용 중)를 그대로 보여 준다. 없으면 일반 문구.
-  const reason = error instanceof DeploymentApiError && error.serverMessage ? error.serverMessage : errorMessage(error, t, t.redeploy.failed);
+  const reason = serverReason(error, t, t.redeploy.failed);
   return <span className={`redeploy ${compact ? 'is-compact' : ''}`}>
     <Keycap variant={variant} sound="start" disabled={busy} onClick={() => void redeploy()} aria-label={`${t.redeploy.button} — ${t.dashboard.deploymentNo(deploymentId)}`}>{busy ? t.redeploy.starting : t.redeploy.button}</Keycap>
     {error !== null && <span className="redeploy__error" role="alert"><strong>{t.redeploy.failed}</strong> {reason}</span>}

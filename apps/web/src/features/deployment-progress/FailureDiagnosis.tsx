@@ -46,7 +46,9 @@ export function FailureDiagnosis({ deploymentId }: { deploymentId: string }) {
   return <div className="diagnosis" aria-live="polite">
     <strong>{t.run.diagnosisTitle}</strong>
     {step && <p className="diagnosis__step">{t.run.diagnosisStep(step)}</p>}
-    <p>{diagnosis.summary}</p>
+    {/* 진단은 서버가 한국어로만 만든다. 화면 언어와 다를 수 있어 원문 언어를 표시해 둔다. */}
+    <p lang="ko">{diagnosis.summary}</p>
+    {t.run.koreanOnly && <p className="diagnosis__note">{t.run.koreanOnly}</p>}
     {diagnosis.patchCandidates.length > 0 && <div className="diagnosis__patches">
       <p className="diagnosis__note">{t.run.diagnosisPatches(diagnosis.patchCandidates.length)}</p>
       {diagnosis.patchCandidates.map((candidate, index) => <details key={index} className="technical-details">

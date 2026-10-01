@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
-import { DeploymentApiError, patchProjectEnv } from '../../api/deployment-api';
+import { patchProjectEnv } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
-import { errorMessage, useI18n } from '../../i18n/I18nProvider';
+import { serverReason, useI18n } from '../../i18n/I18nProvider';
 import { looksSecret } from '../setup/env-plan';
 
 const VALUE_MAX = 4096;
@@ -46,7 +46,7 @@ export function EnvInputPanel({ projectId, names, onSaved }: { projectId: string
     </div>
     {secretNames.length > 0 && <p className="env-warning">{t.setup.env.secretWarning(secretNames.join(', '))}</p>}
     {error !== null && <div className="notice error" role="alert"><strong>{t.setup.env.saveError}</strong><br />
-      {error instanceof DeploymentApiError && error.serverMessage ? error.serverMessage : errorMessage(error, t, t.setup.env.saveError)}</div>}
+      {serverReason(error, t, t.setup.env.saveError)}</div>}
     <div><Keycap type="submit" sound="start" disabled={!complete || saving}>{saving ? t.deploy.aws.saving : copy.submit}</Keycap></div>
   </form>;
 }

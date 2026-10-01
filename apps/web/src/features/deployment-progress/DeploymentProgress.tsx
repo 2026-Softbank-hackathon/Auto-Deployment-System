@@ -281,6 +281,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
     <section className="work-note" aria-label={t.run.workNote}>
       <div className="work-note__bar">
         <h2>{t.run.workNote}</h2>
+        {t.run.koreanOnly && <p className="muted-copy lang-note">{t.run.koreanOnly}</p>}
         <p className="work-note__line">{latestLine ?? t.run.noNote}</p>
         <div className="work-note__actions">
           <Keycap variant="ghost" onClick={() => void refresh()}>{t.progress.refresh}</Keycap>

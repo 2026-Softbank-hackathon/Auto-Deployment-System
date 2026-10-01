@@ -72,7 +72,7 @@ async function assertOk(response: Response): Promise<void> {
   const body = await response.json().catch(() => null) as { error?: { code?: unknown; message?: unknown } } | null;
   const code = typeof body?.error?.code === 'string' ? body.error.code : undefined;
   const serverMessage = typeof body?.error?.message === 'string' && body.error.message.trim() ? body.error.message : undefined;
-  throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`, code, serverMessage);
+  throw new DeploymentApiError(response.status, `request failed (${response.status})`, code, serverMessage);
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -80,8 +80,13 @@ async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
 
+/** 서버 응답이 약속한 모양이 아닐 때. 화면은 이 오류를 현재 언어의 문구로 보여 준다 (label은 로그 · 디버깅용 이름). */
+export class ResponseShapeError extends Error {
+  constructor(readonly label: string) { super(`unexpected response shape: ${label}`); this.name = 'ResponseShapeError'; }
+}
+
 function asRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} 응답 형식이 올바르지 않습니다.`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ResponseShapeError(label);
   return value as Record<string, unknown>;
 }
 
@@ -100,11 +105,11 @@ export async function createDeployment(source: File, projectId: string, target: 
     body: form,
     credentials: 'include',
   });
-  const body = asRecord(await readJson(response), '배포 생성');
+  const body = asRecord(await readJson(response), 'create deployment');
   const deploymentId = typeof body.deploymentId === 'string' ? body.deploymentId : null;
   const status = body.status === 'received' ? body.status : null;
   const eventsUrl = typeof body.eventsUrl === 'string' ? body.eventsUrl : null;
-  if (!deploymentId || !status || !eventsUrl) throw new Error('배포 생성 응답 형식이 올바르지 않습니다.');
+  if (!deploymentId || !status || !eventsUrl) throw new ResponseShapeError('create deployment');
   return { deploymentId, status, eventsUrl };
 }
 
@@ -116,24 +121,24 @@ export async function createProject(name: string): Promise<CreateProjectResponse
     body: JSON.stringify({ name }),
     credentials: 'include',
   });
-  const body = asRecord(await readJson(response), '프로젝트 생성');
+  const body = asRecord(await readJson(response), 'create project');
   const id = typeof body.id === 'string' ? body.id : null;
   const projectName = typeof body.name === 'string' ? body.name : null;
-  if (!id || !projectName) throw new Error('프로젝트 생성 응답 형식이 올바르지 않습니다.');
+  if (!id || !projectName) throw new ResponseShapeError('create project');
   return { id, name: projectName };
 }
 
 /** API-06 — deployment state, current step, and approval state. */
 export async function getDeploymentStatus(deploymentId: string): Promise<DeploymentStatusResponse> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), '배포 상태');
+  const body = asRecord(await readJson(response), 'deployment status');
   return { ...body, currentStep: body.currentStep, approvalPending: body.approvalPending, publicUrl: body.publicUrl };
 }
 
 /** API-19 — analysis summary becomes available once analysis completes. */
 export async function getDeploymentAnalysisReport(deploymentId: string): Promise<DeploymentAnalysisReportResponse> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/analysis-report`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), '분석 리포트');
+  const body = asRecord(await readJson(response), 'analysis report');
   return {
     deploymentId: typeof body.deploymentId === 'number' ? body.deploymentId : Number(deploymentId),
     detectedStack: body.detectedStack,
@@ -163,8 +168,8 @@ export interface DeploymentDiagnosisResponse { failedStep: string | null; summar
 export async function getDeploymentDiagnosis(deploymentId: string): Promise<DeploymentDiagnosisResponse | null> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/diagnosis`), { credentials: 'include' });
   if (response.status === 404) return null;
-  const body = asRecord(await readJson(response), 'AI 진단');
-  if (typeof body.summary !== 'string') throw new Error('AI 진단 응답 형식이 올바르지 않습니다.');
+  const body = asRecord(await readJson(response), 'diagnosis');
+  if (typeof body.summary !== 'string') throw new ResponseShapeError('diagnosis');
   const patchCandidates = (Array.isArray(body.patchCandidates) ? body.patchCandidates : []).flatMap((item): DeploymentPatchCandidate[] => {
     if (!item || typeof item !== 'object') return [];
     const { description, diff } = item as { description?: unknown; diff?: unknown };
@@ -181,9 +186,9 @@ export async function redeployDeployment(deploymentId: string): Promise<{ deploy
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/redeploy`), {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
   });
-  const body = asRecord(await readJson(response), '재배포');
+  const body = asRecord(await readJson(response), 'redeploy');
   const id = typeof body.deploymentId === 'string' || typeof body.deploymentId === 'number' ? String(body.deploymentId) : '';
-  if (!id) throw new Error('재배포 응답 형식이 올바르지 않습니다.');
+  if (!id) throw new ResponseShapeError('redeploy');
   return { deploymentId: id };
 }
 
@@ -251,7 +256,7 @@ export async function createOnpremEnvironment(projectId: string, hostname: strin
     body: JSON.stringify({ projectId: Number(projectId), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: true, onpremConfig: { agentRegistrationToken: placeholder, hostname } }),
     credentials: 'include',
   });
-  const body = asRecord(await readJson(response), '환경 등록');
+  const body = asRecord(await readJson(response), 'create environment');
   return { id: String(body.id), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: body.isDefault === true, region: null, hostname, secretNames: [], lastSeenAt: null };
 }
 
@@ -260,8 +265,8 @@ export interface AgentRegistrationToken { token: string; expiresAt: string }
 /** On-Prem Agent 1회용 등록 토큰 발급 (10분 유효). 값은 이 응답에서 한 번만 받는다. */
 export async function issueAgentRegistrationToken(environmentId: string): Promise<AgentRegistrationToken> {
   const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}/agent-registration-token`), { method: 'POST', credentials: 'include' });
-  const body = asRecord(await readJson(response), '등록 토큰');
-  if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new Error('등록 토큰 응답 형식이 올바르지 않습니다.');
+  const body = asRecord(await readJson(response), 'registration token');
+  if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new ResponseShapeError('registration token');
   return { token: body.token, expiresAt: body.expiresAt };
 }
 
@@ -344,7 +349,7 @@ export interface DeploymentAiUsageResponse { totalTokenIn: number; totalTokenOut
 /** API-32 — 이 배포에 쓴 AI 토큰 · 비용. */
 export async function getDeploymentAiUsage(deploymentId: string): Promise<DeploymentAiUsageResponse> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/ai-usage`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), 'AI 사용량');
+  const body = asRecord(await readJson(response), 'ai usage');
   const number = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
   return { totalTokenIn: number(body.totalTokenIn), totalTokenOut: number(body.totalTokenOut), totalCostUsd: number(body.totalCostUsd) };
 }
@@ -353,7 +358,7 @@ export async function getDeploymentAiUsage(deploymentId: string): Promise<Deploy
 export async function getDeploymentHealth(deploymentId: string): Promise<DeploymentHealthResponse | null> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/health`), { credentials: 'include' });
   if (response.status === 404) return null;
-  const body = asRecord(await readJson(response), '헬스체크');
+  const body = asRecord(await readJson(response), 'health');
   const status = body.status === 'passed' || body.status === 'failed' ? body.status : 'checking';
   const checks = (Array.isArray(body.checks) ? body.checks : []).flatMap((item): DeploymentHealthCheck[] => {
     if (!item || typeof item !== 'object') return [];
@@ -379,7 +384,7 @@ export async function getDeploymentLogs(deploymentId: string, step: DeploymentLo
   if (tail) query.set('tail', String(tail));
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/logs?${query}`), { credentials: 'include' });
   if (response.status === 204) return null;
-  if (!response.ok) throw new DeploymentApiError(response.status, `로그를 불러오지 못했습니다. (${response.status})`);
+  if (!response.ok) throw new DeploymentApiError(response.status, `log request failed (${response.status})`);
   return response.text();
 }
 
@@ -413,7 +418,7 @@ export async function listProjects(options: { limit?: number; cursor?: string } 
   const query = new URLSearchParams({ limit: String(options.limit ?? 100) });
   if (options.cursor) query.set('cursor', options.cursor);
   const response = await fetch(endpoint(`/api/v1/projects?${query}`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), '프로젝트 목록');
+  const body = asRecord(await readJson(response), 'project list');
   const items = Array.isArray(body.items) ? body.items : [];
   return {
     items: items.flatMap((item) => {
@@ -431,7 +436,7 @@ export async function listProjects(options: { limit?: number; cursor?: string } 
 export async function listProjectDeployments(projectId: string, options: { limit?: number } = {}): Promise<Page<ProjectDeploymentSummary>> {
   const query = new URLSearchParams({ limit: String(options.limit ?? 5) });
   const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}/deployments?${query}`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), '배포 이력');
+  const body = asRecord(await readJson(response), 'deployment list');
   const items = Array.isArray(body.items) ? body.items : [];
   return {
     items: items.flatMap((item) => {
@@ -457,10 +462,10 @@ export async function listProjectDeployments(projectId: string, options: { limit
 /** GET /projects/:id — used only to show the project name on the progress screen. */
 export async function getProject(projectId: string): Promise<ProjectSummary> {
   const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), '프로젝트');
+  const body = asRecord(await readJson(response), 'project');
   const id = optionalString(body.id);
   const name = optionalString(body.name);
   const createdAt = optionalString(body.createdAt);
-  if (!id || !name || !createdAt) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
+  if (!id || !name || !createdAt) throw new ResponseShapeError('project');
   return { id, name, createdAt };
 }

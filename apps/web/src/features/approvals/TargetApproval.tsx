@@ -1,1 +1,0 @@
-export function TargetApproval({ onApprove }: { onApprove: () => void }) { return <section className="panel"><h2>배포 대상 승인</h2><p>선택한 프로필과 빠진 요소 결정을 확인한 뒤에만 배포를 시작합니다.</p><div className="notice"><strong>승인이 필요합니다.</strong><br />실제 API-10 결정 결과와 API-11 승인 상태가 연결될 예정입니다.</div><button className="primary" onClick={onApprove}>Target 승인</button></section>; }

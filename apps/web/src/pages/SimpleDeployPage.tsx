@@ -10,7 +10,7 @@ import { ProjectPickerDialog, useReadyProjects } from '../features/deployment-st
 import { SetupSummary } from '../features/deployment-start/SetupSummary';
 import { missingFor, setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
-import { errorMessage, useI18n } from '../i18n/I18nProvider';
+import { serverReason, useI18n } from '../i18n/I18nProvider';
 
 /** 처음 골라져 있는 배포 대상 벤더(aws | onprem). 프로필은 서버가 벤더에서 고른다. */
 const defaultTarget: DeployTarget = isDeployTarget(import.meta.env.VITE_DEMO_TARGET) ? import.meta.env.VITE_DEMO_TARGET : 'aws';
@@ -85,8 +85,7 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   const startErrorCode = error instanceof DeploymentApiError ? error.code : undefined;
   const setupRejected = startErrorCode !== undefined && [...environmentRequiredCodes, ...credentialCodes].includes(startErrorCode);
   const startErrorCopy = setupRejected ? t.deploy.summary.rejected
-    : error instanceof DeploymentApiError && error.serverMessage ? `${error.serverMessage} (${error.status})`
-      : errorMessage(error, t, t.errors.startFailed);
+    : serverReason(error, t, t.errors.startFailed);
 
   return <>
     <div className="page-head">

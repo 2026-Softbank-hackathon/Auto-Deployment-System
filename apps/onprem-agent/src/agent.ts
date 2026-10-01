@@ -113,6 +113,7 @@ export class AgentService {
       controller.abort();
     }
     await Promise.allSettled([...this.activeExecutions]);
+    await this.executor.shutdown?.();
   }
 }
 

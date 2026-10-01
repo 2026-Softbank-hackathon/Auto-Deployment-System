@@ -80,4 +80,23 @@ describe("Agent 작업 수신과 상태 보고", () => {
       errorCode: "cancelled",
     });
   });
+
+  it("종료 시 실행기의 활성 리소스 정리를 기다린다", async () => {
+    const client = new FakeControlPlaneClient();
+    let shutdownCompleted = false;
+    const executor: OnpremJobExecutor = {
+      async execute() {
+        throw new Error("not used");
+      },
+      async shutdown() {
+        await Promise.resolve();
+        shutdownCompleted = true;
+      },
+    };
+    const service = new AgentService(client, executor);
+
+    await service.shutdown();
+
+    expect(shutdownCompleted).toBe(true);
+  });
 });

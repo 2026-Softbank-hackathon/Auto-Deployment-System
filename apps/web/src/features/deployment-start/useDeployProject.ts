@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { createOnpremEnvironment, createProject, getProject, listEnvironments, listProjects, listSecretNames, registerAwsEnvironment, type EnvironmentSummary } from '../../api/deployment-api';
 import type { DeployTarget } from './TargetToggle';
 
@@ -58,7 +58,7 @@ export function awsKeysMissing(environments: EnvironmentSummary[], secretNames: 
   return aws !== undefined && aws.secretNames.some((name) => !secretNames.includes(name));
 }
 
-export function useDeployProject() {
+function useDeployProjectState() {
   const [state, setState] = useState<State>({ phase: 'loading' });
 
   const refresh = useCallback(async () => {
@@ -95,4 +95,27 @@ export function useDeployProject() {
   }, [state, refresh]);
 
   return { state, refresh, createDeployProject, registerAws, registerOnprem };
+}
+
+type DeployProjectValue = ReturnType<typeof useDeployProjectState>;
+const DeployProjectContext = createContext<DeployProjectValue | null>(null);
+
+/** 사이드바 · 연결 설정 · 간단 배포가 같은 프로젝트 · 환경 상태를 보도록 앱 전체에 한 번만 둔다. */
+export function DeployProjectProvider({ children }: { children: ReactNode }) {
+  return createElement(DeployProjectContext.Provider, { value: useDeployProjectState() }, children);
+}
+
+export function useDeployProject(): DeployProjectValue {
+  const value = useContext(DeployProjectContext);
+  if (!value) throw new Error('useDeployProject must be used inside DeployProjectProvider');
+  return value;
+}
+
+/** 화면이 쓰기 좋게 정리한 연결 상태. */
+export function setupStatus(state: DeployProjectValue['state']) {
+  if (state.phase !== 'ready') return { ready: false as const };
+  const defaultOf = (type: EnvironmentSummary['type']) => state.environments.find((environment) => environment.type === type && environment.isDefault) ?? null;
+  const aws = defaultOf('aws');
+  const keysMissing = awsKeysMissing(state.environments, state.secretNames);
+  return { ready: true as const, project: state.project, aws, onprem: defaultOf('onprem'), keysMissing, awsReady: aws !== null && !keysMissing };
 }

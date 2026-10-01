@@ -57,3 +57,18 @@
   .app-header__controls { width: 100%; justify-content: flex-end; }
   .content { padding: 24px 16px 48px; gap: 20px; }
 }
+
+/* 사이드바 아래쪽 — 연결 설정 */
+.sidebar__setup { margin-top: auto; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; color: var(--ink-soft); font-size: 15px; text-decoration: none; border-radius: var(--radius-input); }
+.sidebar__setup:hover { color: var(--ink); }
+.sidebar__setup[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.sidebar__setup:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.sidebar__setup-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--brick); }
+@media (max-width: 760px) {
+  .sidebar__setup { margin-top: 0; }
+}
+
+/* 넓은 화면: 사이드바를 화면 높이에 고정해서 아래쪽 연결 설정이 스크롤해도 항상 보이게 한다. */
+@media (min-width: 761px) {
+  .sidebar { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; }
+}

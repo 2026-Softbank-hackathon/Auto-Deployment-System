@@ -188,6 +188,9 @@ importers:
       '@camellia/build-handler':
         specifier: workspace:*
         version: link:../../packages/build-handler
+      '@camellia/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@camellia/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

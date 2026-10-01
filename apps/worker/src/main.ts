@@ -22,6 +22,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TerraformCli } from "./terraform-cli.js";
 import { loadTerraformBackendConfig } from "./terraform-config.js";
+import { CloudflareClient } from "@camellia/cloudflare";
+import { DeploymentOriginActivator } from "./origin-activation.js";
 
 const log = pino({ name: "worker" });
 
@@ -43,6 +45,15 @@ async function main(): Promise<void> {
   );
   const buildHandler = new BuildHandler();
   const registrySession = new DockerRegistrySession();
+  const cloudflareAccountId = process.env["CLOUDFLARE_ACCOUNT_ID"]?.trim();
+  const cloudflareApiToken = process.env["CLOUDFLARE_API_TOKEN"]?.trim();
+  const originActivator = new DeploymentOriginActivator(pool, {
+    cloudflare: cloudflareAccountId && cloudflareApiToken
+      ? new CloudflareClient({ accountId: cloudflareAccountId, apiToken: cloudflareApiToken })
+      : undefined,
+    zoneId: process.env["CLOUDFLARE_ZONE_ID"],
+    platformDomain: process.env["DEMO_PLATFORM_DOMAIN"],
+  });
   const terraformCli = new TerraformCli({
     executable: process.env["TERRAFORM_BINARY"]?.trim() || "terraform",
   });
@@ -61,6 +72,7 @@ async function main(): Promise<void> {
     secretReader,
     buildHandler,
     registrySession,
+    originActivator,
     awsRegistryFactory,
     terraformCli,
     terraformBackend: loadTerraformBackendConfig(),

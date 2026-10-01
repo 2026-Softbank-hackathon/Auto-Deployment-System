@@ -43,6 +43,7 @@ export function verifySessionToken(
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [header, body, sig] = parts;
+  if (!header || !body || !sig) return null;
   const expected = createHmac("sha256", signingKey)
     .update(`${header}.${body}`)
     .digest("base64url");

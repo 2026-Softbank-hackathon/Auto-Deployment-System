@@ -3,6 +3,7 @@ import type { Pool } from "@camellia/db";
 import {
   claimVerifyStep,
   createVerifyRequestFingerprint,
+  finalizeDeploymentState,
   finishVerifyStep,
   persistHealthCheckAttempt,
   runVerifyJob,
@@ -295,5 +296,123 @@ describe("verify 결과 영속화", () => {
         10,
       ],
     );
+  });
+});
+
+describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반영", () => {
+  function makeTxnHarness(initialStatus = "verifying") {
+    let currentStatus = initialStatus;
+    const clientQueries: Array<{ sql: string; params: unknown[] }> = [];
+    const client = {
+      query: vi.fn(async (sql: string, params: unknown[] = []) => {
+        clientQueries.push({ sql, params });
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+          return { rows: [] };
+        }
+        if (sql.includes("SELECT status FROM deployments")) {
+          return { rows: [{ status: currentStatus }] };
+        }
+        if (sql.includes("UPDATE deployments")) {
+          currentStatus = params[0] as string;
+          return { rows: [] };
+        }
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const poolQueries: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = {
+      connect: vi.fn(async () => client),
+      query: vi.fn(async (sql: string, params: unknown[] = []) => {
+        poolQueries.push({ sql, params });
+        return { rows: [] };
+      }),
+    } as unknown as Pool;
+    return {
+      pool,
+      client,
+      clientQueries,
+      poolQueries,
+      getStatus: () => currentStatus,
+    };
+  }
+
+  it("succeeded 전이 + env_lock DELETE + SSE state_changed 알림", async () => {
+    const harness = makeTxnHarness();
+    const bossSend = vi.fn(async () => "job");
+    const notify = vi.fn(async () => {});
+    const deps = {
+      pool: harness.pool,
+      boss: { send: bossSend },
+      storage: {},
+      notifier: { notify },
+    } as unknown as WorkerDeps;
+
+    await finalizeDeploymentState(deps, 42, "succeeded");
+
+    expect(harness.getStatus()).toBe("succeeded");
+    const lockDelete = harness.poolQueries.find((q) =>
+      q.sql.includes("DELETE FROM env_locks"),
+    );
+    expect(lockDelete?.params).toEqual([42]);
+    expect(notify).toHaveBeenCalledWith(42, "state_changed", {
+      status: "succeeded",
+    });
+    // succeeded 는 diagnose 안 큐잉
+    expect(bossSend).not.toHaveBeenCalled();
+  });
+
+  it("failed 전이 + boss diagnose 큐잉 + env_lock DELETE + SSE 알림", async () => {
+    const harness = makeTxnHarness();
+    const bossSend = vi.fn(async () => "job");
+    const notify = vi.fn(async () => {});
+    const deps = {
+      pool: harness.pool,
+      boss: { send: bossSend },
+      storage: {},
+      notifier: { notify },
+    } as unknown as WorkerDeps;
+
+    await finalizeDeploymentState(deps, 42, "failed", "max_attempts_exceeded");
+
+    expect(harness.getStatus()).toBe("failed");
+    expect(bossSend).toHaveBeenCalledWith("diagnose", { deployment_id: 42 });
+    const lockDelete = harness.poolQueries.find((q) =>
+      q.sql.includes("DELETE FROM env_locks"),
+    );
+    expect(lockDelete?.params).toEqual([42]);
+    expect(notify).toHaveBeenCalledWith(42, "state_changed", {
+      status: "failed",
+    });
+  });
+
+  it("이미 cancelled 등 다른 terminal 상태면 transitionTo 는 예외 삼키고 env_lock·SSE 는 계속", async () => {
+    const harness = makeTxnHarness("cancelled");
+    const warn = vi.fn();
+    const notify = vi.fn(async () => {});
+    const deps = {
+      pool: harness.pool,
+      boss: { send: vi.fn(async () => "job") },
+      storage: {},
+      notifier: { notify },
+      log: { warn, info: vi.fn(), error: vi.fn() },
+    } as unknown as WorkerDeps;
+
+    await expect(
+      finalizeDeploymentState(deps, 42, "succeeded"),
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    // DB 상태는 cancelled 그대로 (transitionTo 가 ROLLBACK)
+    expect(harness.getStatus()).toBe("cancelled");
+    // env_lock cleanup 은 여전히 시도
+    const lockDelete = harness.poolQueries.find((q) =>
+      q.sql.includes("DELETE FROM env_locks"),
+    );
+    expect(lockDelete?.params).toEqual([42]);
+    // SSE 는 요청받은 nextStatus 로 발행 (best-effort)
+    expect(notify).toHaveBeenCalledWith(42, "state_changed", {
+      status: "succeeded",
+    });
   });
 });

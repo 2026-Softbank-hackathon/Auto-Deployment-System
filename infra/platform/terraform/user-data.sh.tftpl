@@ -1,0 +1,63 @@
+#!/bin/bash
+# Camellia 플랫폼 호스트 최초 부팅 (cloud-init, root). 로그: /var/log/camellia-bootstrap.log
+# 이 스크립트는 최초 1회만 돈다. 이후 갱신은 scripts/deploy.sh 를 SSM 으로 실행한다.
+set -euo pipefail
+exec > >(tee -a /var/log/camellia-bootstrap.log) 2>&1
+echo "[camellia] bootstrap start $(date -Is)"
+
+REPO_DIR=/opt/camellia/platform
+export PATH="$PATH:/snap/bin"
+
+# ── 설정 파일 (deploy.sh 가 읽음) ─────────────────────────────────────────
+mkdir -p /etc/camellia
+cat > /etc/camellia/platform.conf <<'CONF'
+AWS_REGION='${region}'
+CAMELLIA_SSM_PREFIX='${ssm_parameter_prefix}'
+CONF
+
+# ── swap 2GiB: 플랫폼 이미지 빌드 · 사용자 앱 빌드 피크 대비 ───────────────
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+# ── 패키지 · Docker (엔진 + buildx + compose 플러그인, Docker 공식 저장소) ─────
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y ca-certificates curl git jq
+if ! command -v docker >/dev/null 2>&1; then
+  curl -fsSL https://get.docker.com | sh
+fi
+cat > /etc/docker/daemon.json <<'JSON'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "5" }
+}
+JSON
+systemctl enable docker
+systemctl restart docker
+
+if ! command -v aws >/dev/null 2>&1; then
+  snap wait system seed.loaded
+  snap install aws-cli --classic
+fi
+
+# ── 사용자 앱 빌드 산출물 정리 (worker 가 호스트 Docker 로 빌드 · push 한 이미지) ──
+cat > /etc/cron.daily/camellia-docker-prune <<'CRON'
+#!/bin/sh
+docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
+docker builder prune -af --filter "until=72h" >/dev/null 2>&1 || true
+CRON
+chmod 755 /etc/cron.daily/camellia-docker-prune
+
+# ── 소스 clone 후 배포 ─────────────────────────────────────────────────────
+if [ ! -d "$REPO_DIR/.git" ]; then
+  mkdir -p "$(dirname "$REPO_DIR")"
+  git clone '${git_repository_url}' "$REPO_DIR"
+fi
+bash "$REPO_DIR/infra/platform/scripts/deploy.sh" '${git_ref}'
+
+echo "[camellia] bootstrap done $(date -Is)"

@@ -1,0 +1,6 @@
+# 로컬 검증용 override (Cloudflare Tunnel 없이 http://localhost:8080 으로 접속)
+#   docker compose -f compose.yaml -f compose.local.yaml up -d --build
+services:
+  web:
+    ports:
+      - "127.0.0.1:${LOCAL_WEB_PORT:-8080}:8080"

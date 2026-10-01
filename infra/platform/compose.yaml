@@ -1,0 +1,186 @@
+# Camellia 플랫폼 운영 스택 (EC2 한 대). 런북: docs/deploy-platform.md
+#
+#   cd infra/platform
+#   docker compose --profile tunnel up -d --build                          # 운영 (Cloudflare Tunnel 포함)
+#   docker compose -f compose.yaml -f compose.local.yaml up -d --build     # 로컬 검증 (localhost:8080)
+#
+# 값은 같은 디렉터리의 .env (git 제외) 에서 읽는다. 항목 설명: platform.env.example
+# 운영에서는 scripts/deploy.sh 가 SSM Parameter Store 에서 .env 를 만든다.
+#
+# 선택 값(ANTHROPIC_API_KEY 등)은 값 없이 `NAME:` 으로 적는다 → .env 에 없으면 컨테이너에도
+# 설정되지 않는다. 빈 문자열로 넘기면 앱이 "설정됨"으로 오인하는 곳이 있다(analyze 의 AI 보완).
+
+name: camellia-platform
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-database-url: &database-url "postgres://camellia:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요하다}@postgres:5432/camellia"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: camellia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요하다}
+      POSTGRES_DB: camellia
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U camellia -d camellia"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+    logging: *logging
+
+  # 1회성: packages/db/migrations 적용 후 종료. api · worker 는 이게 성공해야 뜬다.
+  migrate:
+    image: camellia-platform-api:local
+    pull_policy: never
+    command: ["tsx", "/repo/packages/db/src/migrate.ts"]
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    healthcheck:
+      disable: true
+    networks: [backend]
+    logging: *logging
+
+  api:
+    image: camellia-platform-api:local
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      platforms: [linux/amd64]
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: *database-url
+      STORAGE_ROOT_DIR: /data/storage
+      API_KEY: ${API_KEY:?API_KEY 가 필요하다}
+      SECRET_MASTER_KEY: ${SECRET_MASTER_KEY:?SECRET_MASTER_KEY 가 필요하다}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # dotenv 기본 경로(credentials/credentials.env) 대신 빈 파일 → 값은 위 env 로만 받는다
+      CAMELLIA_ENV_FILE: /dev/null
+      SESSION_TTL_SEC:
+      DEMO_PLATFORM_DOMAIN:
+      CLOUDFLARE_API_TOKEN:
+      CLOUDFLARE_ZONE_ID:
+      CLOUDFLARE_ACCOUNT_ID:
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [backend]
+    logging: *logging
+
+  worker:
+    image: camellia-platform-worker:local
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+      platforms: [linux/amd64]
+    restart: unless-stopped
+    init: true
+    # 호스트 docker.sock 의 그룹(GID)을 node 사용자에 붙인다. deploy.sh 가 자동으로 채운다.
+    group_add:
+      - "${DOCKER_GID:-0}"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: *database-url
+      STORAGE_ROOT_DIR: /data/storage
+      SECRET_MASTER_KEY: ${SECRET_MASTER_KEY:?SECRET_MASTER_KEY 가 필요하다}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # railpack(Dockerfile 없는 앱) → 같은 스택의 buildkitd
+      BUILDKIT_HOST: tcp://buildkit:1234
+      ANTHROPIC_API_KEY:
+      TERRAFORM_STATE_BUCKET:
+      TERRAFORM_STATE_REGION:
+      TERRAFORM_STATE_KMS_KEY_ID:
+      DEMO_PLATFORM_DOMAIN:
+      CLOUDFLARE_API_TOKEN:
+      CLOUDFLARE_ZONE_ID:
+      CLOUDFLARE_ACCOUNT_ID:
+    volumes:
+      - storage:/data/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      buildkit:
+        condition: service_started
+    networks: [backend, build]
+    logging: *logging
+
+  # railpack 전용 BuildKit 데몬. worker 만 붙는 build 네트워크에만 노출한다.
+  buildkit:
+    image: moby/buildkit:v0.33.1
+    restart: unless-stopped
+    privileged: true
+    command: ["--addr", "tcp://0.0.0.0:1234"]
+    volumes:
+      - buildkit:/var/lib/buildkit
+    networks: [build]
+    logging: *logging
+
+  # nginx: 정적 웹 + /api/ · /docs 프록시 + 콘솔 Basic Auth (apps/web/nginx)
+  web:
+    image: camellia-platform-web:local
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      platforms: [linux/amd64]
+      args:
+        VITE_DEMO_TARGET: ${VITE_DEMO_TARGET:-aws}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: api:3000
+      PLATFORM_API_KEY: ${API_KEY:?API_KEY 가 필요하다}
+      CONSOLE_BASIC_AUTH: ${CONSOLE_BASIC_AUTH:-on}
+      CONSOLE_BASIC_AUTH_USER: ${CONSOLE_BASIC_AUTH_USER:-camellia}
+      CONSOLE_BASIC_AUTH_PASSWORD:
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [backend, edge]
+    logging: *logging
+
+  # Cloudflare Tunnel (아웃바운드 연결만). 인그레스 규칙은 Terraform 이 원격 설정으로 관리한다.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [edge]
+    logging: *logging
+
+networks:
+  backend: {}
+  build: {}
+  edge: {}
+
+volumes:
+  pgdata:
+  storage:
+  buildkit:

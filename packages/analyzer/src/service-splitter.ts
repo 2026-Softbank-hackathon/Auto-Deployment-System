@@ -13,8 +13,13 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative as nativeRelative, sep } from "node:path";
 import fg from "fast-glob";
+
+/** 상대 경로를 OS 와 무관하게 "/" 구분으로 (Windows 의 path.relative 는 역슬래시를 쓴다) */
+function relative(from: string, to: string): string {
+  return nativeRelative(from, to).split(sep).join("/");
+}
 
 export type ServiceRoot = {
   /** 서비스 이름 (폴더 이름 또는 docker-compose service 이름) */

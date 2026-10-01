@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertProductionSecurity, decodeSecretMasterKey, type Config } from "../src/config.js";
+import { assertProductionSecurity, decodeSecretMasterKey, loadConfig, type Config } from "../src/config.js";
 
 function baseConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -40,6 +40,36 @@ describe("decodeSecretMasterKey", () => {
       );
     },
   );
+});
+
+describe("DEMO_PLATFORM_DOMAIN 파싱", () => {
+  it("세팅 시 config 에 문자열로 포함된다", () => {
+    const original = process.env["DEMO_PLATFORM_DOMAIN"];
+    process.env["DEMO_PLATFORM_DOMAIN"] = "camellia.app";
+    try {
+      const config = loadConfig();
+      expect(config.DEMO_PLATFORM_DOMAIN).toBe("camellia.app");
+    } finally {
+      if (original === undefined) {
+        delete process.env["DEMO_PLATFORM_DOMAIN"];
+      } else {
+        process.env["DEMO_PLATFORM_DOMAIN"] = original;
+      }
+    }
+  });
+
+  it("미세팅 시 undefined", () => {
+    const original = process.env["DEMO_PLATFORM_DOMAIN"];
+    delete process.env["DEMO_PLATFORM_DOMAIN"];
+    try {
+      const config = loadConfig();
+      expect(config.DEMO_PLATFORM_DOMAIN).toBeUndefined();
+    } finally {
+      if (original !== undefined) {
+        process.env["DEMO_PLATFORM_DOMAIN"] = original;
+      }
+    }
+  });
 });
 
 describe("assertProductionSecurity", () => {

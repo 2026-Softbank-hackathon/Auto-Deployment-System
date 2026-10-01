@@ -68,6 +68,10 @@ function makeMockPool(currentStatus = "received") {
       if (sql.includes("INSERT INTO ir_versions")) {
         insertedRows.push({ table: "ir_versions", params: params ?? [] });
       }
+      // 재진입 체크용 상태 조회 — makeMockPool(currentStatus) 로 분기 테스트.
+      if (sql.includes("SELECT status FROM deployments")) {
+        return { rows: [{ status: currentStatus }] };
+      }
       return { rows: [] };
     }),
     insertedRows,
@@ -328,6 +332,9 @@ describe("handleAnalyze", () => {
   it("LOG-02: 캐시 재사용도 로그에 남긴다", async () => {
     const pool = makeMockPool("received");
     pool.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT status FROM deployments")) {
+        return { rows: [{ status: "received" }] };
+      }
       if (sql.includes("FROM source_versions sv")) {
         return {
           rows: [
@@ -352,5 +359,46 @@ describe("handleAnalyze", () => {
 
     const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
     expect(log).toContain("이전 분석 결과 재사용");
+  });
+
+  it("analyzing 상태 재진입 (pg-boss retry) — invalid transition 로 crash 안 함", async () => {
+    const pool = makeMockPool("analyzing");
+    const { deps, storage } = makeDeps(pool);
+
+    // 핵심 — 이전엔 'transitionTo: invalid transition analyzing → analyzing' 로 즉시 throw.
+    // 지금은 재진입 분기 로 통과해서 분석 흐름까지 진입함 (분석 내부 성패는 별건).
+    await handleAnalyze(makeJob(), deps).catch(() => {});
+
+    const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
+    expect(log).toContain("분석 시작");
+  });
+
+  it("이미 다른 상태 (succeeded 등) 로 넘어갔으면 조기 return — 분석 skip", async () => {
+    const pool = makeMockPool("succeeded");
+    const { deps, storage } = makeDeps(pool);
+
+    await handleAnalyze(makeJob(), deps);
+
+    // 분석 로그 자체가 안 쌓임
+    const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
+    expect(log).toBe("");
+    // 어떤 INSERT 도 발생 안 함
+    expect(pool.insertedRows).toHaveLength(0);
+  });
+
+  it("deployment 가 DB 에 없으면 ANALYZE_DEPLOYMENT_NOT_FOUND throw", async () => {
+    const pool = makeMockPool("received");
+    // SELECT status 가 빈 rows 반환하도록 override
+    pool.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("SELECT status FROM deployments")) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const { deps } = makeDeps(pool);
+
+    await expect(handleAnalyze(makeJob(), deps)).rejects.toThrow(
+      "ANALYZE_DEPLOYMENT_NOT_FOUND",
+    );
   });
 });

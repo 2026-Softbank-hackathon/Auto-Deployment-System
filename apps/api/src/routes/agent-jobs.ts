@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { ApiError } from "../plugins/error-handler.js";
 import type {
   AgentJobService,
@@ -11,7 +12,10 @@ export type AgentIdentity = {
 };
 
 export type AgentJobsRouteOptions = {
-  agentJobService: Pick<AgentJobService, "claimNext">;
+  agentJobService: Pick<
+    AgentJobService,
+    "claimNext" | "prepareTunnel" | "reportResult"
+  >;
   authenticate: (token: string) => Promise<AgentIdentity | null>;
   pollTimeoutMs?: number;
   pollIntervalMs?: number;
@@ -20,6 +24,48 @@ export type AgentJobsRouteOptions = {
 const DEFAULT_POLL_TIMEOUT_MS = 20_000;
 const DEFAULT_POLL_INTERVAL_MS = 500;
 const MAX_LEASE_SECONDS = 90;
+
+const TunnelInputSchema = z.object({
+  deploymentId: z.number().int().positive(),
+  environmentId: z.string().min(1).max(100),
+  localPort: z.number().int().min(1).max(65_535),
+}).strict();
+
+const ResultBaseSchema = z.object({
+  deploymentId: z.number().int().positive(),
+  environmentId: z.string().min(1).max(100),
+  jobId: z.string().min(1).max(200),
+  imageUri: z.string().min(1),
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime(),
+});
+
+const ExecutionResultSchema = z.discriminatedUnion("status", [
+  ResultBaseSchema.extend({
+    status: z.literal("ready_for_verify"),
+    runningDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    localUrl: z.string().url(),
+    endpoint: z.string().url().refine((value) => value.startsWith("https://")),
+  }).strict(),
+  ResultBaseSchema.extend({
+    status: z.literal("failed"),
+    runningDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+    localUrl: z.string().url().optional(),
+    errorCode: z.enum([
+      "invalid_job",
+      "ecr_auth_failed",
+      "image_pull_failed",
+      "digest_mismatch",
+      "compose_failed",
+      "health_check_failed",
+      "tunnel_not_configured",
+      "tunnel_failed",
+      "cancelled",
+      "internal_error",
+    ]),
+    errorMessage: z.string().min(1).max(500),
+  }).strict(),
+]);
 
 const agentJobsRoutes: FastifyPluginAsync<AgentJobsRouteOptions> = async (
   fastify,
@@ -71,6 +117,70 @@ const agentJobsRoutes: FastifyPluginAsync<AgentJobsRouteOptions> = async (
       return reply;
     },
   );
+
+  fastify.post<{ Params: { jobId: string } }>(
+    "/jobs/:jobId/tunnel",
+    {
+      schema: {
+        tags: ["agents"],
+        summary: "Agent 동적 로컬 포트에 Named Tunnel 준비",
+      },
+    },
+    async (request, reply) => {
+      const agent = await authenticateRequest(request.headers["authorization"]);
+      const parsed = TunnelInputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ApiError(400, "VALIDATION_ERROR", "Tunnel 준비 요청이 올바르지 않습니다.");
+      }
+      const input = parsed.data;
+      const session = await options.agentJobService.prepareTunnel(
+        agent.agentId,
+        agent.environmentId,
+        request.params.jobId,
+        input,
+      );
+      return reply
+        .header("cache-control", "no-store")
+        .header("pragma", "no-cache")
+        .send(session);
+    },
+  );
+
+  fastify.post<{ Params: { jobId: string } }>(
+    "/jobs/:jobId/result",
+    {
+      schema: {
+        tags: ["agents"],
+        summary: "Agent 실행 결과 저장 및 Verify 연결",
+      },
+    },
+    async (request, reply) => {
+      const agent = await authenticateRequest(request.headers["authorization"]);
+      const parsed = ExecutionResultSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ApiError(400, "VALIDATION_ERROR", "Agent 실행 결과가 올바르지 않습니다.");
+      }
+      const result = parsed.data;
+      await options.agentJobService.reportResult(
+        agent.agentId,
+        agent.environmentId,
+        request.params.jobId,
+        result,
+      );
+      return reply.status(204).send();
+    },
+  );
+
+  async function authenticateRequest(
+    header: string | string[] | undefined,
+  ): Promise<AgentIdentity> {
+    const token = parseBearerToken(header);
+    const agent = token ? await options.authenticate(token) : null;
+    if (!agent) {
+      throw new ApiError(401, "UNAUTHORIZED", "유효한 Agent Bearer 인증이 필요합니다.");
+    }
+    return agent;
+  }
 };
 
 function parseBearerToken(value: string | string[] | undefined): string | null {

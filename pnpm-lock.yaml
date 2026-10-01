@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@camellia/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@camellia/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

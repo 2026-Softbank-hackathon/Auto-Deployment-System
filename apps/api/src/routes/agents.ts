@@ -14,13 +14,18 @@ import {
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { AgentService } from "../services/agent-service.js";
+import type { AgentJobService } from "../services/agent-job-service.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
-const agentsRoutes: FastifyPluginAsync<{ agentService: AgentService }> = async (
+const agentsRoutes: FastifyPluginAsync<{
+  agentService: AgentService;
+  agentJobService: Pick<AgentJobService, "heartbeat">;
+}> = async (
   fastify,
   opts,
 ) => {
   const svc = opts.agentService;
+  const jobService = opts.agentJobService;
 
   // ── POST /environments/:id/agent-registration-token ─────────────────────────
   // 세션(사용자) 인증. 기존 authPlugin onRequest 훅이 처리.
@@ -120,9 +125,27 @@ const agentsRoutes: FastifyPluginAsync<{ agentService: AgentService }> = async (
       }
 
       const body = AgentHeartbeatBodySchema.parse(request.body);
-      const result = await svc.recordHeartbeat(agent.agentId, body.currentJobId);
+      await svc.recordHeartbeat(agent.agentId);
+      if (!body.currentJobId) {
+        return reply.status(200).send({ ok: true });
+      }
+      const heartbeat = await jobService.heartbeat(
+        agent.agentId,
+        agent.environmentId,
+        body.currentJobId,
+      );
+      if (!heartbeat.leaseRenewed && !heartbeat.jobCancelled) {
+        throw new ApiError(
+          409,
+          "AGENT_JOB_LEASE_LOST",
+          "Agent Job lease를 갱신할 수 없습니다.",
+        );
+      }
 
-      return reply.status(200).send({ ok: true, ...result });
+      return reply.status(200).send({
+        ok: true,
+        ...(heartbeat.jobCancelled ? { deploymentCancelled: true } : {}),
+      });
     },
   );
 };

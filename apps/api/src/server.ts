@@ -48,7 +48,10 @@ import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
 import authRoutes from "./routes/auth.js";
 import { SessionService } from "./services/session-service.js";
-import { AgentJobService } from "./services/agent-job-service.js";
+import {
+  AgentJobService,
+  type TunnelManager,
+} from "./services/agent-job-service.js";
 import agentJobsRoutes, { type AgentIdentity } from "./routes/agent-jobs.js";
 
 export interface BuildServerOptions {
@@ -75,6 +78,9 @@ export interface BuildServerOptions {
   agentJobPollTimeoutMs?: number;
   /** Agent job poll 간격 (테스트용 override 포함). 기본 500ms */
   agentJobPollIntervalMs?: number;
+  /** 플랫폼 관리 Cloudflare Named Tunnel 클라이언트. */
+  agentTunnelManager?: TunnelManager;
+  cloudflareZoneId?: string;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -121,7 +127,12 @@ export async function buildServer(opts: BuildServerOptions) {
   const secretService = new SecretService(opts.pool, secretMasterKey);
   const environmentService = new EnvironmentService(opts.pool);
   const envVarService = new EnvVarService(opts.pool);
-  const agentJobService = new AgentJobService(opts.pool);
+  const agentJobService = new AgentJobService(opts.pool, {
+    tunnelManager: opts.agentTunnelManager,
+    cloudflareZoneId: opts.cloudflareZoneId,
+    platformDomain: opts.platformDomain,
+    boss: opts.boss,
+  });
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
@@ -260,6 +271,7 @@ export async function buildServer(opts: BuildServerOptions) {
 
     v1.register(agentsRoutes, {
       agentService,
+      agentJobService,
     });
 
     v1.register(agentJobsRoutes, {

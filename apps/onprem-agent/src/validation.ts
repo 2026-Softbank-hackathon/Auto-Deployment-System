@@ -73,6 +73,9 @@ function validatePlan(plan: unknown): void {
   if (!Array.isArray(plan.service.secretNames)) {
     invalid("plan.service.secretNames가 올바르지 않습니다.");
   }
+  if (plan.service.secretNames.length > 0) {
+    invalid("P0 On-Prem Agent는 application secret 전달을 지원하지 않습니다.");
+  }
 
   if (!isRecord(plan.health)) invalid("plan.health가 올바르지 않습니다.");
   const healthPath = requireString(plan.health.path, "plan.health.path");

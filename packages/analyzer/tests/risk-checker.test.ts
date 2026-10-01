@@ -5,7 +5,7 @@
 
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { checkRisks } from "../src/risk-checker.js";
@@ -13,8 +13,7 @@ import { checkRisks } from "../src/risk-checker.js";
 async function writeFiles(root: string, files: Record<string, string>) {
   for (const [rel, body] of Object.entries(files)) {
     const abs = join(root, rel);
-    const dir = abs.substring(0, abs.lastIndexOf("/"));
-    await mkdir(dir, { recursive: true });
+    await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, body);
   }
 }

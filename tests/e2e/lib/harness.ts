@@ -91,6 +91,38 @@ export async function startHarness(opts: HarnessOptions): Promise<Harness> {
     }
     const project = projectRes.json<{ id: string }>();
 
+    // 업로드는 대상 벤더의 기본 환경을 요구한다 (onprem 은 이미지 저장용 aws 환경도 필요).
+    // assume_role 로 등록하면 시크릿 없이 통과하고, 분석 단계까지는 AWS 를 호출하지 않는다.
+    const environments: object[] = [
+      {
+        name: "e2e-aws",
+        type: "aws",
+        awsConfig: {
+          credentialsType: "assume_role",
+          roleArn: "arn:aws:iam::123456789012:role/camellia-e2e",
+          externalId: "camellia-e2e",
+          region: "ap-northeast-2",
+        },
+      },
+    ];
+    if (opts.target === "onprem") {
+      environments.push({
+        name: "e2e-onprem",
+        type: "onprem",
+        onpremConfig: { agentRegistrationToken: "e2e-token", hostname: "e2e.local" },
+      });
+    }
+    for (const environment of environments) {
+      const envRes = await server.inject({
+        method: "POST",
+        url: "/api/v1/environments",
+        payload: { projectId: Number(project.id), ...environment },
+      });
+      if (envRes.statusCode !== 201) {
+        throw new Error(`environment creation failed: ${envRes.statusCode} ${envRes.body}`);
+      }
+    }
+
     const form = new FormData();
     form.append("project_id", project.id);
     form.append("target", opts.target);

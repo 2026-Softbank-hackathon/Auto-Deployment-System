@@ -166,6 +166,12 @@ export const AnalysisReportSchema = z
     irErrors: z.array(z.unknown()).nullable(),
     migrationTool: z.string().nullable(),
     createdAt: IsoDateTimeSchema,
+    /**
+     * 배포 전 등록이 필요한 환경변수 이름 목록.
+     * IR services.*.env 중 (user env_vars 미등록) ∧ (env_defaults 없음) ∧ (플랫폼 자동 주입 아님) 인 변수들.
+     * IR 분석이 아직 끝나지 않아 ir_version 이 없는 경우에는 null.
+     */
+    missingEnvNames: z.array(z.string()).nullable(),
   })
   .strict();
 export type AnalysisReport = z.infer<typeof AnalysisReportSchema>;

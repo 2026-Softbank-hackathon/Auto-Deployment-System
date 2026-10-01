@@ -5,7 +5,7 @@ import {
   AdapterError,
   type OnpremDockerDeploymentPlan,
 } from "@camellia/adapters";
-import { AwsConfigSchema } from "@camellia/contracts";
+import { AwsConfigSchema, PLATFORM_INJECTED_ENV_NAMES } from "@camellia/contracts";
 import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
@@ -412,16 +412,10 @@ function normalizeImagePlatform(value: string): "linux/amd64" {
 }
 
 /**
- * 플랫폼이 자동 주입하는 환경변수 리스트 (원클릭 복원 — 이슈 #137).
- * IR에 선언되어 있으면 user env_vars 등록 없이도 플랫폼이 결정한 값으로 채움.
+ * 플랫폼 자동 주입 환경변수 Set — contracts 의 PLATFORM_INJECTED_ENV_NAMES 로부터 생성.
  * 우선순위: DB(user) > env_defaults > 플랫폼 자동 주입.
  */
-const PLATFORM_INJECTED_ENV_VARS = new Set([
-  "PORT",
-  "DEPLOY_TARGET",
-  "NODE_ENV",
-  "AWS_REGION",
-]);
+const PLATFORM_INJECTED_ENV_VARS = new Set<string>(PLATFORM_INJECTED_ENV_NAMES);
 
 type PlatformEnvContext = {
   containerPort: number;

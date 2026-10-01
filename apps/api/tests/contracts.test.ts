@@ -360,8 +360,8 @@ describe("deployments 응답 계약", () => {
     expectEvents(events, ["state_changed", "state_changed", "state_changed"]);
   });
 
-  it("GET /deployments/:id/analysis-report", async () => {
-    pool.on(/FROM analysis_reports/, () => ({
+  it("GET /deployments/:id/analysis-report — missingEnvNames 포함", async () => {
+    pool.on(/FROM analysis_reports ar/, () => ({
       rows: [
         {
           services_json: [{ name: "api", language: "node" }],
@@ -371,13 +371,38 @@ describe("deployments 응답 계약", () => {
           ir_valid: true,
           ir_errors_json: null,
           created_at: NOW,
+          project_id: 1,
         },
       ],
+    }));
+    pool.on(/FROM ir_versions/, () => ({
+      rows: [
+        {
+          ir_json: {
+            $ir_version: "0.1.0",
+            metadata: { name: "test-app", version: "1.0.0" },
+            services: {
+              api: {
+                type: "http",
+                port: 3000,
+                env: ["DB_URL", "NODE_ENV"],
+                env_defaults: {},
+              },
+            },
+            deploy: { profile: "aws-ecs-basic" },
+          },
+        },
+      ],
+    }));
+    pool.on(/FROM env_vars WHERE project_id/, () => ({
+      rows: [{ name: "DB_URL" }],
     }));
 
     const res = await call("GET", "/api/v1/deployments/42/analysis-report");
 
     expect(res.statusCode).toBe(200);
+    // DB_URL 은 등록됨, NODE_ENV 는 플랫폼 자동 주입 → missing 없음
+    expect(res.json().missingEnvNames).toEqual([]);
     expectContract(AnalysisReportSchema, res.json());
   });
 

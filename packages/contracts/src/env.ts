@@ -9,6 +9,13 @@ import { IsoDateTimeSchema } from "./common.js";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/**
+ * 플랫폼이 자동 주입하는 환경변수 이름 목록.
+ * IR에 선언되어 있으면 user env_vars 등록 없이도 플랫폼이 결정한 값으로 채운다.
+ * provision 핸들러와 analysis-report 서비스 양쪽에서 공유한다.
+ */
+export const PLATFORM_INJECTED_ENV_NAMES = ["PORT", "DEPLOY_TARGET", "NODE_ENV", "AWS_REGION"] as const;
+
 // ── 요청 ──────────────────────────────────────────────────────────────────────
 
 export const PatchProjectEnvBodySchema = z.object({

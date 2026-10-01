@@ -28,7 +28,7 @@ export class IrService {
   async getLatest(deploymentId: number): Promise<IrVersion> {
     const res = await this.pool.query<IrVersionRow & { version_num: number }>(
       `SELECT iv.id, iv.deployment_id, iv.ir_json, iv.source, iv.created_at,
-              ROW_NUMBER() OVER (PARTITION BY iv.deployment_id ORDER BY iv.id ASC) AS version_num
+              (ROW_NUMBER() OVER (PARTITION BY iv.deployment_id ORDER BY iv.id ASC))::int AS version_num
        FROM ir_versions iv
        WHERE iv.deployment_id = $1
        ORDER BY iv.id DESC
@@ -44,7 +44,7 @@ export class IrService {
         "분석이 완료된 뒤 다시 조회하세요."
       );
     }
-    return this.toDto(row, row.version_num);
+    return this.toDto(row, Number(row.version_num));
   }
 
   async patch(deploymentId: number, irPartial: unknown, requestedVersion: number): Promise<IrVersion> {
@@ -69,7 +69,7 @@ export class IrService {
     // 2. 현재 최신 버전 조회
     const versionRes = await this.pool.query<{ id: number; ir_json: Record<string, unknown>; row_num: number }>(
       `SELECT id, ir_json,
-              ROW_NUMBER() OVER (ORDER BY id ASC) AS row_num
+              (ROW_NUMBER() OVER (ORDER BY id ASC))::int AS row_num
        FROM ir_versions
        WHERE deployment_id = $1
        ORDER BY id DESC
@@ -80,12 +80,14 @@ export class IrService {
     if (!current) {
       throw new ApiError(404, "NOT_FOUND", `배포 ID ${deploymentId}의 IR이 없습니다.`);
     }
+    // ROW_NUMBER() 는 BIGINT — pg 가 문자열로 돌려주므로 SQL ::int 캐스트 + Number() 로 숫자 고정
+    const currentVersion = Number(current.row_num);
 
-    if (current.row_num !== requestedVersion) {
+    if (currentVersion !== requestedVersion) {
       throw new ApiError(
         409,
         "IR_VERSION_CONFLICT",
-        `IR 버전 불일치. 현재 버전: ${current.row_num}, 요청 버전: ${requestedVersion}.`,
+        `IR 버전 불일치. 현재 버전: ${currentVersion}, 요청 버전: ${requestedVersion}.`,
         "GET /ir 로 최신 version을 조회한 뒤 재시도하세요."
       );
     }
@@ -108,7 +110,7 @@ export class IrService {
       [deploymentId, JSON.stringify(parsed.data)]
     );
     const newRow = insertRes.rows[0]!;
-    const newVersion = current.row_num + 1;
+    const newVersion = currentVersion + 1;
 
     return this.toDto(newRow, newVersion);
   }

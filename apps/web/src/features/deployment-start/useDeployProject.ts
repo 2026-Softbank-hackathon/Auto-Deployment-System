@@ -82,6 +82,7 @@ function useDeployProjectState() {
     const project = await createProject(name);
     storeId(project.id);
     setState((current) => ({ phase: 'ready', projects: [project, ...(current.phase === 'ready' ? current.projects : [])], project, environments: [], secretNames: [] }));
+    return project;
   }, []);
 
   /** 배포할 앱을 바꾼다. 연결 상태(AWS 키 · 환경)도 그 앱의 것으로 다시 읽는다. */

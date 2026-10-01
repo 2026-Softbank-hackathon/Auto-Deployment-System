@@ -63,12 +63,20 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
   if (!known) return <>{back}<div className="notice error" role="alert">{copy.notFound}</div></>;
 
   const base = `/projects/${encodeURIComponent(projectId)}`;
+  const deployReady = selectedHere && status.ready && status.awsReady;
   return <>
     {back}
     <div className="page-head">
       <div><h1>{displayProjectName(known.name)}</h1><p>{copy.detailDescription}</p></div>
-      <DeployKeycap href="/deploy" onClick={(event) => followAppLink(event, onNavigate)}>{copy.deploy}</DeployKeycap>
+      {/* AWS 연결은 어느 대상이든 필수라, 등록 전에는 배포로 보내지 않는다. */}
+      {deployReady
+        ? <DeployKeycap href="/deploy" onClick={(event) => followAppLink(event, onNavigate)}>{copy.deploy}</DeployKeycap>
+        : <DeployKeycap disabled>{copy.deploy}</DeployKeycap>}
     </div>
+    {selectedHere && !deployReady && <div className="notice" role="status">
+      {status.ready && status.keysMissing ? copy.needsKeyAgain : copy.needsAws}{' '}
+      {tab !== 'settings' && <a className="setup-summary__link" href={`${base}/settings`} onClick={(event) => followAppLink(event, onNavigate)}>{copy.goSettings}</a>}
+    </div>}
 
     <nav className="tabs" aria-label={copy.tabsLabel}>
       {tabs.map((item) => <a key={item.tab} href={`${base}${item.path}`} className="tabs__tab" aria-current={item.tab === tab ? 'page' : undefined}

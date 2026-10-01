@@ -59,7 +59,8 @@ function ProjectCard({ project, selected, onOpen, onNavigate }: { project: Deplo
     </dl>}
     <div className="project-card__actions">
       <Keycap variant="secondary" onClick={() => onOpen(`/projects/${encodeURIComponent(project.id)}`)}>{copy.openDetail}</Keycap>
-      <Keycap onClick={() => onOpen('/deploy')}>{copy.deploy}</Keycap>
+      {/* AWS 연결은 어느 대상이든 필수라(이미지를 ECR에 둔다), 없으면 배포로 보내지 않는다. */}
+      <Keycap disabled={!awsReady} onClick={() => onOpen('/deploy')}>{copy.deploy}</Keycap>
     </div>
   </li>;
 }
@@ -97,7 +98,7 @@ export function ProjectsPage({ onNavigate }: { onNavigate: Navigate }) {
       <div className="setup-card__body">
         <p>{state.projects.length === 0 ? t.setup.app.copy : t.setup.app.addCopy}</p>
         <ProjectNameForm onCancel={adding ? () => setAdding(false) : undefined}
-          onCreate={async (name) => { await createDeployProject(name); onNavigate('/setup'); }} />
+          onCreate={async (name) => { const created = await createDeployProject(name); onNavigate(`/projects/${encodeURIComponent(created.id)}/settings`); }} />
       </div>
     </section>}
     {state.projects.length > 0 && <ul className="project-list" aria-label={copy.title}>

@@ -48,7 +48,7 @@ export async function handleProvision(
     const context = await loadProvisionContext(deps, deploymentId);
     activeStatus = context.status;
 
-    if (context.status === "verifying") return;
+    if (["verifying", "succeeded", "failed", "cancelled", "rejected"].includes(context.status)) return;
     if (context.status !== "provisioning" && context.status !== "deploying") {
       throw new Error("PROVISION_STATE_INVALID");
     }
@@ -104,6 +104,7 @@ export async function handleProvision(
       });
       if (context.status === "provisioning") {
         await transitionTo(deps.pool, deploymentId, "deploying");
+        activeStatus = "deploying";
         await deps.notifier?.notify(deploymentId, "state_changed", {
           status: "deploying",
         });
@@ -170,12 +171,14 @@ export async function handleProvision(
 
     if (context.status === "provisioning") {
       await transitionTo(deps.pool, deploymentId, "deploying");
+      activeStatus = "deploying";
       await deps.notifier?.notify(deploymentId, "state_changed", {
         status: "deploying",
       });
     }
 
     await transitionTo(deps.pool, deploymentId, "verifying");
+    activeStatus = "verifying";
     await deps.notifier?.notify(deploymentId, "state_changed", {
       status: "verifying",
     });
@@ -204,23 +207,49 @@ export async function handleProvision(
     await stepLog.line(`프로비저닝 실패: ${errorCode}`);
 
     if (
+      activeStatus === "planning" ||
       activeStatus === "provisioning" ||
       activeStatus === "deploying" ||
       activeStatus === "verifying"
     ) {
-      await transitionTo(deps.pool, deploymentId, "failed", {
-        reason: errorCode,
-        boss: deps.boss,
-      }).catch(() => {});
-      await deps.pool.query("DELETE FROM env_locks WHERE deployment_id = $1", [
-        deploymentId,
-      ]);
+      const failed = await failProvisionStage(deps, deploymentId, activeStatus, errorCode);
+      if (!failed) throw error;
+      await deps.boss.send("diagnose", { deployment_id: deploymentId }).catch(() => {});
       await deps.notifier?.notify(deploymentId, "state_changed", {
         status: "failed",
       });
       return;
     }
     throw error;
+  }
+}
+
+async function failProvisionStage(
+  deps: WorkerDeps,
+  deploymentId: number,
+  expectedStatus: Status,
+  errorCode: string,
+): Promise<boolean> {
+  const client = await deps.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query<{ id: number | string }>(
+      `UPDATE deployments
+       SET status = 'failed', error = $1, failed_at = NOW(), updated_at = NOW()
+       WHERE id = $2 AND status = $3
+       RETURNING id`,
+      [errorCode, deploymentId, expectedStatus],
+    );
+    if (result.rows.length > 0) {
+      await client.query("DELETE FROM env_locks WHERE deployment_id = $1", [deploymentId]);
+    }
+    await client.query("COMMIT");
+    return result.rows.length > 0;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 }
 

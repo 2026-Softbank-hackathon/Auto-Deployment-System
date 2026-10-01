@@ -3,7 +3,7 @@ import { Keycap } from '../../components/ui/Keycap';
 import { StatusTape } from '../../components/ui/StatusTape';
 import { useI18n } from '../../i18n/I18nProvider';
 import { deploymentStatusView } from '../deployment-status/status-view';
-import { displayProjectName, elapsed, hostOf, relativeTime, safeHttpUrl } from './format';
+import { displayProjectName, elapsed, hostOf, isStalled, relativeTime, safeHttpUrl } from './format';
 import { MiniRail } from './MiniRail';
 import type { DeploymentListItem } from './useDeploymentList';
 
@@ -16,6 +16,7 @@ function ExternalIcon() {
 export function DeploymentRow({ deployment, now, onNavigate }: { deployment: DeploymentListItem; now: number; onNavigate: Navigate }) {
   const { t } = useI18n();
   const view = deploymentStatusView(deployment.status);
+  const stalled = isStalled(view.outcome === 'active', deployment.createdAt, now);
   const name = displayProjectName(deployment.projectName);
   const titleId = `deployment-${deployment.id}-title`;
   const progressPath = `/deployments/${encodeURIComponent(deployment.id)}`;
@@ -27,7 +28,7 @@ export function DeploymentRow({ deployment, now, onNavigate }: { deployment: Dep
   const context = <span className="visually-hidden"> {name}</span>;
 
   const action = view.outcome === 'active'
-    ? <Keycap variant="secondary" href={progressPath} onClick={(event) => followAppLink(event, onNavigate)}>{t.dashboard.watch}{context}</Keycap>
+    ? <Keycap variant="secondary" href={progressPath} onClick={(event) => followAppLink(event, onNavigate)}>{stalled ? t.dashboard.details : t.dashboard.watch}{context}</Keycap>
     : liveUrl
       ? <Keycap href={liveUrl} target="_blank" rel="noreferrer" trailing={<ExternalIcon />}>{t.dashboard.open}{context}<span className="visually-hidden"> {t.dashboard.newTab}</span></Keycap>
       : view.outcome === 'success'
@@ -41,10 +42,10 @@ export function DeploymentRow({ deployment, now, onNavigate }: { deployment: Dep
         ? <a className="deployment-row__sub" href={liveUrl} target="_blank" rel="noreferrer">{hostOf(liveUrl)}</a>
         : <span className="deployment-row__sub">{t.dashboard.deploymentNo(deployment.id)}{deployment.sourceSha256 ? ` · ${deployment.sourceSha256.slice(0, 12)}` : ''}</span>}
     </div>
-    <StatusTape tone={view.tone} className="deployment-row__tape">{view.tape}</StatusTape>
+    <StatusTape tone={stalled ? 'waiting' : view.tone} className="deployment-row__tape">{stalled ? 'STALLED' : view.tape}</StatusTape>
     <MiniRail view={view} />
     <div className="deployment-row__stage">
-      <span className={`deployment-row__stage-label is-${view.outcome}`}>{t.status.stage[view.stageKey]}</span>
+      <span className={`deployment-row__stage-label is-${stalled ? 'stopped' : view.outcome}`}>{stalled ? t.dashboard.stalled : t.status.stage[view.stageKey]}</span>
       <span className="deployment-row__time">{timing}</span>
     </div>
     <div className="deployment-row__action">{action}</div>

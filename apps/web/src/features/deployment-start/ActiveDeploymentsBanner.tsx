@@ -3,7 +3,7 @@ import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { Marble } from '../../components/ui/Marble';
 import { useI18n } from '../../i18n/I18nProvider';
-import { displayProjectName, elapsed } from '../dashboard/format';
+import { displayProjectName, elapsed, isStalled } from '../dashboard/format';
 import { useDeploymentList, type DeploymentListItem } from '../dashboard/useDeploymentList';
 import { deploymentStatusView } from '../deployment-status/status-view';
 
@@ -20,7 +20,8 @@ export function ActiveDeploymentsBanner({ onNavigate }: { onNavigate: Navigate }
   const listId = useId();
   if (state.phase !== 'ready') return null;
 
-  const active = state.items.filter((item) => deploymentStatusView(item.status).outcome === 'active');
+  // 멈춘 배포(2시간 넘게 끝나지 않음)는 지켜볼 것이 없으므로 띠에 넣지 않는다. 대시보드에서는 계속 보인다.
+  const active = state.items.filter((item) => deploymentStatusView(item.status).outcome === 'active' && !isStalled(true, item.createdAt, state.loadedAt));
   if (active.length === 0) return null;
 
   const describe = (item: DeploymentListItem) => {

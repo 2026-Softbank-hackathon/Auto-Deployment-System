@@ -11,6 +11,7 @@ import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/f
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
+import { failureKind, fixableByAwsKey } from './failure-reason';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { HealthProgress } from './HealthProgress';
 
@@ -73,9 +74,9 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
   </ol>;
 }
 
-interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void }
+interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void; /** AWS 키를 바꾸러 설정으로 간다 */ onFixAwsKey?: () => void }
 
-export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment }: DeploymentProgressProps) {
+export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment, onFixAwsKey }: DeploymentProgressProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -180,6 +181,8 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
   const elapsedText = createdAt ? elapsed(createdAt, finishedAt ? Date.parse(finishedAt) : now) : null;
   const title = view.outcome === 'active' ? t.run.titleActive : view.outcome === 'success' ? t.run.titleSucceeded : view.outcome === 'failed' ? t.run.titleFailed : t.run.titleStopped;
   const failureMessage = text(status?.error);
+  // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
+  const failure = failureKind(failureMessage);
   const publicUrl = safeHttpUrl(text(status?.publicUrl));
 
   async function loadLogs() {
@@ -242,9 +245,13 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
 
       {view.outcome === 'failed' && <div className="notice error run-failure" role="alert">
         <strong>{t.run.failedCause}</strong>
-        <p>{failureMessage ?? t.progress.failedCopy}</p>
+        <p>{failure ? t.run.failureReasons[failure] : failureMessage ?? t.progress.failedCopy}</p>
+        {failure && failureMessage && <p className="run-failure__code">{t.run.failureCode(failureMessage)}</p>}
         <FailureDiagnosis deploymentId={deploymentId} />
-        {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
+        <div className="run-failure__actions">
+          {fixableByAwsKey(failure) && onFixAwsKey && <Keycap onClick={onFixAwsKey}>{t.run.fixAwsKey}</Keycap>}
+          {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
+        </div>
       </div>}
       {view.outcome === 'success' && <div className="run-success">
         {publicUrl && <a className="run-success__url" href={publicUrl} target="_blank" rel="noreferrer">{hostOf(publicUrl)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}

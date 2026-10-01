@@ -16,6 +16,14 @@ export function relativeTime(iso: string, now: number, t: Messages): string {
   return new Date(iso).toLocaleDateString(t.locale, { month: 'short', day: 'numeric' });
 }
 
+/** 백엔드의 환경 락 임대 시간 (apps/api approval-service: 2시간). 진행 중인 채로 이 시간을 넘긴 배포는 멈춘 것으로 본다. */
+export const STALLED_AFTER_MS = 2 * 60 * 60 * 1000;
+
+/** 끝나지 않은 채 락 임대 시간을 넘겼는지. 진행 여부를 추정하는 게 아니라 "시작한 지 2시간이 넘었다"는 사실만 본다. */
+export function isStalled(active: boolean, createdAtIso: string, now: number): boolean {
+  return active && now - Date.parse(createdAtIso) > STALLED_AFTER_MS;
+}
+
 /** 실제 시각 두 개의 차이만 표시한다. m:ss, 1시간 이상은 h:mm:ss */
 export function elapsed(fromIso: string, toMs: number): string {
   const total = Math.max(0, Math.floor((toMs - Date.parse(fromIso)) / 1000));

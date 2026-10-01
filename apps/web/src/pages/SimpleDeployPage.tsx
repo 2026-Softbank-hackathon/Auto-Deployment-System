@@ -38,12 +38,16 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   // AWS 연결이 아직 없으면 화면에 들어왔을 때 처음 설정을 한 번 자동으로 띄운다. 닫으면 다시 띄우지 않는다.
   const autoOpened = useRef(false);
   const needsSetup = projectState.phase === 'ready' && awsEnvironment === null;
+  // 실패 화면의 "AWS 키 변경"으로 들어온 경우(/deploy?setup=aws)에도 한 번 연다. 새로고침 때 다시 열리지 않게 주소에서 표시를 지운다.
+  const requestedSetup = useRef(new URLSearchParams(window.location.search).get('setup') === 'aws');
+  const projectReady = projectState.phase === 'ready';
   useEffect(() => {
-    if (!needsSetup || autoOpened.current) return;
+    if (!projectReady || autoOpened.current || !(needsSetup || requestedSetup.current)) return;
     autoOpened.current = true;
+    if (requestedSetup.current) window.history.replaceState(null, '', window.location.pathname);
     setSetupRound((round) => round + 1);
     setSetupOpen(true);
-  }, [needsSetup]);
+  }, [projectReady, needsSetup]);
 
   async function startDeployment() {
     if (!file || !project || !environmentsReady || isStarting) return;

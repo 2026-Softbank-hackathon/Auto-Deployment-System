@@ -13,7 +13,6 @@
   background: var(--ink); color: var(--on-ink); border-radius: var(--radius-tape);
   font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .08em; white-space: nowrap;
 }
-.chip.result-success::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--moss-on-dark); }
 
 /* card */
 .panel {
@@ -41,7 +40,6 @@
 .secondary { background: var(--surface); color: var(--ink); border: var(--border); box-shadow: var(--shadow-rest); }
 .secondary:active { transform: translateY(2px); box-shadow: var(--shadow-press); }
 .compact { min-height: 36px; padding: 0 12px; font-size: 13px; }
-.open-url { margin: 4px 0 8px; }
 .page-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 
 /* 알림 */

@@ -72,7 +72,8 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       {meta}
       <p>{failed ? t.result.failedCopy : t.result.runningCopy}</p>
       <div className="result-card__actions">
-        <Keycap onClick={onBack}>{t.result.back}</Keycap>
+        {view.outcome !== 'active' && <RedeployButton variant="primary" deploymentId={deploymentId} onStarted={onRedeployed} onUploadAgain={onNewDeployment} />}
+        <Keycap variant={view.outcome === 'active' ? 'primary' : 'secondary'} onClick={onBack}>{t.result.back}</Keycap>
         <Keycap variant="secondary" onClick={() => void refresh()}>{t.progress.refresh}</Keycap>
       </div>
     </section>;

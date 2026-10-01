@@ -126,6 +126,7 @@ export const ja: Messages = {
     button: '再デプロイ',
     starting: '再デプロイを開始しています…',
     failed: '再デプロイを開始できませんでした。',
+    uploadAgain: 'ZIPをもう一度入れる',
   },
   notify: {
     title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },

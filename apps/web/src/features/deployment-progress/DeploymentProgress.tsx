@@ -256,8 +256,8 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
         <FailureDiagnosis deploymentId={deploymentId} />
         <div className="run-failure__actions">
           {fixableByAwsKey(failure) && onFixSettings && <Keycap onClick={() => onFixSettings(projectId)}>{t.run.fixAwsKey}</Keycap>}
-          {onRedeployed && <RedeployButton deploymentId={deploymentId} onStarted={onRedeployed} />}
-          {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
+          {/* 실패한 배포는 같은 소스로 다시 배포한다. ZIP을 다시 올리는 길은 재배포를 시작하지 못했을 때만 보여 준다. */}
+          {onRedeployed && <RedeployButton variant={fixableByAwsKey(failure) ? 'secondary' : 'primary'} deploymentId={deploymentId} onStarted={onRedeployed} onUploadAgain={onNewDeployment} />}
         </div>
       </div>}
       {view.outcome === 'success' && <div className="run-success">

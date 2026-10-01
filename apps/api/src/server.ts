@@ -44,6 +44,8 @@ import deploymentDiagnosisRoutes from "./routes/deployment-diagnosis.js";
 import deploymentAiUsageRoutes from "./routes/deployment-ai-usage.js";
 import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
+import authRoutes from "./routes/auth.js";
+import { SessionService } from "./services/session-service.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -59,6 +61,8 @@ export interface BuildServerOptions {
   enablePgListener?: boolean;
   /** AES-256-GCM 마스터 키 (32바이트). 없으면 dev/test 랜덤 생성 (production 부팅 시 config 에서 강제). */
   secretMasterKey?: Buffer;
+  /** API-01 세션 TTL(초). 기본 3600 */
+  sessionTtlSec?: number;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -101,6 +105,9 @@ export async function buildServer(opts: BuildServerOptions) {
   const secretService = new SecretService(opts.pool, secretMasterKey);
   const environmentService = new EnvironmentService(opts.pool);
   const envVarService = new EnvVarService(opts.pool);
+  const sessionService = opts.apiKey
+    ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
+    : undefined;
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -218,6 +225,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(secretsRoutes, {
       prefix: "/secrets",
       secretService,
+    });
+
+    v1.register(authRoutes, {
+      prefix: "/auth",
+      sessionService,
     });
 
     v1.register(environmentsRoutes, {

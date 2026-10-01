@@ -30,6 +30,7 @@ async function main() {
       config.SECRET_MASTER_KEY,
       config.NODE_ENV,
     ),
+    sessionTtlSec: config.SESSION_TTL_SEC,
   });
 
   // pg-boss 시작 (DB 없어도 서버는 뜨게)

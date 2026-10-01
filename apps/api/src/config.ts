@@ -11,6 +11,8 @@ const ConfigSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   DATABASE_URL: z.string().optional(),
   API_KEY: z.string().optional(),
+  /** API-01 세션 토큰 TTL(초). 기본 3600 */
+  SESSION_TTL_SEC: z.coerce.number().int().min(60).max(86400).optional(),
   /** AES-256-GCM 마스터 키 (base64 인코딩된 32바이트). 미설정 시 dev/test 에서만 랜덤 fallback. */
   SECRET_MASTER_KEY: z.string().optional(),
   STORAGE_ROOT_DIR: z.string().default("/tmp/camellia-storage"),

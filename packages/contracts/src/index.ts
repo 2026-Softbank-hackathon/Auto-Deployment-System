@@ -13,3 +13,4 @@ export * from "./deployments.js";
 export * from "./secrets.js";
 export * from "./environments.js";
 export * from "./events.js";
+export * from "./auth.js";

@@ -1,11 +1,12 @@
 /**
  * apps/api/src/plugins/auth.ts
- * X-API-Key 헤더 검증 또는 dev 모드 자동 우회.
+ * X-API-Key / Bearer(API Key 또는 API-01 세션 토큰) 검증. dev 모드 자동 우회.
  * NODE_ENV=development(또는 미지정) + API_KEY 환경변수 없으면 bypass.
  */
 
 import { type FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
+import { sessionSigningKey, verifySessionToken } from "../lib/session-token.js";
 import { ApiError } from "./error-handler.js";
 
 declare module "fastify" {
@@ -14,23 +15,35 @@ declare module "fastify" {
   }
 }
 
+function requestPath(url: string): string {
+  return url.split("?")[0] ?? url;
+}
+
 const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = async (
   fastify,
   opts
 ) => {
   const apiKey = opts.apiKey;
   const isDev = (opts.nodeEnv ?? "development") !== "production";
+  const sessionKey = apiKey ? sessionSigningKey(apiKey) : undefined;
 
   fastify.decorateRequest("isDevBypass", false);
 
   fastify.addHook("onRequest", async (request) => {
+    const path = requestPath(request.url);
+
     // Skip health check
-    if (request.url === "/health" || request.url === "/api/v1/health") {
+    if (path === "/health" || path === "/api/v1/health") {
       return;
     }
 
     // Skip OpenAPI 문서 (Swagger UI · /docs/json). API 호출은 여전히 키 필요
     if (/^\/docs(\/|\?|$)/.test(request.url)) {
+      return;
+    }
+
+    // API-01: 세션 발급은 본문 apiKey 로만 인증
+    if (request.method === "POST" && path === "/api/v1/auth/session") {
       return;
     }
 
@@ -61,14 +74,20 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
       );
     }
 
-    if (apiKey && headerKey !== apiKey) {
-      throw new ApiError(
-        401,
-        "UNAUTHORIZED",
-        "유효하지 않은 API Key입니다.",
-        "올바른 API Key를 확인하세요."
-      );
+    if (apiKey && headerKey === apiKey) {
+      return;
     }
+
+    if (sessionKey && verifySessionToken(headerKey, sessionKey)) {
+      return;
+    }
+
+    throw new ApiError(
+      401,
+      "UNAUTHORIZED",
+      "유효하지 않은 API Key입니다.",
+      "올바른 API Key 또는 세션 토큰을 확인하세요."
+    );
   });
 };
 

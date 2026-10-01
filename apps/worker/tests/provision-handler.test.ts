@@ -23,12 +23,21 @@ const IR = {
 
 function makeHarness(overrides: Partial<{
   status: string;
+  targetType: "aws" | "onprem";
   terraformFailure: Error;
   environmentVariables: Array<{ name: string; value: string }>;
   originUrl: string | null;
+  existingAgentJob: boolean;
+  existingAgentJobDigest: string;
+  repositoryUri: string;
+  imagePlatform: string;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
+  const ir = overrides.targetType === "onprem"
+    ? { ...IR, deploy: { profile: "onprem-docker-basic" } }
+    : IR;
   const queries: Array<{ sql: string; params: unknown[] }> = [];
+  const agentJobQueries: Array<{ sql: string; params: unknown[] }> = [];
   const client = {
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
       if (sql.includes("SELECT status FROM deployments")) {
@@ -51,18 +60,21 @@ function makeHarness(overrides: Partial<{
             {
               status,
               project_id: "12",
-              target_profile: "aws-ecs-basic",
+              target_profile: overrides.targetType === "onprem" ? "onprem-docker-basic" : "aws-ecs-basic",
               target_environment_id: "34",
-              target_environment_type: "aws",
+              target_environment_type: overrides.targetType ?? "aws",
               aws_config: {
                 credentialsType: "access_key",
                 accessKeyIdSecretName: "AWS_ACCESS_KEY_ID",
                 secretAccessKeySecretName: "AWS_SECRET_ACCESS_KEY",
                 region: "ap-northeast-2",
               },
-              ir_json: IR,
+              registry_aws_config: { credentialsType: "access_key", region: "ap-northeast-2" },
+              ir_json: ir,
+              repository_uri: overrides.repositoryUri ?? "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/12",
               immutable_ref: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo@${IMAGE_DIGEST}`,
               image_digest: IMAGE_DIGEST,
+              image_platform: overrides.imagePlatform ?? "linux/amd64",
               origin_url: overrides.originUrl ?? null,
             },
           ],
@@ -70,6 +82,18 @@ function makeHarness(overrides: Partial<{
       }
       if (sql.includes("FROM env_vars")) {
         return { rows: overrides.environmentVariables ?? [{ name: "PUBLIC_MODE", value: "demo" }] };
+      }
+      if (sql.includes("INSERT INTO onprem_agent_jobs")) {
+        agentJobQueries.push({ sql, params });
+        return { rows: overrides.existingAgentJob ? [] : [{ job_id: params[0] }] };
+      }
+      if (sql.includes("FROM onprem_agent_jobs")) {
+        agentJobQueries.push({ sql, params });
+        return {
+          rows: overrides.existingAgentJob
+            ? [{ job_id: "onprem-deployment-99", status: "pending", payload: { image: { digest: overrides.existingAgentJobDigest ?? IMAGE_DIGEST } } }]
+            : [],
+        };
       }
       return { rows: [] };
     }),
@@ -104,7 +128,7 @@ function makeHarness(overrides: Partial<{
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   } as unknown as WorkerDeps;
 
-  return { deps, pool, boss, notifier, secretReader, terraformCli, queries, getStatus: () => status };
+  return { deps, pool, boss, notifier, secretReader, terraformCli, queries, agentJobQueries, getStatus: () => status };
 }
 
 describe("handleProvision", () => {
@@ -185,5 +209,71 @@ describe("handleProvision", () => {
 
     expect(harness.terraformCli.apply).not.toHaveBeenCalled();
     expect(harness.getStatus()).toBe("failed");
+  });
+
+  it("On-Prem 대상은 digest 기반 Agent Job을 저장하고 deploying으로 전이한다", async () => {
+    const harness = makeHarness({ targetType: "onprem" });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    const insert = harness.agentJobQueries.find(({ sql }) => sql.includes("INSERT INTO onprem_agent_jobs"));
+    expect(insert).toBeDefined();
+    expect(insert?.params[0]).toBe("onprem-deployment-99");
+    expect(JSON.parse(String(insert?.params[4]))).toMatchObject({
+      jobId: "onprem-deployment-99",
+      attempt: 1,
+      deploymentId: 99,
+      environmentId: "34",
+      plan: { target: "onprem", profile: { id: "onprem-docker-basic" } },
+      image: {
+        repositoryUri: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/12",
+        digest: IMAGE_DIGEST,
+        platform: "linux/amd64",
+        registryType: "ecr",
+        region: "ap-northeast-2",
+      },
+      environment: { PUBLIC_MODE: "demo" },
+    });
+    expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+    expect(harness.getStatus()).toBe("deploying");
+    expect(harness.boss.send).not.toHaveBeenCalledWith("verify", expect.anything());
+  });
+
+  it("동일 On-Prem Provision 재전달은 기존 Agent Job을 재사용한다", async () => {
+    const harness = makeHarness({ targetType: "onprem", status: "deploying", existingAgentJob: true });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.agentJobQueries).toHaveLength(2);
+    expect(harness.agentJobQueries[1]?.sql).toContain("SELECT job_id, status, payload");
+    expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+    expect(harness.getStatus()).toBe("deploying");
+  });
+
+  it("잘못된 ECR URI는 Agent Job을 만들지 않고 실패 처리한다", async () => {
+    const harness = makeHarness({
+      targetType: "onprem",
+      repositoryUri: "not-an-ecr-repository",
+    });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.agentJobQueries).toHaveLength(0);
+    expect(harness.getStatus()).toBe("failed");
+    expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(true);
+  });
+
+  it("기존 Agent Job과 image digest가 다르면 재사용하지 않는다", async () => {
+    const harness = makeHarness({
+      targetType: "onprem",
+      status: "deploying",
+      existingAgentJob: true,
+      existingAgentJobDigest: `sha256:${"b".repeat(64)}`,
+    });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.getStatus()).toBe("failed");
+    expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(true);
   });
 });

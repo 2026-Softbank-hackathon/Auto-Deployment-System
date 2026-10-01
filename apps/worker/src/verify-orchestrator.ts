@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Pool } from "@camellia/db";
 import type { WorkerDeps } from "./deps.js";
+import { transitionTo } from "./state-machine.js";
 import {
   buildHealthUrl,
   handleVerify,
@@ -73,13 +74,75 @@ export async function runVerifyJob(
     await finishVerifyStep(deps.pool, stepId, result, validJob.data);
   } catch (error) {
     await failVerifyStep(deps.pool, stepId, error);
+    // verify 자체 crash → deployment 를 failed 로 전이 + 락 해제 + SSE.
+    await finalizeDeploymentState(
+      deps,
+      validJob.data.deploymentId,
+      "failed",
+      "verify_internal_error",
+    );
     throw error;
   }
   // Keep the successful health result for retries if Cloudflare activation fails.
   if (result.status === "passed") {
     await deps.originActivator?.activate(validJob.data);
   }
+  // Verify 결과를 deployment 레벨로 반영 (verifying → succeeded/failed) + env_lock 해제 + SSE 알림.
+  await finalizeDeploymentState(
+    deps,
+    validJob.data.deploymentId,
+    result.status === "passed" ? "succeeded" : "failed",
+    result.status === "passed" ? undefined : result.failureReason,
+  );
   return result;
+}
+
+/**
+ * verify 결과를 deployment 레벨로 반영.
+ *   - verifying → succeeded / failed 전이 (state-machine 유효 전이)
+ *   - env_locks 삭제 (해당 환경 재배포 unblock)
+ *   - SSE state_changed 알림
+ * 모든 단계는 best-effort — 이미 다른 상태로 전이됐거나 알림 발행이 실패해도
+ * verify 자체는 종료되어야 한다.
+ */
+export async function finalizeDeploymentState(
+  deps: WorkerDeps,
+  deploymentId: number,
+  nextStatus: "succeeded" | "failed",
+  reason?: string,
+): Promise<void> {
+  try {
+    await transitionTo(deps.pool, deploymentId, nextStatus, {
+      reason,
+      boss: nextStatus === "failed" ? deps.boss : undefined,
+    });
+  } catch (err) {
+    deps.log?.warn(
+      { deployment_id: deploymentId, next: nextStatus, err },
+      "verify finalize: transitionTo skipped (likely terminal state already)",
+    );
+  }
+  try {
+    await deps.pool.query(
+      "DELETE FROM env_locks WHERE deployment_id = $1",
+      [deploymentId],
+    );
+  } catch (err) {
+    deps.log?.warn(
+      { deployment_id: deploymentId, err },
+      "verify finalize: env_lock cleanup failed",
+    );
+  }
+  try {
+    await deps.notifier?.notify(deploymentId, "state_changed", {
+      status: nextStatus,
+    });
+  } catch (err) {
+    deps.log?.warn(
+      { deployment_id: deploymentId, next: nextStatus, err },
+      "verify finalize: SSE notify failed",
+    );
+  }
 }
 
 export async function claimVerifyStep(

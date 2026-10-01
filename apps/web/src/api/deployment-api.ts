@@ -43,6 +43,16 @@ export interface DeploymentIrResponse {
   ir: unknown;
   version: unknown;
   generatedAt: unknown;
+  /** "analyzer" | "ai_filled" | "analyzer_cache" | "user_edited" */
+  source: unknown;
+}
+
+export interface DeploymentHealthCheck { attempt: number; passed: boolean; statusCode?: number; latencyMs?: number }
+export interface DeploymentHealthResponse {
+  status: 'checking' | 'passed' | 'failed';
+  checks: DeploymentHealthCheck[];
+  consecutivePassed: number;
+  requiredPasses: number;
 }
 
 function endpoint(path: string): string {
@@ -127,7 +137,27 @@ export async function getDeploymentAnalysisReport(deploymentId: string): Promise
 export async function getDeploymentIr(deploymentId: string): Promise<DeploymentIrResponse> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/ir`), { credentials: 'include' });
   const body = asRecord(await readJson(response), 'IR');
-  return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt };
+  return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt, source: body.source };
+}
+
+/** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */
+export async function getDeploymentHealth(deploymentId: string): Promise<DeploymentHealthResponse | null> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/health`), { credentials: 'include' });
+  if (response.status === 404) return null;
+  const body = asRecord(await readJson(response), '헬스체크');
+  const status = body.status === 'passed' || body.status === 'failed' ? body.status : 'checking';
+  const checks = (Array.isArray(body.checks) ? body.checks : []).flatMap((item): DeploymentHealthCheck[] => {
+    if (!item || typeof item !== 'object') return [];
+    const check = item as Record<string, unknown>;
+    if (typeof check.attempt !== 'number' || typeof check.passed !== 'boolean') return [];
+    return [{ attempt: check.attempt, passed: check.passed, statusCode: typeof check.statusCode === 'number' ? check.statusCode : undefined, latencyMs: typeof check.latencyMs === 'number' ? check.latencyMs : undefined }];
+  });
+  return {
+    status,
+    checks,
+    consecutivePassed: typeof body.consecutivePassed === 'number' ? body.consecutivePassed : 0,
+    requiredPasses: typeof body.requiredPasses === 'number' ? body.requiredPasses : 3,
+  };
 }
 
 /** packages/contracts LOG_STEPS — the logs endpoint requires one of these as `step`. */

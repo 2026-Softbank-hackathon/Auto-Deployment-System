@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   TerraformCli,
   TerraformCliError,
+  TerraformProcessError,
   type TerraformCommandExecutor,
 } from "../src/terraform-cli.js";
 
@@ -129,6 +130,29 @@ describe("TerraformCli", () => {
       message: "TERRAFORM_PLAN_FAILED",
     });
     await expect(fs.access(workspace)).rejects.toThrow();
+  });
+
+  it("executor가 TerraformProcessError를 던지면 stderr를 TerraformCliError.detail로 전파한다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const stderrText = "Error: failed to query available provider packages\nsome AWS error detail";
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      if (args[0] === "init") {
+        throw new TerraformProcessError("terraform exited with code 1", stderrText);
+      }
+      return "";
+    });
+
+    const error = await new TerraformCli({ execute })
+      .apply(makeRequest(moduleDirectory))
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      name: "TerraformCliError",
+      code: "TERRAFORM_INIT_FAILED",
+      detail: stderrText,
+    });
+    expect((error as { message: string }).message).toContain("TERRAFORM_INIT_FAILED");
+    expect((error as { message: string }).message).toContain(stderrText);
   });
 
   it("절대 경로 밖 state key를 거부한다", async () => {

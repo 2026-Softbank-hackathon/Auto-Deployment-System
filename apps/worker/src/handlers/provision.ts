@@ -225,11 +225,18 @@ export async function handleProvision(
     });
   } catch (error) {
     const errorCode = normalizeProvisionFailure(error);
+    const errorDetail =
+      error instanceof TerraformCliError && error.detail
+        ? error.detail.slice(0, 2048)
+        : undefined;
     deps.log?.error(
       { deployment_id: deploymentId, error_code: errorCode },
       "provision job failed",
     );
     await stepLog.line(`프로비저닝 실패: ${errorCode}`);
+    if (errorDetail) {
+      await stepLog.line(errorDetail);
+    }
 
     if (
       activeStatus === "planning" ||
@@ -237,7 +244,7 @@ export async function handleProvision(
       activeStatus === "deploying" ||
       activeStatus === "verifying"
     ) {
-      const failed = await failProvisionStage(deps, deploymentId, activeStatus, errorCode);
+      const failed = await failProvisionStage(deps, deploymentId, activeStatus, errorCode, errorDetail);
       if (!failed) throw error;
       await deps.boss.send("diagnose", { deployment_id: deploymentId }).catch(() => {});
       await deps.notifier?.notify(deploymentId, "state_changed", {
@@ -254,7 +261,11 @@ async function failProvisionStage(
   deploymentId: number,
   expectedStatus: Status,
   errorCode: string,
+  errorDetail?: string,
 ): Promise<boolean> {
+  const errorValue = errorDetail
+    ? `${errorCode}\n${errorDetail.slice(0, 2048)}`
+    : errorCode;
   const client = await deps.pool.connect();
   try {
     await client.query("BEGIN");
@@ -263,7 +274,7 @@ async function failProvisionStage(
        SET status = 'failed', error = $1, failed_at = NOW(), updated_at = NOW()
        WHERE id = $2 AND status = $3
        RETURNING id`,
-      [errorCode, deploymentId, expectedStatus],
+      [errorValue, deploymentId, expectedStatus],
     );
     if (result.rows.length > 0) {
       await client.query("DELETE FROM env_locks WHERE deployment_id = $1", [deploymentId]);

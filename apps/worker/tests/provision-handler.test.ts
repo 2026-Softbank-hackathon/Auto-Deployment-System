@@ -3,6 +3,7 @@ import type { WorkerDeps } from "../src/deps.js";
 import { handleProvision } from "../src/handlers/provision.js";
 import { TerraformCliError } from "../src/terraform-cli.js";
 
+
 const IMAGE_DIGEST = `sha256:${"a".repeat(64)}`;
 const IR = {
   $ir_version: "0.1.0",
@@ -407,5 +408,37 @@ describe("handleProvision", () => {
 
     expect(harness.getStatus()).toBe("failed");
     expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(true);
+  });
+
+  it("TerraformCliError에 detail이 있으면 DB error 컬럼에 code와 detail을 같이 저장한다", async () => {
+    const stderrDetail = "Error: no valid credential sources\nRequestError: access denied to AWS";
+    const harness = makeHarness({
+      terraformFailure: new TerraformCliError("TERRAFORM_APPLY_FAILED", stderrDetail),
+    });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.getStatus()).toBe("failed");
+    const failQuery = harness.queries.find(({ sql }) => sql.includes("SET status = 'failed'"));
+    expect(failQuery).toBeDefined();
+    const storedError = failQuery?.params[0] as string;
+    expect(storedError).toContain("TERRAFORM_APPLY_FAILED");
+    expect(storedError).toContain(stderrDetail);
+  });
+
+  it("TerraformCliError에 detail이 있으면 stepLog에 detail 줄을 추가로 기록한다", async () => {
+    const stderrDetail = "Error: no valid credential sources\nRequestError: access denied to AWS";
+    const harness = makeHarness({
+      terraformFailure: new TerraformCliError("TERRAFORM_APPLY_FAILED", stderrDetail),
+    });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    const logLineCalls = harness.notifier.notify.mock.calls.filter(
+      ([, event]) => event === "log.line",
+    );
+    const logLines = logLineCalls.map(([, , payload]) => (payload as { line: string }).line);
+    expect(logLines.some((line) => line.includes("TERRAFORM_APPLY_FAILED"))).toBe(true);
+    expect(logLines.some((line) => line.includes(stderrDetail))).toBe(true);
   });
 });

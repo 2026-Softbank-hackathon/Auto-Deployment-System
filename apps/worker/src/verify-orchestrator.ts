@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Pool } from "@camellia/db";
 import type { WorkerDeps } from "./deps.js";
 import {
+  buildHealthUrl,
   handleVerify,
   type HealthCheckAttempt,
   type VerifyJobPayload,
@@ -76,10 +77,12 @@ export async function claimVerifyStep(
   payload: VerifyJobPayload,
 ): Promise<VerifyStepClaim> {
   const requestFingerprint = createVerifyRequestFingerprint(payload);
+  const targetUrl = resolveHealthTargetUrl(payload);
   const initialMessage = JSON.stringify({
     jobId: payload.jobId,
     environmentId: payload.environmentId,
     requestFingerprint,
+    ...(targetUrl ? { targetUrl } : {}),
   });
   const inserted = await pool.query<{ id: string | number }>(
     `INSERT INTO deployment_steps(
@@ -141,6 +144,14 @@ export async function claimVerifyStep(
     throw new VerifyJobInProgressError(payload.jobId);
   }
   return { owned: true, stepId: Number(reclaimedId) };
+}
+
+function resolveHealthTargetUrl(payload: VerifyJobPayload): string | null {
+  try {
+    return buildHealthUrl(payload.targetUrl, payload.health.path);
+  } catch {
+    return null;
+  }
 }
 
 export async function persistHealthCheckAttempt(

@@ -237,7 +237,7 @@ async function executeHealthCheck(
   }
 }
 
-function buildHealthUrl(targetUrl: string, healthPath: string): string {
+export function buildHealthUrl(targetUrl: string, healthPath: string): string {
   const base = new URL(targetUrl);
   if (base.protocol !== "http:" && base.protocol !== "https:") {
     throw new Error("unsupported protocol");

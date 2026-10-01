@@ -29,6 +29,11 @@ const kinds: Record<string, FailureKind> = {
   APPLICATION_SECRET_DELIVERY_UNAVAILABLE: 'appSecret',
   PROJECT_ENV_VAR_NOT_FOUND: 'envVar',
   PROVISION_FAILED: 'infra',
+  TERRAFORM_INIT_FAILED: 'infra',
+  TERRAFORM_VALIDATE_FAILED: 'infra',
+  TERRAFORM_PLAN_FAILED: 'infra',
+  TERRAFORM_APPLY_FAILED: 'infra',
+  TERRAFORM_OUTPUT_FAILED: 'infra',
   TERRAFORM_OUTPUT_INVALID: 'infra',
   TERRAFORM_OUTPUT_MISSING: 'infra',
   BUILD_ARTIFACT_MISSING: 'build',
@@ -40,6 +45,12 @@ const kinds: Record<string, FailureKind> = {
   TERRAFORM_DEPENDENCY_MISSING: 'server',
   TERRAFORM_BACKEND_CONFIG_INCOMPLETE: 'server',
   TERRAFORM_MODULE_INVALID: 'server',
+  TERRAFORM_BINARY_UNAVAILABLE: 'server',
+  TERRAFORM_BACKEND_INVALID: 'server',
+  TERRAFORM_INPUT_INVALID: 'server',
+  PROVISION_TARGET_UNSUPPORTED: 'server',
+  PROVISION_STATE_INVALID: 'server',
+  AUTO_APPROVE_STATE_INVALID: 'server',
 };
 
 export function failureKind(code: string | null): FailureKind | null {

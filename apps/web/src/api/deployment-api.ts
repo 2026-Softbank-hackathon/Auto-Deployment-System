@@ -174,8 +174,7 @@ export type ApprovalGate = 'target' | 'plan';
 
 /**
  * API-11 — 승인 게이트 통과. 원클릭 흐름에서 프론트가 사용자 입력 없이 호출한다 (2026-10-01 팀 결정:
- * 사용자는 벤더만 고르고 대상 확인은 승인으로 받지 않는다. plan 승인도 우선 자동 승인으로 가정).
- * plan 승인은 실제 인프라 생성으로 이어진다.
+ * 사용자는 벤더만 고르고 대상 확인은 승인으로 받지 않는다). 프론트는 target만 호출하고, plan 승인은 서버가 자동으로 처리한다.
  */
 export async function approveDeploymentGate(deploymentId: string, gate: ApprovalGate, note: string): Promise<void> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/approvals`), {

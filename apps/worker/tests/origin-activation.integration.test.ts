@@ -97,7 +97,7 @@ describe.skipIf(!databaseUrl)("Verify → Origin: isolated PostgreSQL + HTTP", (
         calls.push("ingress");
       }),
       switchServiceOrigin: vi.fn().mockRejectedValueOnce(new Error("fake provider failure")).mockImplementation(async (input) => {
-        expect(input.serviceHostname).toBe(`service-${projectId}.apps.example.com`);
+        expect(input.serviceHostname).toBe(`service-${projectId}.example.com`);
         calls.push("dns");
       }),
     };

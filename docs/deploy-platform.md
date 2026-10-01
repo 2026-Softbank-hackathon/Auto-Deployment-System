@@ -3,7 +3,7 @@
 배포 시스템 **자체**(web · api · worker · Postgres)를 AWS에 올리는 방법. 사용자 앱 배포(`infra/terraform/profiles/*`)와는 별개다.
 
 - 주소: **https://console.camellia-deploy.app** (Terraform 변수 `console_subdomain`)
-- 사용자 앱 주소 `service-{projectId}.apps.camellia-deploy.app` 과 겹치지 않는다
+- 사용자 앱 주소 `service-{projectId}.camellia-deploy.app` 과 겹치지 않는다
 - 관련 파일: `apps/{api,worker,web}/Dockerfile`, `apps/web/nginx/`, `infra/platform/`
 
 ## 1. 구조

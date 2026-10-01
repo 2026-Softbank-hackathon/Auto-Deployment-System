@@ -9,7 +9,7 @@ API와 Worker에 다음 네 환경변수를 동일하게 전달한다. Worker는
 - `CLOUDFLARE_ZONE_ID`: NS 위임을 완료한 플랫폼 DNS Zone
 - `DEMO_PLATFORM_DOMAIN`: 플랫폼 도메인, 예: `example.com`
 
-고정 서비스 주소는 `https://service-{projectId}.apps.{domain}`이다. 실제 토큰은 저장소에 넣지 않는다. 이번 연결은 Zone을 자동 생성하거나 등록기관 NS를 변경하지 않는다.
+고정 서비스 주소는 `https://service-{projectId}.{domain}`이다. 실제 토큰은 저장소에 넣지 않는다. 이번 연결은 Zone을 자동 생성하거나 등록기관 NS를 변경하지 않는다.
 
 ## On-Prem Agent 연결 — 기존 PR #112 계약 유지
 
@@ -41,7 +41,7 @@ DB의 `deployments.public_url`은 후보 Origin endpoint를 유지한다. API의
 
 - 자동 테스트: 헬스 성공/실패, 동적 포트, digest 불일치, 취소, 재시도, 비밀 오류 원문 차단, 기존 Verify 회귀.
 - 실제 AWS 앱·Cloudflare DNS/TLS·VM 전환 E2E는 별도 실행이 필요하다. 단위 테스트 통과를 실제 전환 성공으로 보고하지 않는다.
-- Terraform ALB는 HTTP이다. Cloudflare origin SSL 설정과 `*.apps.{domain}`에 해당하는 인증서 범위를 실제로 확인해야 한다. API 토큰 설정만으로 HTTPS 완료가 되지 않는다.
+- Terraform ALB는 HTTP이다. Cloudflare origin SSL 설정과 `*.{domain}`에 해당하는 인증서 범위를 실제로 확인해야 한다. API 토큰 설정만으로 HTTPS 완료가 되지 않는다.
 - Tunnel ingress 변경과 DNS 변경은 원자적이지 않다. Verify 실패는 기존 stable Origin을 건드리지 않지만, 활성화 도중 실패하면 일부 변경이 남을 수 있다. 자동 롤백은 구현하지 않으며 재시도로 수렴한다.
 - 프로젝트당 하나의 Tunnel을 재사용하므로 여러 VM/Tunnel connector의 동시 활성화나 같은 프로젝트의 양 환경 동시 전환은 데모 전에 직렬화해야 한다.
 

@@ -91,7 +91,7 @@ export class DeploymentOriginActivator {
     const projectId = String(row.project_id);
     if (!/^[1-9]\d*$/.test(projectId)) throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
     const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
-    const serviceHostname = `service-${projectId}.apps.${domain}`;
+    const serviceHostname = `service-${projectId}.${domain}`;
     let originHostname: string;
     let tunnelIngress: { tunnelId: string; hostname: string; serviceUrl: string } | undefined;
 

@@ -67,7 +67,7 @@ export function deploymentToDto(
         ? null
         : String(row.registry_environment_id),
     publicUrl: platformDomain
-      ? `https://service-${row.project_id}.apps.${platformDomain}`
+      ? `https://service-${row.project_id}.${platformDomain}`
       : null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),

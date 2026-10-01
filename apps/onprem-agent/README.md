@@ -73,4 +73,15 @@ Docker 통합 테스트는 Docker daemon과 이미지 빌드가 가능한 환경
 RUN_DOCKER_INTEGRATION=1 pnpm --filter @camellia/onprem-agent test:integration
 ```
 
-현재 개발 머신에는 `cloudflared`와 실제 Cloudflare 계정·Tunnel Token이 없으므로 실제 외부 Tunnel 연결은 검증 대상에서 제외합니다. 백그라운드 프로세스의 실제 시작·종료와 Docker Compose 통합은 로컬에서 별도로 검증합니다.
+실제 Cloudflare 통합 테스트는 플랫폼 API Token, Account·Zone, 테스트 도메인과 현재 OS에서 실행 가능한 `cloudflared`가 준비된 환경에서만 명시적으로 실행합니다. 테스트는 고유한 임시 Named Tunnel과 CNAME을 만들고 동적 `localPort`의 loopback origin이 외부 HTTPS endpoint로 노출되는지 확인한 뒤 생성한 리소스를 정리합니다.
+
+```bash
+set -a
+source .env.cloudflare.local
+set +a
+RUN_CLOUDFLARE_INTEGRATION=1 \
+CLOUDFLARED_PATH=/absolute/path/to/cloudflared \
+pnpm --filter @camellia/onprem-agent test:integration
+```
+
+`.env.cloudflare.local`은 저장소의 `.env.*` ignore 규칙에 포함되며 실제 Token을 커밋하거나 테스트 출력에 기록하지 않습니다. Docker와 Cloudflare 실통합을 함께 실행하려면 `RUN_DOCKER_INTEGRATION=1`도 지정합니다.

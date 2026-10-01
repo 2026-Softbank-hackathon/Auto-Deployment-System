@@ -34,8 +34,10 @@ export type { AnalysisResult, ServiceCandidate, ResourceCandidate, Warning, Unre
 export type { FillOptions, AiFillResult } from "./ai/fill-unresolved.js";
 
 // Re-export AI helpers so consumers (e.g. apps/worker/handlers/diagnose.ts) can import top-level.
-export { createClient } from "./ai/anthropic-client.js";
+export { createClient, resolveAiProvider, resolveModel } from "./ai/anthropic-client.js";
 export type {
+  AiProvider,
+  AiRole,
   AnthropicLike,
   AnthropicContentBlock,
   AnthropicMessageResponse,
@@ -43,6 +45,7 @@ export type {
   ClientOptions,
 } from "./ai/anthropic-client.js";
 export { redact, redactPayload } from "./ai/redact.js";
+export { estimateCost } from "./ai/tokens.js";
 
 /**
  * 소스 경로를 스캔해서 IR 초안을 생성한다.

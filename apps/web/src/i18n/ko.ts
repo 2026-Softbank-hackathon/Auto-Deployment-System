@@ -372,6 +372,12 @@ export const ko = {
     diagnosisRetry: '다시 확인',
     diagnosisStep: (step: string) => `멈춘 단계로 추정: ${step}`,
     diagnosisPatches: (n: number) => `수정 후보 ${n}건 — 제안이며 자동으로 적용되지 않아요.`,
+    envInput: {
+      waiting: '환경변수 입력을 기다리고 있어요',
+      title: (n: number) => `배포를 이어 가려면 환경변수 ${n}개를 입력해 주세요.`,
+      copy: '분석 결과, 기본값이 없어서 직접 넣어야 하는 변수예요. 저장하면 이 프로젝트에 등록되고 다음 배포에도 그대로 쓰여요.',
+      submit: '저장하고 배포 계속',
+    },
     approveFailed: '배포 대상을 확정하지 못했어요.',
     approveLocked: '같은 환경에 진행 중인 배포가 있어요. 그 배포가 끝난 뒤 다시 시도해 주세요.',
     approveRetry: '다시 시도',

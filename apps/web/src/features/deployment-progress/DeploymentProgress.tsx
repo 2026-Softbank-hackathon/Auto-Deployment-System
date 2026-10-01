@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -11,6 +11,7 @@ import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/f
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
+import { EnvInputPanel } from './EnvInputPanel';
 import { failureKind, fixableByAwsKey } from './failure-reason';
 import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
@@ -150,16 +151,24 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
     }
     await refresh();
   }, [deploymentId, refresh]);
+  // 대상 승인 전에 서버에 "등록해야만 배포되는 환경변수"가 있는지 묻는다. 있으면 자동 승인을 멈추고 그 자리에서 입력받는다 (#142, #150).
+  // 없거나 확인하지 못하면 지금까지처럼 바로 승인한다 (원클릭 유지).
+  const [envNeeded, setEnvNeeded] = useState<string[] | null>(null);
   const autoApproved = useRef(new Set<ApprovalGate>());
   useEffect(() => {
     if (!pendingGate || autoApproved.current.has(pendingGate)) return;
     autoApproved.current.add(pendingGate);
-    void approveGate(pendingGate);
-  }, [pendingGate, approveGate]);
+    if (pendingGate !== 'target') { void approveGate(pendingGate); return; }
+    // 이 확인은 배포당 한 번만 시작한다(위의 autoApproved). 효과가 다시 실행돼도 취소하지 않아야 승인이 빠지지 않는다.
+    void getDeploymentAnalysisReport(deploymentId).then((report) => report.missingEnvNames ?? [], () => [] as string[]).then((names) => {
+      if (names.length > 0) setEnvNeeded(names); else void approveGate('target');
+    });
+  }, [pendingGate, approveGate, deploymentId]);
+  const waitingForEnv = envNeeded !== null && pendingGate === 'target';
 
   const statusView = deploymentStatusView(currentStatus ?? 'received');
   // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
-  const view = pendingGate && approvalError === null ? { ...statusView, waiting: null } : statusView;
+  const view = pendingGate && approvalError === null && !waitingForEnv ? { ...statusView, waiting: null } : statusView;
 
   // 진행 중 → 성공/실패로 바뀌는 순간에만 효과음. 성공이면 코로가 컵에 착지하는 걸 보여 준 뒤 결과 화면으로 넘어간다.
   // 이미 끝난 배포를 열었을 때는 넘어가지 않는다 (결과 화면의 "진행 화면" 버튼으로 돌아올 수 있어야 한다).
@@ -229,7 +238,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
           {elapsedText && <span className="run-head__elapsed" aria-label={`${t.run.elapsedLabel} ${elapsedText}`}>{elapsedText}</span>}
         </div>
         <p className="run-head__meta">
-          {view.outcome === 'active' && approvalError === null && <span>{currentStepLabel(currentStatus, t)}</span>}
+          {view.outcome === 'active' && approvalError === null && <span>{waitingForEnv ? t.run.envInput.waiting : currentStepLabel(currentStatus, t)}</span>}
           <span className="run-head__id">{projectName ? `${displayProjectName(projectName)} · ` : ''}{t.dashboard.deploymentNo(deploymentId)}</span>
         </p>
       </div>
@@ -237,6 +246,8 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
       <StageChips view={view} />
 
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
+
+      {waitingForEnv && projectId && envNeeded && <EnvInputPanel projectId={projectId} names={envNeeded} onSaved={() => { setEnvNeeded(null); void approveGate('target'); }} />}
 
       {approvalError !== null && <div className="notice error run-failure" role="alert">
         <strong>{t.run.approveFailed}</strong>

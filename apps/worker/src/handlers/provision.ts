@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { createDeploymentPlan, AdapterError } from "@camellia/adapters";
+import {
+  createDeploymentPlan,
+  AdapterError,
+  type OnpremDockerDeploymentPlan,
+} from "@camellia/adapters";
 import { AwsConfigSchema } from "@camellia/contracts";
 import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
@@ -20,8 +24,10 @@ type ProvisionContext = {
   target_environment_type: string | null;
   aws_config: unknown;
   ir_json: unknown;
+  repository_uri: string | null;
   immutable_ref: string | null;
   image_digest: string | null;
+  image_platform: string | null;
   origin_url: string | null;
 };
 
@@ -52,17 +58,66 @@ export async function handleProvision(
       context.target_environment_id,
       "TARGET_ENVIRONMENT_REQUIRED",
     );
-    if (context.target_environment_type !== "aws") {
-      throw new Error("PROVISION_TARGET_UNSUPPORTED");
-    }
     if (!context.target_profile) throw new Error("TARGET_PROFILE_MISSING");
-    if (!deps.secretReader || !deps.terraformCli || !deps.terraformBackend || !deps.terraformModuleRoot) {
-      throw new Error("TERRAFORM_DEPENDENCY_MISSING");
-    }
-    if (!context.immutable_ref || !context.image_digest) {
+    if (
+      !context.repository_uri ||
+      !context.immutable_ref ||
+      !context.image_digest ||
+      !context.image_platform
+    ) {
       throw new Error("BUILD_ARTIFACT_MISSING");
     }
 
+    const ir = IrSchema.parse(context.ir_json);
+    const plan = createDeploymentPlan(ir, context.target_profile);
+    if (plan.service.secretNames.length > 0) {
+      throw new Error("APPLICATION_SECRET_DELIVERY_UNAVAILABLE");
+    }
+
+    const environmentVariables = await loadProjectEnvironmentVariables(
+      deps,
+      projectId,
+      plan.service.environmentNames,
+    );
+
+    if (plan.target === "onprem") {
+      if (context.target_environment_type !== "onprem") {
+        throw new Error("PROVISION_TARGET_UNSUPPORTED");
+      }
+      const region = ecrRegionFromRepository(context.repository_uri);
+      await createOrGetOnpremAgentJob(deps, {
+        jobId: `onprem-deployment-${deploymentId}`,
+        attempt: 1,
+        deploymentId,
+        environmentId: String(environmentId),
+        plan,
+        image: {
+          repositoryUri: context.repository_uri,
+          digest: context.image_digest,
+          platform: normalizeImagePlatform(context.image_platform),
+          registryType: "ecr",
+          region,
+        },
+        ...(Object.keys(environmentVariables).length > 0
+          ? { environment: environmentVariables }
+          : {}),
+      });
+      if (context.status === "provisioning") {
+        await transitionTo(deps.pool, deploymentId, "deploying");
+        await deps.notifier?.notify(deploymentId, "state_changed", {
+          status: "deploying",
+        });
+      }
+      await stepLog.line("On-Prem Agent Job 저장 완료, Agent 실행을 기다립니다.");
+      return;
+    }
+
+    if (plan.target !== "aws" || context.target_environment_type !== "aws") {
+      throw new Error("PROVISION_TARGET_UNSUPPORTED");
+    }
+    if (!deps.secretReader || !deps.terraformCli || !deps.terraformBackend || !deps.terraformModuleRoot) {
+      throw new Error("TERRAFORM_DEPENDENCY_MISSING");
+    }
     const awsConfig = AwsConfigSchema.parse(context.aws_config);
     if (
       awsConfig.credentialsType !== "access_key" ||
@@ -76,18 +131,6 @@ export async function handleProvision(
       deps.secretReader.read(projectId, awsConfig.secretAccessKeySecretName),
     ]);
 
-    const ir = IrSchema.parse(context.ir_json);
-    const plan = createDeploymentPlan(ir, context.target_profile);
-    if (plan.target !== "aws") throw new Error("PROVISION_TARGET_UNSUPPORTED");
-    if (plan.service.secretNames.length > 0) {
-      throw new Error("APPLICATION_SECRET_DELIVERY_UNAVAILABLE");
-    }
-
-    const environmentVariables = await loadProjectEnvironmentVariables(
-      deps,
-      projectId,
-      plan.service.environmentNames,
-    );
     const moduleDirectory = path.resolve(
       deps.terraformModuleRoot,
       plan.provisioning.moduleRef.replace(/^infra\/terraform\/profiles\//, ""),
@@ -232,8 +275,10 @@ async function loadProvisionContext(
             target_environment.type AS target_environment_type,
             target_environment.aws_config,
             ir.ir_json,
+            artifact.repository_uri,
             artifact.immutable_ref,
             artifact.image_digest,
+            artifact.platform AS image_platform,
             d.public_url AS origin_url
      FROM deployments d
      LEFT JOIN environments target_environment
@@ -252,6 +297,73 @@ async function loadProvisionContext(
   const row = result.rows[0];
   if (!row) throw new Error("PROVISION_CONTEXT_NOT_FOUND");
   return row;
+}
+
+type OnpremAgentJobPayload = {
+  jobId: string;
+  attempt: number;
+  deploymentId: number;
+  environmentId: string;
+  plan: OnpremDockerDeploymentPlan;
+  image: {
+    repositoryUri: string;
+    digest: string;
+    platform: "linux/amd64";
+    registryType: "ecr";
+    region: string;
+  };
+  environment?: Record<string, string>;
+};
+
+async function createOrGetOnpremAgentJob(
+  deps: WorkerDeps,
+  payload: OnpremAgentJobPayload,
+): Promise<void> {
+  const inserted = await deps.pool.query<{ job_id: string }>(
+    `INSERT INTO onprem_agent_jobs
+       (job_id, deployment_id, environment_id, attempt, status, payload)
+     VALUES ($1, $2, $3, $4, 'pending', $5::jsonb)
+     ON CONFLICT (deployment_id) DO NOTHING
+     RETURNING job_id`,
+    [
+      payload.jobId,
+      payload.deploymentId,
+      Number(payload.environmentId),
+      payload.attempt,
+      JSON.stringify(payload),
+    ],
+  );
+  if (inserted.rows[0]) return;
+
+  const existing = await deps.pool.query<{
+    job_id: string;
+    status: string;
+    payload: OnpremAgentJobPayload;
+  }>(
+    `SELECT job_id, status, payload
+     FROM onprem_agent_jobs
+     WHERE deployment_id = $1`,
+    [payload.deploymentId],
+  );
+  const row = existing.rows[0];
+  if (!row) throw new Error("AGENT_JOB_PERSIST_FAILED");
+  if (row.payload?.image?.digest !== payload.image.digest) {
+    throw new Error("AGENT_JOB_CONFLICT");
+  }
+  if (!["pending", "claimed", "running", "ready_for_verify"].includes(row.status)) {
+    throw new Error("AGENT_JOB_NOT_RETRYABLE");
+  }
+}
+
+function ecrRegionFromRepository(repositoryUri: string): string {
+  const match = /^\d{12}\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com\//.exec(repositoryUri);
+  if (!match?.[1]) throw new Error("ECR_REPOSITORY_INVALID");
+  return match[1];
+}
+
+function normalizeImagePlatform(value: string): "linux/amd64" {
+  if (value !== "linux/amd64") throw new Error("IMAGE_PLATFORM_UNSUPPORTED");
+  return value;
 }
 
 async function loadProjectEnvironmentVariables(
@@ -332,6 +444,11 @@ function normalizeProvisionFailure(error: unknown): string {
       "TERRAFORM_OUTPUT_MISSING",
       "TERRAFORM_OUTPUT_INVALID",
       "TERRAFORM_BACKEND_CONFIG_INCOMPLETE",
+      "AGENT_JOB_PERSIST_FAILED",
+      "AGENT_JOB_CONFLICT",
+      "AGENT_JOB_NOT_RETRYABLE",
+      "ECR_REPOSITORY_INVALID",
+      "IMAGE_PLATFORM_UNSUPPORTED",
     ]);
     if (allowed.has(error.message)) return error.message;
   }

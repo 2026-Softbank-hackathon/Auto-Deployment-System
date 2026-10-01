@@ -63,6 +63,8 @@ export interface BuildServerOptions {
   secretMasterKey?: Buffer;
   /** API-01 세션 TTL(초). 기본 3600 */
   sessionTtlSec?: number;
+  /** 플랫폼 도메인 (고정 서비스 URL 발급용). 예: `camellia.app`. 미세팅 시 publicUrl=null */
+  platformDomain?: string;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -93,7 +95,7 @@ export async function buildServer(opts: BuildServerOptions) {
 
   // ── services ───────────────────────────────────────────────────────────────
   const projectService = new ProjectService(opts.pool);
-  const deploymentService = new DeploymentService(opts.pool, opts.boss, opts.storage);
+  const deploymentService = new DeploymentService(opts.pool, opts.boss, opts.storage, opts.platformDomain);
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);
   const analysisReportService = new AnalysisReportService(opts.pool);

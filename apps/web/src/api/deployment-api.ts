@@ -156,6 +156,17 @@ export async function getDeploymentIr(deploymentId: string): Promise<DeploymentI
   return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt, source: body.source };
 }
 
+/**
+ * IR 일부 수정 (#144). 서버는 awaiting_target_confirmation 상태에서만 받아 준다(그 밖은 409 IR_NOT_EDITABLE).
+ * version은 GET /ir로 받은 값이어야 한다(다르면 409 IR_VERSION_CONFLICT).
+ */
+export async function patchDeploymentIr(deploymentId: string, ir: Record<string, unknown>, version: number): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/ir`), {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ir, version }),
+  });
+  await assertOk(response);
+}
+
 export interface DeploymentPatchCandidate { description: string; diff: string }
 export interface DeploymentDiagnosisResponse { failedStep: string | null; summary: string; patchCandidates: DeploymentPatchCandidate[] }
 

@@ -8,6 +8,7 @@ import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { isDeployTarget, TargetToggle, type DeployTarget } from '../features/deployment-start/TargetToggle';
 import { ProjectPickerDialog, useReadyProjects } from '../features/deployment-start/ProjectPickerDialog';
 import { SetupSummary } from '../features/deployment-start/SetupSummary';
+import { requestReview } from '../features/deployment-progress/review-flag';
 import { missingFor, setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
@@ -26,6 +27,8 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   const [target, setTarget] = useState<DeployTarget>(defaultTarget);
   const [error, setError] = useState<unknown>(null);
   const [isStarting, setIsStarting] = useState(false);
+  // 켜면 분석 뒤에 멈춰서 감지한 포트를 확인 · 수정한다 (#144). 기본은 꺼짐(원클릭).
+  const [reviewFirst, setReviewFirst] = useState(false);
   const { state: projectState, refresh: refreshProject, selectProject } = useDeployProject();
   const status = setupStatus(projectState);
   // 화면에 들어올 때 연결 상태를 다시 읽는다 (다른 탭이나 연결 설정 화면에서 바뀌었을 수 있다).
@@ -64,6 +67,7 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
     setError(null);
     try {
       const deployment = await createDeployment(file, project.id, target);
+      if (reviewFirst) requestReview(deployment.deploymentId);
       onStarted(deployment.deploymentId);
     } catch (requestError) {
       setError(requestError);
@@ -98,6 +102,10 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
       <ZipUploader file={file} onChange={(next) => { setFile(next); setError(null); }} disabled={isStarting} />
       {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.startError}</strong><br />{startErrorCopy}</div>}
       <TargetToggle value={target} onChange={setTarget} disabled={isStarting} />
+      <label className="deploy-option">
+        <input type="checkbox" checked={reviewFirst} onChange={(event) => setReviewFirst(event.target.checked)} disabled={isStarting} />
+        <span>{t.deploy.reviewFirst}</span>
+      </label>
       <SetupSummary target={target} state={projectState} usable={project !== null} envMissing={envMissing} onRetry={() => void refreshProject()} onNavigate={onNavigate}
         onPick={() => setPicking(true)} disabled={isStarting} />
       <div className="deploy-card__footer">

@@ -22,7 +22,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.54.0",
+    "@anthropic-ai/bedrock-sdk": "^0.34.2",
+    "@anthropic-ai/sdk": "^0.131.0",
     "@camellia/ir-schema": "workspace:*",
     "fast-glob": "^3.3.2",
     "unzipper": "^0.12.3",

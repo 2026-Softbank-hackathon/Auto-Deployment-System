@@ -105,7 +105,8 @@ aws ssm put-parameter --name $P/DEMO_PLATFORM_DOMAIN  --type String       --valu
 aws ssm put-parameter --name $P/CLOUDFLARE_API_TOKEN  --type SecureString --value "<사용자 앱 DNS · Tunnel 관리용 토큰>"
 aws ssm put-parameter --name $P/CLOUDFLARE_ZONE_ID    --type String       --value "<zone ID>"
 aws ssm put-parameter --name $P/CLOUDFLARE_ACCOUNT_ID --type String       --value "<account ID>"
-aws ssm put-parameter --name $P/ANTHROPIC_API_KEY     --type SecureString --value "<키>"          # AI 보완 · 진단
+aws ssm put-parameter --name $P/ANTHROPIC_API_KEY     --type SecureString --value "<키>"          # AI 보완 · 진단 (4.8)
+aws ssm put-parameter --name $P/AI_PROVIDER           --type String       --value anthropic      # 4.8
 aws ssm put-parameter --name $P/TERRAFORM_STATE_BUCKET     --type String --value "<bucket>"     # 셋 다 넣거나
 aws ssm put-parameter --name $P/TERRAFORM_STATE_REGION     --type String --value ap-northeast-2 # 셋 다 빼기
 aws ssm put-parameter --name $P/TERRAFORM_STATE_KMS_KEY_ID --type String --value "<kms arn>"
@@ -290,6 +291,34 @@ gh workflow disable deploy-platform.yml --repo "$R"   # 다시 켜기: gh workfl
 | `StatusDetails=DeliveryTimedOut` · `Undeliverable` | 에이전트가 10분 안에 명령을 못 받음 → 위 에이전트 항목 |
 | `헬스체크 실패` | 컨테이너는 떴지만 api · web unhealthy 또는 Tunnel 문제 → 4.5 로그, `cloudflared` 확인 |
 
+### 4.8 AI 제공자 — Claude API (현재) / Amazon Bedrock (보류) (D-56)
+
+worker 의 AI 분석 보완(Claude Opus 5.5)과 실패 진단(Claude Sonnet 5.5)은 **Claude API** 를 부른다. 키는 SSM `/camellia/platform/env/ANTHROPIC_API_KEY`, 제공자는 `/camellia/platform/env/AI_PROVIDER = anthropic`. `deploy.sh` 가 두 값을 `.env` 로 만들고 compose 가 worker 에만 넘긴다 (없으면 넘기지 않음).
+
+| env | 값 | 동작 |
+|---|---|---|
+| `AI_PROVIDER` | `anthropic` | Claude API. `ANTHROPIC_API_KEY` 필요 (없으면 AI 비활성) |
+| | `bedrock` | Amazon Bedrock (`bedrock-runtime`, `global.anthropic.claude-*-5-5`, 리전 `AWS_REGION` 기본 ap-northeast-2). AWS 기본 자격 증명 체인 — **지금은 쓸 수 없음** (아래) |
+| | (미설정) | `ANTHROPIC_API_KEY` 가 있으면 Claude API, 없으면 AI 비활성 (규칙 분석만) |
+| `AI_MODEL_ANALYZE` · `AI_MODEL_DIAGNOSE` | 모델 ID | 기본(Opus 5.5 · Sonnet 5.5) 덮어쓰기 |
+
+AI 호출이 실패 · 거절돼도 배포는 진행된다: 분석 보완은 이유를 기록하고 규칙 분석 결과로 넘어가고, 진단은 안내 문구로 저장된다. `ai_usage.estimated_cost_usd` 는 Claude API 공시 단가 기준 추정치.
+
+**바꾸는 법**: SSM 값을 바꾸고 4.4(또는 CD 재실행)로 재배포.
+
+```bash
+aws ssm put-parameter --name $P/AI_PROVIDER --type String --value anthropic --overwrite   # 또는 bedrock
+aws ssm delete-parameter --name $P/AI_PROVIDER    # 미설정 = 키 유무로 결정
+```
+
+**Bedrock 이 보류된 이유** (2026-10-01):
+
+- 계정 접근: 사용 사례 양식 · 모델 agreement 를 처리한 뒤에도 Opus 5.5 · Sonnet 5.5 호출이 `anthropic.claude-opus-5-5 is not available for this account ... contact AWS Sales` 로 막힌다 (15분 이상 재시도). AWS 쪽 계정 조치가 필요하다
+- 자격 증명: 코드는 AWS 기본 체인을 쓰지만, **운영에서 인스턴스 역할은 쓰지 않는다**. IMDS hop limit 이 1 이라 컨테이너는 인스턴스 역할에 닿지 못하고, 이를 2 로 올리면 worker 뿐 아니라 사용자 앱 `docker build` 의 `RUN` 단계(업로드한 코드)도 인스턴스 역할 자격 증명을 받아 플랫폼 env SSM(`SECRET_MASTER_KEY` · `API_KEY` · Cloudflare 토큰 등)을 읽을 수 있다. 그래서 hop limit 은 1 로 둔다 (7절)
+- Bedrock 으로 바꿀 때는 **Bedrock 호출만 되는 전용 최소 권한 자격 증명**을 worker 에만 준다 — 예: `bedrock:InvokeModel` 만 가진 IAM 역할/사용자 키를 SSM SecureString 에 넣고 worker env(`AWS_ACCESS_KEY_ID` 등)로 넘기거나 Bedrock API 키(`AWS_BEARER_TOKEN_BEDROCK`). 권한은 global 추론 프로파일 3단(추론 프로파일 · 리전 모델 · 리전 없는 global 모델 ARN, AWS "Global cross-Region inference" 문서). 이 IAM 은 지금 Terraform 에 없다 (쓰지 않는 권한을 두지 않음)
+
+로컬: `AI_PROVIDER=anthropic ANTHROPIC_API_KEY=... pnpm dev:worker`, Bedrock 을 시험할 때는 `AI_PROVIDER=bedrock AWS_PROFILE=camellia AWS_REGION=ap-northeast-2`.
+
 ## 5. 로컬에서 같은 스택 검증
 
 ```bash
@@ -325,7 +354,7 @@ docker compose -f compose.yaml -f compose.local.yaml down -v   # 정리 (볼륨 
   필요하면 EBS 스냅샷(`aws ec2 create-snapshot`)도 가능
 - **docker.sock = 호스트 root 권한**: worker 가 뚫리면 호스트도 뚫린다. worker 는 non-root 지만 docker 그룹이 붙는다. buildkit 은 privileged. 둘 다 외부에 포트가 없고 buildkit 은 worker 만 붙는 `build` 네트워크에만 있다
 - **콘솔 = API 전체 권한**: Basic Auth 를 통과하면 nginx 가 API Key 를 붙인다. 콘솔 비밀번호를 API Key 처럼 다룬다. 노출되면 SSM 값을 바꾸고 4.4 실행
-- **IMDS 차단**: hop limit 1 이라 컨테이너는 인스턴스 역할 자격증명을 못 얻는다(의도). worker 는 사용자 등록 AWS 키만 쓴다
+- **IMDS 차단**: hop limit 1 이라 컨테이너는 인스턴스 역할 자격증명을 못 얻는다(의도). worker 는 사용자 등록 AWS 키만 쓴다. 같은 호스트에서 사용자 코드가 빌드되므로 올리지 않는다 — Bedrock 은 전용 자격 증명으로 (4.8, D-56)
 - **업로드 100MB**: Cloudflare 무료 플랜 요청 본문 한도가 100MB, API 한도도 100MB
 - **Tunnel token 이 state 에 있음**: state 는 암호화 · 퍼블릭 차단 S3 bucket, 읽을 수 있는 주체는 8절 표
 - **AMI · user-data 변경은 무시**(`ignore_changes`): 인스턴스를 의도치 않게 갈아엎지 않기 위함. OS 를 새로 받으려면 `terraform apply -replace=aws_instance.host` (DB 백업 후)

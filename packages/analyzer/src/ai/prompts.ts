@@ -30,7 +30,7 @@ Your task is to fill only the unresolved fields in the IR draft. Rules:
 - For commands, infer from language: Node.js = ["node", "<main file>"], Python = ["python", "-m", "<module>"].
 - Port defaults: Node.js HTTP = 3000, Python HTTP = 8000, unless overridden.
 
-Always call the fill_unresolved_ir_fields tool with your answer.`,
+Respond with a JSON object {"fields": [{"path": ..., "value": ...}]} containing one entry per unresolved field you can fill. Use the exact paths from the unresolved list.`,
   },
 ];
 

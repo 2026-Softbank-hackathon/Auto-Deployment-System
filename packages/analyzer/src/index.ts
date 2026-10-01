@@ -19,7 +19,7 @@ import { detectDocker } from "./detectors/docker.js";
 import { detectDatabase } from "./detectors/database.js";
 import { detectEnvNames } from "./detectors/env.js";
 import { checkRisks } from "./risk-checker.js";
-import { buildIr } from "./ir-builder.js";
+import { buildIr, sanitizeName } from "./ir-builder.js";
 import type {
   AnalysisResult,
   ServiceCandidate,
@@ -34,8 +34,10 @@ export type { AnalysisResult, ServiceCandidate, ResourceCandidate, Warning, Unre
 export type { FillOptions, AiFillResult } from "./ai/fill-unresolved.js";
 
 // Re-export AI helpers so consumers (e.g. apps/worker/handlers/diagnose.ts) can import top-level.
-export { createClient } from "./ai/anthropic-client.js";
+export { createClient, resolveAiProvider, resolveModel } from "./ai/anthropic-client.js";
 export type {
+  AiProvider,
+  AiRole,
   AnthropicLike,
   AnthropicContentBlock,
   AnthropicMessageResponse,
@@ -43,6 +45,7 @@ export type {
   ClientOptions,
 } from "./ai/anthropic-client.js";
 export { redact, redactPayload } from "./ai/redact.js";
+export { estimateCost } from "./ai/tokens.js";
 
 /**
  * 소스 경로를 스캔해서 IR 초안을 생성한다.
@@ -152,10 +155,15 @@ export async function analyze(sourcePath: string): Promise<AnalysisResult> {
     const serviceType: ServiceCandidate["type"] =
       framework && HTTP_FRAMEWORKS.has(framework) ? "http" : "unknown";
 
-    // Collect unresolved from detectors
+    // Collect unresolved from detectors.
+    // 감지기는 서비스 이름을 몰라 "services.<name>.…" 자리표시자를 쓴다 → IR 서비스 키로 바꾼다
+    // (AI 보완이 이 경로에 그대로 값을 넣으므로 자리표시자면 엉뚱한 서비스가 생긴다)
+    const serviceKey = sanitizeName(svcRoot.name);
     unresolved.push(
-      ...(nodeResult.detected ? nodeResult.unresolved : []),
-      ...(pyResult.detected ? pyResult.unresolved : []),
+      ...[
+        ...(nodeResult.detected ? nodeResult.unresolved : []),
+        ...(pyResult.detected ? pyResult.unresolved : []),
+      ].map((u) => ({ ...u, path: u.path.replace("services.<name>.", `services.${serviceKey}.`) })),
     );
 
     // Build detected_from

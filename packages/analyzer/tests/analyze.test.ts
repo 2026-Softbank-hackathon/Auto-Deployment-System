@@ -81,6 +81,18 @@ describe("fixture: python-fastapi", () => {
     expect(portUnresolved).toBe(true);
   });
 
+  it("unresolved port path uses the real IR service key, not a '<name>' placeholder", async () => {
+    // AI 보완이 이 경로 그대로 값을 넣으므로 자리표시자면 'services.<name>' 서비스가 새로 생겨 IR 이 깨진다
+    const result = await analyze(resolve(fixturesDir, "python-fastapi"));
+    const portPaths = result.unresolved.map((u) => u.path).filter((p) => p.endsWith(".port"));
+    expect(portPaths.length).toBeGreaterThan(0);
+    const serviceKeys = Object.keys(result.ir_draft.services ?? {});
+    for (const p of portPaths) {
+      expect(p).not.toContain("<");
+      expect(serviceKeys).toContain(p.split(".")[1]);
+    }
+  });
+
   it("ir_draft has metadata.name and services entry", async () => {
     const result = await analyze(resolve(fixturesDir, "python-fastapi"));
     expect(result.ir_draft.metadata).toBeDefined();

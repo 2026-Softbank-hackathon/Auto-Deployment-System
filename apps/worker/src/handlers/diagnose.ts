@@ -8,11 +8,20 @@
  * 1. 이미 진단 있으면 skip (idempotent)
  * 2. 실패 배포 · 최신 IR · warnings · 스텝별 로그 tail 수집
  * 3. redact.ts 로 시크릿 마스킹 (D-50)
- * 4. Claude 호출 → { failedStep, summary, patchCandidates[] }
+ * 4. Claude(Sonnet 5.5, 구조화 출력) 호출 → { failedStep, summary, patchCandidates[] }
  * 5. deployments.diagnosis_json 저장 + ai_usage INSERT
  */
 
-import { createClient, redact, type AnthropicLike, type AnthropicContentBlock } from "@camellia/analyzer";
+import {
+  createClient,
+  estimateCost,
+  redact,
+  resolveAiProvider,
+  resolveModel,
+  type AiProvider,
+  type AnthropicLike,
+  type AnthropicContentBlock,
+} from "@camellia/analyzer";
 import type { WorkerDeps } from "../deps.js";
 
 export type DiagnoseJobPayload = {
@@ -31,11 +40,42 @@ export type DiagnosisResult = {
   generatedAt: string;
 };
 
-const MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 2000;
+/**
+ * Sonnet 5.5 는 thinking 을 끌 수 없고(disabled → 400) thinking 토큰이 max_tokens 에 포함된다.
+ * 답(요약 + diff 최대 3개)과 생각 여유를 합쳐 스트리밍 없이 안전한 상한(~16K)으로 둔다.
+ */
+const MAX_TOKENS = 16000;
+/**
+ * 로그 · IR 을 읽고 원인을 추론해 패치를 제안하는 다단계 추론 → medium.
+ * (low 는 단순 추출 · 대화용. 사람이 실패 후 한 번 보는 결과라 지연보다 품질 우선)
+ */
+const EFFORT = "medium" as const;
+
+/** 구조화 출력 스키마 — 응답이 항상 이 모양의 JSON 이 되도록 강제한다. */
+const DIAGNOSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    failedStep: { anyOf: [{ type: "string" }, { type: "null" }] },
+    summary: { type: "string" },
+    patchCandidates: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          description: { type: "string" },
+          diff: { type: "string" },
+        },
+        required: ["description", "diff"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["failedStep", "summary", "patchCandidates"],
+  additionalProperties: false,
+};
 
 /**
- * Anthropic SDK 클라이언트 팩토리 주입 가능 (테스트용).
+ * Claude 클라이언트 팩토리 주입 가능 (테스트용).
  */
 export async function handleDiagnose(
   job: { data: DiagnoseJobPayload },
@@ -64,10 +104,21 @@ export async function handleDiagnose(
   // 2. 컨텍스트 수집
   const context = await gatherContext(pool, deployment_id);
 
-  // 3. Claude SDK 확보 (실패 시 fallback diagnosis 저장 후 종료)
-  const factory =
-    clientFactory ??
-    (() => createClient({ apiKey: process.env["ANTHROPIC_API_KEY"] }));
+  // 3. Claude 클라이언트 확보 (AI 비활성 · 실패 시 fallback diagnosis 저장 후 종료)
+  const ai = resolveAiProvider();
+  if (clientFactory === undefined && ai.provider === null) {
+    log?.info({ deployment_id, reason: ai.reason }, "AI disabled; storing fallback diagnosis");
+    await storeDiagnosis(pool, deployment_id, {
+      failedStep: context.failedStep,
+      summary: "AI 진단이 꺼져 있어(AI_PROVIDER 미설정) 진단을 건너뜁니다.",
+      patchCandidates: [],
+      generatedAt: new Date().toISOString(),
+    });
+    return;
+  }
+  const provider: AiProvider = ai.provider ?? "anthropic";
+  const model = resolveModel("diagnose", provider);
+  const factory = clientFactory ?? (() => createClient({ provider }));
   let client: AnthropicLike;
   try {
     client = await factory();
@@ -84,26 +135,37 @@ export async function handleDiagnose(
 
   // 4. 프롬프트 (시크릿 마스킹)
   const systemPrompt =
-    "당신은 CI/CD 배포 실패 원인을 진단하는 AI입니다. 실패한 배포의 상태·로그·IR을 보고 (1) 실패 원인 한국어 3-5문장 요약, (2) 수정 후보 최대 3개 (각각 description + unified diff 형식)를 JSON으로 반환하세요. 반드시 JSON 만: { failedStep, summary, patchCandidates: [{ description, diff }] }.";
+    "당신은 CI/CD 배포 실패 원인을 진단하는 AI입니다. 실패한 배포의 상태·로그·IR을 보고 (1) 실패 원인 한국어 3-5문장 요약, (2) 수정 후보 최대 3개 (각각 description + unified diff 형식)를 JSON으로 반환하세요. 형식: { failedStep, summary, patchCandidates: [{ description, diff }] }.";
   const userPrompt = `배포 컨텍스트 (시크릿 마스킹됨):\n${redact(JSON.stringify(context, null, 2))}\n\n위 정보로 진단 JSON 을 반환하세요.`;
 
   const response = await client.messages.create({
-    model: MODEL,
+    model,
     max_tokens: MAX_TOKENS,
     system: systemPrompt,
+    // thinking 필드는 보내지 않는다 (Sonnet 5.5 기본 adaptive, disabled 는 400)
+    output_config: {
+      effort: EFFORT,
+      format: { type: "json_schema", schema: DIAGNOSIS_SCHEMA },
+    },
     messages: [{ role: "user", content: userPrompt }],
   });
 
-  // 5. 응답 파싱 (JSON 블록 추출)
-  const textBlock = response.content.find(
-    (c: AnthropicContentBlock) => c.type === "text",
-  );
+  // 5. 응답 파싱 — refusal 은 content 를 읽기 전에 거른다 (content 가 비었거나 일부만 있음)
+  const textBlock =
+    response.stop_reason === "refusal"
+      ? undefined
+      : response.content.find((c: AnthropicContentBlock) => c.type === "text");
   let parsed: Omit<DiagnosisResult, "generatedAt"> = {
     failedStep: context.failedStep,
-    summary: "AI 응답을 파싱할 수 없습니다.",
+    summary:
+      response.stop_reason === "refusal"
+        ? `AI 가 이 진단 요청을 거절했습니다 (category: ${response.stop_details?.category ?? "none"}).`
+        : response.stop_reason === "max_tokens"
+          ? "AI 응답이 길이 제한(max_tokens)에서 잘려 진단을 만들지 못했습니다."
+          : "AI 응답을 파싱할 수 없습니다.",
     patchCandidates: [],
   };
-  if (textBlock && textBlock.type === "text") {
+  if (textBlock && textBlock.type === "text" && response.stop_reason !== "max_tokens") {
     const match = textBlock.text.match(/\{[\s\S]*\}/);
     if (match) {
       try {
@@ -134,18 +196,21 @@ export async function handleDiagnose(
     generatedAt: new Date().toISOString(),
   });
 
-  // 6. ai_usage INSERT (토큰·비용)
+  // 6. ai_usage INSERT (토큰·비용 — 1P 단가 기준 추정치)
   const inputTokens = response.usage?.input_tokens ?? 0;
   const outputTokens = response.usage?.output_tokens ?? 0;
-  const estimatedCost = estimateCost(inputTokens, outputTokens);
+  const estimatedCost = estimateCost(
+    { input_tokens: inputTokens, output_tokens: outputTokens },
+    model,
+  );
   await pool.query(
     `INSERT INTO ai_usage(deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd)
      VALUES ($1,$2,$3,$4,0,0,$5)`,
-    [deployment_id, MODEL, inputTokens, outputTokens, estimatedCost],
+    [deployment_id, model, inputTokens, outputTokens, estimatedCost],
   );
 
   log?.info(
-    { deployment_id, input_tokens: inputTokens, output_tokens: outputTokens },
+    { deployment_id, model, stop_reason: response.stop_reason, input_tokens: inputTokens, output_tokens: outputTokens },
     "diagnose job succeeded",
   );
 }
@@ -214,11 +279,4 @@ async function storeDiagnosis(
     `UPDATE deployments SET diagnosis_json = $1 WHERE id = $2`,
     [JSON.stringify(diagnosis), deploymentId],
   );
-}
-
-/** claude-sonnet-4-6 대략 요금 (per M tokens). */
-function estimateCost(inputTokens: number, outputTokens: number): number {
-  const inputRate = 3.0;
-  const outputRate = 15.0;
-  return (inputTokens / 1_000_000) * inputRate + (outputTokens / 1_000_000) * outputRate;
 }

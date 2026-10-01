@@ -170,9 +170,8 @@ export async function handleAnalyze(
       step: "detecting",
     });
 
-    // 5. analyze + AI fill
+    // 5. analyze + AI fill (제공자 · 모델은 env 로 결정: AI_PROVIDER · ANTHROPIC_API_KEY)
     const opts: FillOptions = {
-      apiKey: process.env["ANTHROPIC_API_KEY"],
       onUsage: async (u) => {
         await pool.query(
           `INSERT INTO ai_usage(deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd)

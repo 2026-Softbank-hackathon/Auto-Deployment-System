@@ -2,7 +2,7 @@
  * apps/worker/src/main.ts
  *
  * 별도 프로세스 진입점.
- * DATABASE_URL, STORAGE_ROOT_DIR, ANTHROPIC_API_KEY 환경변수를 읽어
+ * DATABASE_URL, STORAGE_ROOT_DIR, AI_PROVIDER(또는 ANTHROPIC_API_KEY) 환경변수를 읽어
  * 의존성을 초기화하고 pg-boss 워커를 시작한다.
  */
 

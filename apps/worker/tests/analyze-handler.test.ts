@@ -174,6 +174,17 @@ describe("handleAnalyze", () => {
     expect(tables).toContain("ir_versions");
   });
 
+  it("캐시 미스(최초 분석)에도 analysis_reports에 source_version_id를 저장한다 — ANL-08 캐시 조회가 이 값으로 JOIN 한다", async () => {
+    const pool = makeMockPool("received");
+    const { deps } = makeDeps(pool);
+    vi.mocked(analyzeWithAI).mockResolvedValue(makeAnalysisResult() as any);
+
+    await handleAnalyze(makeJob({ source_version_id: 7 }), deps);
+
+    const row = pool.insertedRows.find((r) => r.table === "analysis_reports");
+    expect(row?.params).toContain(7);
+  });
+
   it("성공 시 상태 전이 호출 2회 + notifier state_changed 2회", async () => {
     const pool = makeMockPool("received");
     const notifierCalls: unknown[][] = [];

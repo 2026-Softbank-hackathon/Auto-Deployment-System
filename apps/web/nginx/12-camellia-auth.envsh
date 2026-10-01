@@ -1,0 +1,26 @@
+#!/bin/sh
+# nginx docker-entrypoint 가 source 하는 스크립트 (envsubst 템플릿 렌더링 전에 실행).
+# 콘솔 Basic Auth 를 준비하고 템플릿 변수 CONSOLE_AUTH_REALM 을 export 한다.
+# 계정이 없으면 기동을 거부한다 (fail-closed). 끄려면 CONSOLE_BASIC_AUTH=off.
+
+htpasswd_file=/etc/nginx/auth/htpasswd
+
+if [ "${CONSOLE_BASIC_AUTH:-on}" = "off" ]; then
+    echo "camellia: CONSOLE_BASIC_AUTH=off — 콘솔 Basic Auth 비활성. 주소를 아는 누구나 API 를 쓸 수 있다." >&2
+    : > "$htpasswd_file"
+    export CONSOLE_AUTH_REALM=off
+else
+    if [ -z "${CONSOLE_BASIC_AUTH_USER:-}" ] || [ -z "${CONSOLE_BASIC_AUTH_PASSWORD:-}" ]; then
+        echo "camellia: CONSOLE_BASIC_AUTH_USER / CONSOLE_BASIC_AUTH_PASSWORD 가 필요하다 (끄려면 CONSOLE_BASIC_AUTH=off)." >&2
+        exit 1
+    fi
+    hash=$(printf '%s' "$CONSOLE_BASIC_AUTH_PASSWORD" | openssl passwd -apr1 -stdin) || exit 1
+    printf '%s:%s\n' "$CONSOLE_BASIC_AUTH_USER" "$hash" > "$htpasswd_file"
+    export CONSOLE_AUTH_REALM="Camellia Console"
+fi
+unset CONSOLE_BASIC_AUTH_PASSWORD hash
+
+if [ -z "${PLATFORM_API_KEY:-}" ]; then
+    echo "camellia: PLATFORM_API_KEY 가 비어 있다 — API 가 production(API_KEY 필수)이면 콘솔 요청이 401 이 된다." >&2
+fi
+export PLATFORM_API_KEY="${PLATFORM_API_KEY:-}"

@@ -131,7 +131,8 @@ export async function stage(
 
   await Promise.all(
     directory.files.map(async (file) => {
-      const entryPath = file.path;
+      // 역슬래시 구분 엔트리(Windows PowerShell 5.1 Compress-Archive 등)도 OS 와 무관하게 "/" 로 — unzipper Extract 와 같은 처리
+      const entryPath = file.path.replace(/\\/g, "/");
 
       // zip slip 방지: ".." 포함 또는 destDir 탈출 경로는 skip
       if (!isSafeEntry(entryPath, destDir)) {

@@ -9,7 +9,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { stage } from "./stager.js";
 import { splitServices } from "./service-splitter.js";
@@ -237,13 +237,13 @@ async function readAppMeta(
     const raw = await readFile(join(rootPath, "package.json"), "utf8");
     const pkg = JSON.parse(raw) as { name?: string; version?: string };
     return {
-      appName: pkg.name ?? services[0]?.name ?? rootPath.split("/").pop() ?? "app",
+      appName: pkg.name ?? services[0]?.name ?? basename(rootPath),
       appVersion: pkg.version ?? "0.0.1",
     };
   } catch {
     // Python or no package.json
     return {
-      appName: services[0]?.name ?? rootPath.split("/").pop() ?? "app",
+      appName: services[0]?.name ?? basename(rootPath),
       appVersion: "0.0.1",
     };
   }

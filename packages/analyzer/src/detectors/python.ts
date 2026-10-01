@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import fg from "fast-glob";
 import type { UnresolvedField, Warning } from "../types.js";
+import { relativePosix } from "../paths.js";
 
 export type PythonDetectResult = {
   detected: boolean;
@@ -128,7 +129,7 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
       const uvicornPortMatch = /uvicorn\.run\s*\([^)]*port\s*=\s*(\d+)/s.exec(content);
       if (uvicornPortMatch) {
         port = parseInt(uvicornPortMatch[1]!, 10);
-        const rel = file.replace(serviceDir + "/", "");
+        const rel = relativePosix(serviceDir, file);
         detectedFrom.push(`${rel} (uvicorn.run port=${port})`);
         break;
       }
@@ -137,7 +138,7 @@ export async function detectPython(serviceDir: string): Promise<PythonDetectResu
       const flaskPortMatch = /\.run\s*\([^)]*port\s*=\s*(\d+)/s.exec(content);
       if (flaskPortMatch) {
         port = parseInt(flaskPortMatch[1]!, 10);
-        const rel = file.replace(serviceDir + "/", "");
+        const rel = relativePosix(serviceDir, file);
         detectedFrom.push(`${rel} (.run port=${port})`);
         break;
       }

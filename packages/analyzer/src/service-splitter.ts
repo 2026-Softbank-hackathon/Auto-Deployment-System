@@ -13,13 +13,9 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { join, relative as nativeRelative, sep } from "node:path";
+import { basename, join } from "node:path";
 import fg from "fast-glob";
-
-/** 상대 경로를 OS 와 무관하게 "/" 구분으로 (Windows 의 path.relative 는 역슬래시를 쓴다) */
-function relative(from: string, to: string): string {
-  return nativeRelative(from, to).split(sep).join("/");
-}
+import { relativePosix as relative } from "./paths.js";
 
 export type ServiceRoot = {
   /** 서비스 이름 (폴더 이름 또는 docker-compose service 이름) */
@@ -85,7 +81,7 @@ export async function splitServices(rootPath: string): Promise<ServiceRoot[]> {
   // ------------------------------------------------------------------
   const rootPkg = await fileExists(join(rootPath, "package.json"));
   if (rootPkg) {
-    const name = await readPackageName(join(rootPath, "package.json"), rootPath.split("/").pop() ?? "app");
+    const name = await readPackageName(join(rootPath, "package.json"), basename(rootPath));
     services.push({
       name,
       absPath: rootPath,
@@ -101,7 +97,7 @@ export async function splitServices(rootPath: string): Promise<ServiceRoot[]> {
   const pythonMarkers = ["requirements.txt", "pyproject.toml", "Pipfile"];
   for (const marker of pythonMarkers) {
     if (await fileExists(join(rootPath, marker))) {
-      const folderName = rootPath.split("/").pop() ?? "app";
+      const folderName = basename(rootPath);
       services.push({
         name: folderName,
         absPath: rootPath,
@@ -116,7 +112,7 @@ export async function splitServices(rootPath: string): Promise<ServiceRoot[]> {
   // 5. 아무것도 없으면 루트를 unknown 단일 서비스로
   // ------------------------------------------------------------------
   services.push({
-    name: rootPath.split("/").pop() ?? "app",
+    name: basename(rootPath),
     absPath: rootPath,
     relPath: ".",
     source: "root",

@@ -346,3 +346,25 @@ describe("stage() — 대량 파일 해제", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// 역슬래시 엔트리 (Windows PowerShell 5.1 Compress-Archive 등이 만드는 zip)
+// ---------------------------------------------------------------------------
+
+describe("stage() — 역슬래시 구분 엔트리", () => {
+  it("src\\server.js 엔트리를 OS 와 무관하게 src/server.js 로 해제한다", async () => {
+    const zipPath = path.join(fixturesDir, "backslash.zip");
+    await writeFile(zipPath, buildZip([
+      { name: "src\\server.js", data: Buffer.from("listen(3000)") },
+    ]));
+
+    const result = await stage(zipPath, { mode: "unzip" });
+    try {
+      const content = await readFile(path.join(result.resolvedPath, "src", "server.js"), "utf8");
+      expect(content).toBe("listen(3000)");
+    } finally {
+      await result.cleanup?.();
+      await rm(zipPath, { force: true });
+    }
+  });
+});

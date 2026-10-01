@@ -144,3 +144,35 @@ describe("fixture: node-postgres", () => {
     expect(profileUnresolved).toBeDefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 경로 표기 — OS 와 무관하게 상대 경로 + "/" 구분 (Windows 에서 절대 경로·역슬래시가 새던 버그)
+// ---------------------------------------------------------------------------
+describe("output paths are relative and /-separated on every OS", () => {
+  const isPortableRelative = (p: string) => !/^([A-Za-z]:|\/)/.test(p) && !p.includes("\\");
+
+  it.each(["node-http", "node-postgres", "python-fastapi"])("%s: service path · detected_from · dockerfile", async (fx) => {
+    const result = await analyze(resolve(fixturesDir, fx));
+    for (const svc of result.services) {
+      expect(isPortableRelative(svc.path)).toBe(true);
+      if (svc.dockerfile) expect(isPortableRelative(svc.dockerfile)).toBe(true);
+      for (const d of svc.detected_from) expect(isPortableRelative(d), d).toBe(true);
+    }
+    for (const w of result.warnings) {
+      if (w.path) expect(isPortableRelative(w.path), w.path).toBe(true);
+    }
+  });
+
+  it("node-postgres: .env.example · .listen 출처가 서비스 기준 상대 경로", async () => {
+    const result = await analyze(resolve(fixturesDir, "node-postgres"));
+    expect(result.services[0].detected_from).toEqual(
+      expect.arrayContaining([".env.example", "server.js (.listen(8080))"])
+    );
+  });
+
+  it("python-fastapi: package.json 이 없으면 서비스·앱 이름은 폴더 이름", async () => {
+    const result = await analyze(resolve(fixturesDir, "python-fastapi"));
+    expect(result.services[0].name).toBe("python-fastapi");
+    expect(result.ir_draft.metadata?.name).toBe("python-fastapi");
+  });
+});

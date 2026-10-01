@@ -13,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import fg from "fast-glob";
+import { relativePosix } from "../paths.js";
 
 export type EnvDetectResult = {
   envNames: string[];
@@ -44,7 +45,7 @@ export async function detectEnvNames(serviceDir: string): Promise<EnvDetectResul
     } catch {
       continue;
     }
-    const rel = envFile.replace(serviceDir + "/", "");
+    const rel = relativePosix(serviceDir, envFile);
     let foundAny = false;
     for (const line of content.split("\n")) {
       const trimmed = line.trim();

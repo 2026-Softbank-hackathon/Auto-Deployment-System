@@ -93,6 +93,7 @@ Defang(defang.io, AI DevOps 에이전트, Compose→AWS/GCP/Azure, Pulumi 프로
 | D-51 | 두 층(베이스/앱) 분리 · 사용자 계정 내 공용 RDS · apply 단계 분리 · Aurora DSQL → **채택 안 함** | — | `docs/paas-vs-user-account.md` 6절 |
 | D-52 | 백엔드 언어 = **TypeScript** (Fastify + Zod + pg-boss) | Go, Java, Python(FastAPI) | 팀원 리포에 Zod IR 스키마 · Analyzer 3단계 · PoC 이미 존재 → 재사용 최대. 프론트(민성)와 언어 공유(모노레포 packages/contracts). pg-boss가 D-11·D-29(Postgres 큐 SKIP LOCKED + LISTEN/NOTIFY)와 정확 매치. Node 동시성(이벤트 루프 + 논블로킹 I/O + 워커 풀)이 우리 규모 여유. 팀 슬랙에 반대 있으면 조정. 상세: `.omc/specs/deep-interview-backend-decisions.md` |
 | D-53 | 실행 모델 = **일반 애플리케이션 (ECS Fargate)** · D-32 재확정 | Lambda 하이브리드 (API Gateway + Lambda×4 + SQS + Fargate task for apply) | Lambda 15분 하드리밋으로 Terraform apply 초과 리스크(하이브리드 강제 → 순수 서버리스 불가), Postgres LISTEN/NOTIFY 불가(폴링 우회 비용), SSE 우회 복잡(API Gateway WebSocket), env_lock lease heartbeat이 stateless와 상충. 이식성 30점 물증은 IR·digest에서 나오므로 Lambda 사용은 채점 결정 요인 아님. 우리 컨트롤 플레인과 사용자 앱 런타임 대칭 유지. 상세: `.omc/specs/deep-interview-backend-decisions.md` |
+| D-54 | 플랫폼 자체 호스팅 = **EC2 한 대 + Docker Compose**(web · api · worker · Postgres · buildkit · cloudflared), 접속은 **Cloudflare Named Tunnel** `console.camellia-deploy.app`, 시크릿은 SSM Parameter Store. D-53 의 "상시 실행 애플리케이션"은 유지하고 호스트만 Fargate → EC2 | ECS Fargate(D-53), EIP + A 레코드, ALB + ACM, RDS | worker 가 사용자 앱을 Docker Buildx 로 빌드(docker.sock)하고 Terraform CLI 를 실행 → Fargate 에 Docker 데몬 없음. Tunnel 은 인바운드 포트 0 · 인증서 자동 · 비용 0, 사용자 앱과 같은 방식. 해커톤 예산(약 $2.75/일). 상세: `docs/deploy-platform.md` |
 
 ## 미결 (9/30 기준)
 | # | 결정 | 선택지 | 기한 |

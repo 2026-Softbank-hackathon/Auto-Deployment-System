@@ -38,6 +38,7 @@ export function projectToDto(row: ProjectRow): Project {
 
 export interface ProjectDeploymentRow {
   id: number;
+  project_id: number;
   status: DeploymentStatus;
   target_profile: string | null;
   public_url: string | null;
@@ -48,12 +49,14 @@ export interface ProjectDeploymentRow {
   source_sha256: string | null;
 }
 
-export function projectDeploymentToDto(row: ProjectDeploymentRow): ProjectDeployment {
+export function projectDeploymentToDto(row: ProjectDeploymentRow, platformDomain?: string): ProjectDeployment {
   return {
     id: String(row.id),
     status: row.status,
     targetProfile: row.target_profile,
-    publicUrl: row.public_url,
+    publicUrl: platformDomain
+      ? `https://service-${row.project_id}.${platformDomain}`
+      : null,
     sourceVersion:
       row.source_version_id !== null
         ? { id: String(row.source_version_id), sha256: row.source_sha256 }
@@ -65,7 +68,10 @@ export function projectDeploymentToDto(row: ProjectDeploymentRow): ProjectDeploy
 }
 
 export class ProjectService {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly platformDomain?: string,
+  ) {}
 
   async create(input: CreateProjectInput): Promise<Project> {
     const { name, description } = input;
@@ -149,7 +155,7 @@ export class ProjectService {
     }
 
     const res = await this.pool.query<ProjectDeploymentRow>(
-      `SELECT d.id, d.status, d.target_profile, d.public_url,
+      `SELECT d.id, d.project_id, d.status, d.target_profile, d.public_url,
               d.created_at, d.succeeded_at, d.failed_at,
               sv.id AS source_version_id, sv.sha256 AS source_sha256
        FROM deployments d
@@ -168,7 +174,7 @@ export class ProjectService {
 
     const rows = res.rows;
     const hasMore = rows.length > limit;
-    const items = rows.slice(0, limit).map(projectDeploymentToDto);
+    const items = rows.slice(0, limit).map((r) => projectDeploymentToDto(r, this.platformDomain));
     const nextCursor = hasMore ? String(rows[limit - 1]!.id) : null;
 
     return { items, nextCursor };

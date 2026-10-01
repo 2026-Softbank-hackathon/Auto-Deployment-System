@@ -8,6 +8,7 @@ import type { MarbleTone } from '../components/ui/Marble';
 import { displayProjectName } from '../features/dashboard/format';
 import { AwsKeyForm } from '../features/deployment-start/AwsKeyForm';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
+import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { OnpremCard } from '../features/setup/OnpremCard';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -110,6 +111,10 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
 
     <Card id="onprem" title={t.setup.onprem.title} tone={onprem ? 'success' : 'waiting'} status={onprem ? t.setup.status.registered : t.setup.status.optional}>
       <OnpremCard hasProject={project !== null} environment={onprem} onRegisterHost={registerOnprem} />
+    </Card>
+
+    <Card title={t.setup.env.title} tone="waiting" status={t.setup.status.optional}>
+      <EnvVarsCard projectId={project?.id ?? null} />
     </Card>
   </>;
 }

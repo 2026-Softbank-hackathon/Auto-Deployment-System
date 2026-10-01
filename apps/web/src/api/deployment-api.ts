@@ -247,6 +247,30 @@ export async function listSecretNames(projectId: string): Promise<string[]> {
   return (Array.isArray(body) ? body : []).flatMap((item) => (item && typeof item === 'object' && typeof (item as { name?: unknown }).name === 'string' ? [(item as { name: string }).name] : []));
 }
 
+export interface ProjectEnvVar { name: string; value: string }
+
+function envVarsOf(body: unknown): ProjectEnvVar[] {
+  const items = body && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items) ? (body as { items: unknown[] }).items : [];
+  return items.flatMap((item) => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+    return typeof record.name === 'string' && typeof record.value === 'string' ? [{ name: record.name, value: record.value }] : [];
+  });
+}
+
+/** DAT-01 — 프로젝트 환경변수(평문 설정값) 목록. 이름순. */
+export async function listProjectEnv(projectId: string): Promise<ProjectEnvVar[]> {
+  const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}/env`), { credentials: 'include' });
+  return envVarsOf(await readJson(response));
+}
+
+/** DAT-01 — 환경변수 추가 · 수정 · 삭제(값 null). 바뀐 뒤의 전체 목록을 돌려준다. 다음 배포부터 적용된다. */
+export async function patchProjectEnv(projectId: string, vars: Record<string, string | null>): Promise<ProjectEnvVar[]> {
+  const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}/env`), {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vars }),
+  });
+  return envVarsOf(await readJson(response));
+}
+
 /** 팀이 정한 시크릿 이름 (2026-10-01). 환경은 이 이름으로만 키를 참조한다. */
 const AWS_ACCESS_KEY_ID_SECRET = 'AWS_ACCESS_KEY_ID';
 const AWS_SECRET_ACCESS_KEY_SECRET = 'AWS_SECRET_ACCESS_KEY';

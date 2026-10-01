@@ -49,6 +49,9 @@ export function deploymentToDto(
   row: DeploymentRow,
   step?: StepRow | null,
   approval?: ApprovalRow | null,
+  /** 플랫폼 도메인. 있으면 고정 서비스 URL 계산, 없으면 null.
+   * DB public_url 컬럼은 origin endpoint 저장용으로 재해석 — 응답 publicUrl 은 여기서 계산. */
+  platformDomain?: string,
 ): Deployment {
   return {
     id: String(row.id),
@@ -61,7 +64,9 @@ export function deploymentToDto(
       row.registry_environment_id == null
         ? null
         : String(row.registry_environment_id),
-    publicUrl: row.public_url,
+    publicUrl: platformDomain
+      ? `https://service-${row.project_id}.apps.${platformDomain}`
+      : null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     succeededAt: row.succeeded_at?.toISOString() ?? null,
@@ -95,7 +100,8 @@ export class DeploymentService {
   constructor(
     private readonly pool: Pool,
     private readonly boss: PgBoss,
-    private readonly storage: Storage
+    private readonly storage: Storage,
+    private readonly platformDomain?: string,
   ) {}
 
   async create(input: CreateDeploymentInput): Promise<CreateDeploymentResponse> {
@@ -191,7 +197,7 @@ export class DeploymentService {
     );
     const approval = approvalRes.rows[0] ?? null;
 
-    return deploymentToDto(row, step, approval);
+    return deploymentToDto(row, step, approval, this.platformDomain);
   }
 
   async updateStatus(id: number, status: string, extra?: { error?: string; public_url?: string }) {

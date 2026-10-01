@@ -242,7 +242,7 @@ describe("deployments 응답 계약", () => {
     expectContract(DeploymentSchema, res.json());
   });
 
-  it("GET /deployments/:id — 실행 중 단계 · 대기 승인 없음", async () => {
+  it("GET /deployments/:id — 실행 중 단계 · 대기 승인 없음, publicUrl=null(도메인 미세팅)", async () => {
     pool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
       rows: [{ ...deploymentRow("succeeded"), public_url: "https://app.example.com", succeeded_at: NOW }],
     }));
@@ -251,7 +251,37 @@ describe("deployments 응답 계약", () => {
 
     expect(res.json().currentStep).toEqual({ name: null, startedAt: null });
     expect(res.json().approvalPending).toBeNull();
+    // DB public_url 은 origin endpoint 저장용으로 재해석 — 응답 publicUrl 은 platformDomain 기반 계산
+    // platformDomain 미세팅이므로 null
+    expect(res.json().publicUrl).toBeNull();
     expectContract(DeploymentSchema, res.json());
+  });
+
+  it("GET /deployments/:id — DEMO_PLATFORM_DOMAIN 세팅 시 publicUrl 고정 서비스 URL", async () => {
+    const domainPool = new MockPool();
+    const domainServer = await buildServer({
+      pool: domainPool as unknown as Pool,
+      boss: new MockPgBoss() as unknown as PgBoss,
+      storage: new MockStorage() as unknown as Storage,
+      nodeEnv: "development",
+      logger: false,
+      enablePgListener: false,
+      platformDomain: "camellia.app",
+    });
+    await domainServer.ready();
+
+    domainPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
+      rows: [deploymentRow("succeeded")],
+    }));
+
+    const res = await domainServer.inject({ method: "GET", url: "/api/v1/deployments/42" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().publicUrl).toBe("https://service-1.apps.camellia.app");
+    expectContract(DeploymentSchema, res.json());
+
+    await domainServer.close();
+    domainPool.reset();
   });
 
   it("GET /deployments/:id/ir — version 숫자 · 문자열(실제 pg BIGINT)", async () => {

@@ -329,6 +329,54 @@ describe("POST /api/v1/deployments", () => {
 
 });
 
+// ── publicUrl 계산 ────────────────────────────────────────────────────────────
+
+describe("GET /api/v1/deployments/:id publicUrl 계산", () => {
+  it("DEMO_PLATFORM_DOMAIN 세팅 시 고정 서비스 URL 반환", async () => {
+    // platformDomain 을 주입한 서버를 별도로 만든다
+    const domainServer = await buildServer({
+      pool: mockPool as unknown as Pool,
+      boss: mockBoss as unknown as PgBoss,
+      storage: mockStorage as unknown as Storage,
+      nodeEnv: "development",
+      logger: false,
+      platformDomain: "camellia.app",
+    });
+    await domainServer.ready();
+
+    const dep = makeDeployment(42, 1, "succeeded");
+    mockPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
+      rows: [dep],
+    }));
+    mockPool.on(/FROM deployment_steps/, () => ({ rows: [] }));
+    mockPool.on(/FROM approvals/, () => ({ rows: [] }));
+
+    const res = await domainServer.inject({ method: "GET", url: "/api/v1/deployments/42" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ publicUrl: string }>().publicUrl).toBe(
+      "https://service-1.apps.camellia.app",
+    );
+
+    await domainServer.close();
+  });
+
+  it("DEMO_PLATFORM_DOMAIN 미세팅 시 publicUrl === null", async () => {
+    // 기본 server (platformDomain 없음)
+    const dep = makeDeployment(42, 1, "succeeded");
+    mockPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
+      rows: [dep],
+    }));
+    mockPool.on(/FROM deployment_steps/, () => ({ rows: [] }));
+    mockPool.on(/FROM approvals/, () => ({ rows: [] }));
+
+    const res = await server.inject({ method: "GET", url: "/api/v1/deployments/42" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ publicUrl: null }>().publicUrl).toBeNull();
+  });
+});
+
 // ── 4. GET /deployments/:id ───────────────────────────────────────────────────
 
 describe("GET /api/v1/deployments/:id", () => {

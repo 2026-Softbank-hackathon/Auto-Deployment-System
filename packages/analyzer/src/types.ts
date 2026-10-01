@@ -32,6 +32,11 @@ export type ServiceCandidate = {
   dockerfile?: string;
   /** 이 서비스가 필요로 하는 환경변수 이름 목록 */
   env_names: string[];
+  /**
+   * `.env.example` 등에서 추출한 default 값 매핑 (name → value).
+   * 원클릭 복원 (이슈 #137): 프로젝트에 등록 안 돼도 이 값으로 fallback.
+   */
+  env_defaults?: Record<string, string>;
   /** 감지 근거 목록 (예: "package.json", "server.js line 42") */
   detected_from: string[];
 };

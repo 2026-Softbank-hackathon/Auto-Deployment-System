@@ -183,6 +183,12 @@ export async function analyze(sourcePath: string): Promise<AnalysisResult> {
       command,
       dockerfile: dockerResult.dockerfilePath,
       env_names: [...allEnvNames].sort(),
+      // `.env.example` 등에서 추출한 default 값 매핑. 코드 scan 추출은 default 없음.
+      // 원클릭 복원 (이슈 #137): provision 이 user env_vars 미등록 시 fallback.
+      env_defaults:
+        Object.keys(envResult.envDefaults).length > 0
+          ? { ...envResult.envDefaults }
+          : undefined,
       detected_from: [...new Set(detectedFrom)],
     });
   }

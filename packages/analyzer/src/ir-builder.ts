@@ -98,6 +98,10 @@ export function buildIr(input: IrBuildInput): IrBuildResult {
     if (svc.env_names.length > 0) {
       serviceEntry.env = svc.env_names;
     }
+    // env defaults — 원클릭 복원 (이슈 #137): `.env.example` 에서 추출한 default.
+    if (svc.env_defaults && Object.keys(svc.env_defaults).length > 0) {
+      serviceEntry.env_defaults = { ...svc.env_defaults };
+    }
 
     servicesMap[serviceName] = serviceEntry;
   }

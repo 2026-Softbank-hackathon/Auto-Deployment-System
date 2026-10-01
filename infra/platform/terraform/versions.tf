@@ -12,8 +12,7 @@ terraform {
     }
   }
 
-  # 기본은 로컬 state. 팀이 같이 apply 하려면 backend.tf.example → backend.tf 로 복사해
-  # S3 backend(use_lockfile) 를 켠다. state 에 Tunnel token 이 들어가므로 암호화 bucket 필수.
+  # state 는 S3 backend(backend.tf). state 에 Tunnel token 이 들어가므로 암호화 · 접근 제한 bucket.
 }
 
 provider "aws" {

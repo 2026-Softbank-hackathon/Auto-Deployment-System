@@ -56,14 +56,18 @@ variable "ssm_parameter_prefix" {
   }
 }
 
+# account · zone ID 는 비밀이 아닌 식별자라 기본값으로 둔다 → 로컬 · CI 가 tfvars 없이 같은 값을 쓴다.
+# 비밀인 API token 은 환경변수 CLOUDFLARE_API_TOKEN 으로만 (SSM /camellia/platform/env/CLOUDFLARE_API_TOKEN)
 variable "cloudflare_account_id" {
   description = "Cloudflare account ID (Tunnel 소유 계정)"
   type        = string
+  default     = "616f7afddb9e452c51c0654c6b7decbe"
 }
 
 variable "cloudflare_zone_id" {
   description = "platform_domain 의 Cloudflare zone ID"
   type        = string
+  default     = "9668a870d447dc0fed7e4c9317cb69ad"
 }
 
 variable "platform_domain" {

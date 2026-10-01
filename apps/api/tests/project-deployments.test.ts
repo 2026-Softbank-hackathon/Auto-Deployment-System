@@ -35,6 +35,7 @@ afterEach(async () => {
 function deploymentRow(id: number, overrides: Record<string, unknown> = {}) {
   return {
     id,
+    project_id: 1,
     status: "succeeded",
     target_profile: "aws-ecs-basic",
     public_url: `https://app-${id}.example.com`,
@@ -101,7 +102,7 @@ describe("GET /api/v1/projects/:id/deployments", () => {
           id: "1",
           status: "succeeded",
           targetProfile: "aws-ecs-basic",
-          publicUrl: "https://app-1.example.com",
+          publicUrl: null,
           sourceVersion: { id: "10", sha256: "sha-1" },
           createdAt: "2026-09-30T01:00:00.000Z",
           succeededAt: "2026-09-30T01:05:00.000Z",
@@ -159,5 +160,44 @@ describe("GET /api/v1/projects/:id/deployments", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("GET /api/v1/projects/:id/deployments — platformDomain 주입 시 publicUrl 재계산", () => {
+  let serverWithDomain: FastifyInstance;
+  let poolWithDomain: MockPool;
+
+  beforeEach(async () => {
+    poolWithDomain = new MockPool();
+    serverWithDomain = await buildServer({
+      pool: poolWithDomain as unknown as Pool,
+      boss: new MockPgBoss() as unknown as PgBoss,
+      storage: new MockStorage() as unknown as Storage,
+      nodeEnv: "development",
+      logger: false,
+      enablePgListener: false,
+      platformDomain: "camellia-deploy.app",
+    });
+    await serverWithDomain.ready();
+  });
+
+  afterEach(async () => {
+    await serverWithDomain.close();
+    poolWithDomain.reset();
+  });
+
+  it("platformDomain 주입 시 publicUrl 을 service-{projectId}.{domain} 포맷으로 반환함", async () => {
+    poolWithDomain.on(/FROM projects WHERE id/, () => ({ rows: [{ id: 1 }] }));
+    poolWithDomain.on(/FROM deployments/, () => ({
+      rows: [deploymentRow(1)],
+    }));
+
+    const res = await serverWithDomain.inject({
+      method: "GET",
+      url: "/api/v1/projects/1/deployments",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().items[0].publicUrl).toBe("https://service-1.camellia-deploy.app");
   });
 });

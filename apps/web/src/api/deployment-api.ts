@@ -1,7 +1,8 @@
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '');
 
 export class DeploymentApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  /** code — 서버 오류 본문의 error.code (예: DEPLOYMENT_LOCKED). 본문을 읽은 경우에만 있다. */
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
     this.name = 'DeploymentApiError';
   }
@@ -60,8 +61,16 @@ function endpoint(path: string): string {
   return `${apiBaseUrl}${suffix}`;
 }
 
+/** 실패 응답이면 서버 오류 코드(error.code)를 담아 던진다. */
+async function assertOk(response: Response): Promise<void> {
+  if (response.ok) return;
+  const body = await response.json().catch(() => null) as { error?: { code?: unknown } } | null;
+  const code = typeof body?.error?.code === 'string' ? body.error.code : undefined;
+  throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`, code);
+}
+
 async function readJson(response: Response): Promise<unknown> {
-  if (!response.ok) throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`);
+  await assertOk(response);
   return response.json();
 }
 
@@ -72,7 +81,7 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
 
 /**
  * Current backend contract for the P0 demo upload endpoint.
- * `target` is the vendor (aws | onprem); the server resolves it to a profile. The project is created automatically.
+ * `target` is the vendor (aws | onprem); the server resolves it to a profile and to the project's default environment.
  */
 export async function createDeployment(source: File, projectId: string, target: string): Promise<CreateDeploymentResponse> {
   const form = new FormData();
@@ -93,7 +102,7 @@ export async function createDeployment(source: File, projectId: string, target: 
   return { deploymentId, status, eventsUrl };
 }
 
-/** API-02 — create an opaque project record for a one-click deployment. */
+/** API-02 — 프로젝트 생성. 프로젝트는 한 애플리케이션의 배포 이력을 묶는 단위라 처음 한 번만 만든다. */
 export async function createProject(name: string): Promise<CreateProjectResponse> {
   const response = await fetch(endpoint('/api/v1/projects'), {
     method: 'POST',
@@ -155,6 +164,94 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
     return typeof description === 'string' && typeof diff === 'string' ? [{ description, diff }] : [];
   });
   return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: body.summary, patchCandidates };
+}
+
+/**
+ * API-11 — 대상(target) 승인. 원클릭 흐름에서 프론트가 자동으로 호출한다 (2026-10-01 팀 결정:
+ * 사용자는 벤더만 고르고 프로필은 서버가 정하므로 대상 확인은 사용자 승인으로 받지 않는다).
+ * plan 승인은 인프라를 실제로 만드는 단계라 여기서 다루지 않는다.
+ */
+export async function approveDeploymentTarget(deploymentId: string, note: string): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/approvals`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gate: 'target', decision: 'approve', note }),
+    credentials: 'include',
+  });
+  await assertOk(response);
+}
+
+/** 배포 환경 (API-24). 화면에는 종류 · 기본 여부 · 표시용 값(리전 / 호스트 이름)만 쓴다. */
+export interface EnvironmentSummary { id: string; name: string; type: 'aws' | 'onprem'; isDefault: boolean; region: string | null; hostname: string | null }
+
+/** API-24 — 프로젝트에 등록된 배포 환경 목록. */
+export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
+  const response = await fetch(endpoint(`/api/v1/environments?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });
+  const body = await readJson(response);
+  return (Array.isArray(body) ? body : []).flatMap((item): EnvironmentSummary[] => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    if (record.type !== 'aws' && record.type !== 'onprem') return [];
+    const aws = record.awsConfig && typeof record.awsConfig === 'object' ? record.awsConfig as Record<string, unknown> : {};
+    const onprem = record.onpremConfig && typeof record.onpremConfig === 'object' ? record.onpremConfig as Record<string, unknown> : {};
+    return [{
+      id: String(record.id), name: typeof record.name === 'string' ? record.name : '', type: record.type, isDefault: record.isDefault === true,
+      region: typeof aws.region === 'string' ? aws.region : null, hostname: typeof onprem.hostname === 'string' ? onprem.hostname : null,
+    }];
+  });
+}
+
+/** 팀이 정한 시크릿 이름 (2026-10-01). 환경은 이 이름으로만 키를 참조한다. */
+const AWS_ACCESS_KEY_ID_SECRET = 'AWS_ACCESS_KEY_ID';
+const AWS_SECRET_ACCESS_KEY_SECRET = 'AWS_SECRET_ACCESS_KEY';
+const AWS_ENVIRONMENT_NAME = 'aws-default';
+
+/** API-28 · 30 — 시크릿 저장. 같은 이름이 있으면 지우고 다시 저장한다(키 교체). 값은 응답에 돌아오지 않는다. */
+async function saveSecret(projectId: string, name: string, value: string): Promise<void> {
+  const post = () => fetch(endpoint('/api/v1/secrets'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId: Number(projectId), name, value }),
+    credentials: 'include',
+  });
+  let response = await post();
+  if (response.status === 409) {
+    await assertOk(await fetch(endpoint(`/api/v1/secrets/${encodeURIComponent(name)}?projectId=${encodeURIComponent(projectId)}`), { method: 'DELETE', credentials: 'include' }));
+    response = await post();
+  }
+  await assertOk(response);
+}
+
+/**
+ * AWS 키 등록 — 시크릿 2개 저장(API-28) 후 그 이름을 참조하는 기본 AWS 환경을 만든다(API-23).
+ * 키 값은 시크릿 저장 요청에만 실리고, 환경에는 시크릿 이름과 리전만 들어간다.
+ * 이미 등록된 환경(current)이 있으면 키만 바꾼다. 리전이 달라졌을 때만 새 기본 환경을 만든다(이전 환경은 기본에서 내려간다).
+ */
+export async function registerAwsEnvironment(projectId: string, input: { accessKeyId: string; secretAccessKey: string; region: string }, current?: EnvironmentSummary | null): Promise<void> {
+  await saveSecret(projectId, AWS_ACCESS_KEY_ID_SECRET, input.accessKeyId);
+  await saveSecret(projectId, AWS_SECRET_ACCESS_KEY_SECRET, input.secretAccessKey);
+  if (current && current.region === input.region) return;
+  const name = current ? `aws-${input.region}-${Date.now()}` : AWS_ENVIRONMENT_NAME;
+  const response = await fetch(endpoint('/api/v1/environments'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: Number(projectId), name, type: 'aws', isDefault: true,
+      awsConfig: { credentialsType: 'access_key', accessKeyIdSecretName: AWS_ACCESS_KEY_ID_SECRET, secretAccessKeySecretName: AWS_SECRET_ACCESS_KEY_SECRET, region: input.region },
+    }),
+    credentials: 'include',
+  });
+  await assertOk(response);
+}
+
+export interface DeploymentAiUsageResponse { totalTokenIn: number; totalTokenOut: number; totalCostUsd: number }
+
+/** API-32 — 이 배포에 쓴 AI 토큰 · 비용. */
+export async function getDeploymentAiUsage(deploymentId: string): Promise<DeploymentAiUsageResponse> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/ai-usage`), { credentials: 'include' });
+  const body = asRecord(await readJson(response), 'AI 사용량');
+  const number = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+  return { totalTokenIn: number(body.totalTokenIn), totalTokenOut: number(body.totalTokenOut), totalCostUsd: number(body.totalCostUsd) };
 }
 
 /** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */

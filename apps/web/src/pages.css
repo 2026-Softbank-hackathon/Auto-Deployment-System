@@ -349,3 +349,30 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .command-block { flex-direction: column; }
   .command-block pre { width: 100%; }
 }
+
+/* 배포 결과 화면 */
+.result-card {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 720px; margin: 0 auto; padding: 40px 32px 32px; text-align: center;
+  background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-lift);
+}
+.result-card.is-success { border-color: var(--moss); }
+.result-card.is-failed { border-color: var(--brick); }
+.result-card h1 { margin: 0; font-family: var(--font-display); font-size: 34px; line-height: 1.2; }
+.result-card p { margin: 0; color: var(--ink-soft); }
+.result-card__meta { font-family: var(--font-mono); font-size: 14px; }
+.result-card__note { max-width: 46ch; }
+.result-card > .notice { align-self: stretch; text-align: left; }
+.result-url { align-self: stretch; display: grid; gap: 14px; justify-items: center; padding: 20px; background: var(--paper-sunken); border-radius: var(--radius-card); }
+.result-url__link { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--koro-text); overflow-wrap: anywhere; }
+.result-url__link:hover { color: var(--koro-text-hover); }
+.result-url__actions, .result-card__actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.result-facts { align-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0; }
+.result-facts div { display: grid; gap: 4px; padding: 12px 14px; border: var(--border); border-radius: var(--radius-input); }
+.result-facts dt { font-size: 13px; color: var(--ink-soft); }
+.result-facts dd { margin: 0; font-family: var(--font-mono); font-size: 15px; color: var(--ink); }
+.result-card__actions { margin-top: 8px; }
+@media (max-width: 760px) {
+  .result-card { padding: 28px 16px 24px; }
+  .result-card h1 { font-size: 28px; }
+  .result-url__link { font-size: 18px; }
+}

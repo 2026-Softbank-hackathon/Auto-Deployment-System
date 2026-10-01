@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { approveDeploymentTarget, DeploymentApiError, deploymentLogSteps, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -20,6 +20,8 @@ type StepLog = { step: DeploymentLogStep; text: string };
 
 /** 승인 기록에 남기는 메모 — 사람이 누른 승인과 구분한다. */
 const AUTO_APPROVAL_NOTE = 'one-click auto-approval (web)';
+/** 사용자 입력 없이 통과시키는 승인 대기 상태 → 게이트 */
+const autoApprovalGates: Record<string, ApprovalGate> = { awaiting_target_confirmation: 'target', awaiting_plan_approval: 'plan' };
 
 /** 지켜보던 배포가 성공했을 때, 결과 화면으로 넘어가기 전 코로가 컵에 착지하는 모습을 보여 주는 시간 */
 const SUCCESS_LANDING_MS = 1400;
@@ -133,28 +135,29 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
 
   const currentStatus = deploymentStatus(status);
 
-  // 원클릭: 분석이 끝나 대상 확인 대기(awaiting_target_confirmation)가 되면 사용자 입력 없이 바로 승인한다.
-  // 다른 탭이 먼저 승인했으면(APPROVAL_GATE_NOT_PENDING) 정상으로 본다. 실패하면 멈춘 채 다시 시도 버튼을 보여 준다.
-  const [approvalError, setApprovalError] = useState<unknown>(null);
-  const approveTarget = useCallback(async () => {
+  // 원클릭: 승인 대기 상태가 되면 사용자 입력 없이 바로 승인한다 (대상 확인 → target, 배포 계획 → plan).
+  // 다른 탭이나 서버가 먼저 승인했으면(APPROVAL_GATE_NOT_PENDING) 정상으로 본다. 실패하면 멈춘 채 다시 시도 버튼을 보여 준다.
+  const pendingGate = currentStatus ? autoApprovalGates[currentStatus] ?? null : null;
+  const [approvalError, setApprovalError] = useState<{ gate: ApprovalGate; cause: unknown } | null>(null);
+  const approveGate = useCallback(async (gate: ApprovalGate) => {
     setApprovalError(null);
     try {
-      await approveDeploymentTarget(deploymentId, AUTO_APPROVAL_NOTE);
+      await approveDeploymentGate(deploymentId, gate, AUTO_APPROVAL_NOTE);
     } catch (requestError) {
-      if (!(requestError instanceof DeploymentApiError && requestError.code === 'APPROVAL_GATE_NOT_PENDING')) setApprovalError(requestError);
+      if (!(requestError instanceof DeploymentApiError && requestError.code === 'APPROVAL_GATE_NOT_PENDING')) setApprovalError({ gate, cause: requestError });
     }
     await refresh();
   }, [deploymentId, refresh]);
-  const autoApprovalStarted = useRef(false);
+  const autoApproved = useRef(new Set<ApprovalGate>());
   useEffect(() => {
-    if (currentStatus !== 'awaiting_target_confirmation' || autoApprovalStarted.current) return;
-    autoApprovalStarted.current = true;
-    void approveTarget();
-  }, [currentStatus, approveTarget]);
+    if (!pendingGate || autoApproved.current.has(pendingGate)) return;
+    autoApproved.current.add(pendingGate);
+    void approveGate(pendingGate);
+  }, [pendingGate, approveGate]);
 
   const statusView = deploymentStatusView(currentStatus ?? 'received');
-  // 대상 확인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
-  const view = currentStatus === 'awaiting_target_confirmation' && approvalError === null ? { ...statusView, waiting: null } : statusView;
+  // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
+  const view = pendingGate && approvalError === null ? { ...statusView, waiting: null } : statusView;
 
   // 진행 중 → 성공/실패로 바뀌는 순간에만 효과음. 성공이면 코로가 컵에 착지하는 걸 보여 준 뒤 결과 화면으로 넘어간다.
   // 이미 끝난 배포를 열었을 때는 넘어가지 않는다 (결과 화면의 "진행 화면" 버튼으로 돌아올 수 있어야 한다).
@@ -234,9 +237,9 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
       {approvalError !== null && <div className="notice error run-failure" role="alert">
-        <strong>{t.run.approveFailed}</strong>
-        <p>{approvalError instanceof DeploymentApiError && approvalError.code === 'DEPLOYMENT_LOCKED' ? t.run.approveLocked : errorMessage(approvalError, t, t.run.approveFailed)}</p>
-        <Keycap variant="secondary" onClick={() => void approveTarget()}>{t.run.approveRetry}</Keycap>
+        <strong>{approvalError.gate === 'plan' ? t.run.approvePlanFailed : t.run.approveFailed}</strong>
+        <p>{approvalError.cause instanceof DeploymentApiError && approvalError.cause.code === 'DEPLOYMENT_LOCKED' ? t.run.approveLocked : errorMessage(approvalError.cause, t, t.run.approveFailed)}</p>
+        <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
       </div>}
 
       <figure className="run-scene"><DeployScene view={view} /></figure>

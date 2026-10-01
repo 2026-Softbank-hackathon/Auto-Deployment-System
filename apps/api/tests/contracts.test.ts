@@ -103,6 +103,8 @@ function deploymentRow(status = "awaiting_target_confirmation") {
     project_id: 1,
     status,
     target_profile: "aws-ecs-basic",
+    target_environment_id: 10,
+    registry_environment_id: 10,
     public_url: null,
     created_at: NOW,
     updated_at: NOW,
@@ -203,6 +205,7 @@ describe("projects 응답 계약", () => {
 
 describe("deployments 응답 계약", () => {
   it("POST /deployments 202 (multipart)", async () => {
+    pool.on(/SELECT id FROM environments/, () => ({ rows: [{ id: 10 }] }));
     pool.on(/INSERT INTO deployments/, () => ({ rows: [{ id: 42 }] }));
     pool.on(/INSERT INTO source_versions/, () => ({ rows: [{ id: 1 }] }));
 
@@ -223,7 +226,7 @@ describe("deployments 응답 계약", () => {
   });
 
   it("GET /deployments/:id — 실행 중 단계 · 대기 승인 있음", async () => {
-    pool.on(/SELECT id, project_id, status, target_profile, public_url/, () => ({
+    pool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
       rows: [deploymentRow()],
     }));
     pool.on(/FROM deployment_steps/, () => ({
@@ -239,7 +242,7 @@ describe("deployments 응답 계약", () => {
   });
 
   it("GET /deployments/:id — 실행 중 단계 · 대기 승인 없음", async () => {
-    pool.on(/SELECT id, project_id, status, target_profile, public_url/, () => ({
+    pool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
       rows: [{ ...deploymentRow("succeeded"), public_url: "https://app.example.com", succeeded_at: NOW }],
     }));
 
@@ -301,9 +304,8 @@ describe("deployments 응답 계약", () => {
     const events = collectEvents("42");
     let status = "awaiting_target_confirmation";
     pool.on(/FROM deployments WHERE id/, () => ({
-      rows: [{ id: 42, status, project_id: 1, target_profile: "aws-ecs-basic" }],
+      rows: [{ id: 42, status, target_environment_id: 10 }],
     }));
-    pool.on(/FROM projects WHERE id/, () => ({ rows: [{ name: "app-1" }] }));
 
     const target = await call("POST", "/api/v1/deployments/42/approvals", { gate: "target", decision: "approve" });
     expect(target.statusCode).toBe(200);
@@ -438,6 +440,7 @@ describe("environments 응답 계약", () => {
     project_id: "1",
     name: "onprem-mac",
     type: "onprem",
+    is_default: true,
     aws_config: null,
     onprem_config: { agentRegistrationToken: "tok", hostname: "mac.local" },
     agent_status: null,
@@ -447,7 +450,7 @@ describe("environments 응답 계약", () => {
 
   it("POST 201 (onprem) · GET 목록 · GET 단건 · DELETE 204", async () => {
     pool.on(/SELECT 1 FROM projects/, () => ({ rows: [{}] }));
-    pool.on(/INSERT INTO environments/, () => ({ rows: [{ id: "10", created_at: NOW }] }));
+    pool.on(/INSERT INTO environments/, () => ({ rows: [{ id: "10", is_default: true, created_at: NOW }] }));
     pool.on(/FROM environments/, () => ({ rows: [envRow] }));
 
     const created = await call("POST", "/api/v1/environments", {

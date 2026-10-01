@@ -22,3 +22,25 @@ export type Config = z.infer<typeof ConfigSchema>;
 export function loadConfig(): Config {
   return ConfigSchema.parse(process.env);
 }
+
+export function decodeSecretMasterKey(
+  encoded: string | undefined,
+  nodeEnv: Config["NODE_ENV"],
+): Buffer | undefined {
+  if (!encoded) {
+    if (nodeEnv === "production") {
+      throw new Error("production에서는 SECRET_MASTER_KEY가 필요합니다.");
+    }
+    return undefined;
+  }
+
+  const value = encoded.trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) {
+    throw new Error("SECRET_MASTER_KEY는 base64 인코딩된 32바이트여야 합니다.");
+  }
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length !== 32) {
+    throw new Error("SECRET_MASTER_KEY는 base64 인코딩된 32바이트여야 합니다.");
+  }
+  return decoded;
+}

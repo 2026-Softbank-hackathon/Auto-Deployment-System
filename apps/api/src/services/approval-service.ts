@@ -40,10 +40,9 @@ export class ApprovalService {
       const depRes = await client.query<{
         id: number;
         status: string;
-        project_id: number;
-        target_profile: string | null;
+        target_environment_id: number | null;
       }>(
-        `SELECT id, status, project_id, target_profile
+        `SELECT id, status, target_environment_id
          FROM deployments WHERE id = $1 FOR UPDATE`,
         [deploymentId]
       );
@@ -80,12 +79,14 @@ export class ApprovalService {
 
         // target 승인 시: env_lock 획득 (D-30)
         if (gate === "target") {
-          const projectRes = await client.query<{ name: string }>(
-            `SELECT name FROM projects WHERE id = $1`,
-            [dep.project_id]
-          );
-          const projectName = projectRes.rows[0]?.name ?? String(dep.project_id);
-          const envKey = `${dep.target_profile ?? "unknown"}:${projectName}`;
+          if (dep.target_environment_id === null) {
+            throw new ApiError(
+              409,
+              "TARGET_ENVIRONMENT_REQUIRED",
+              "배포 대상 Environment가 연결되어 있지 않습니다.",
+            );
+          }
+          const envKey = `environment:${dep.target_environment_id}`;
           const leaseExpires = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2시간
 
           // 충돌 시 409 DEPLOYMENT_LOCKED

@@ -58,6 +58,8 @@ export const DeploymentSchema = z
     projectId: IdStringSchema,
     status: DeploymentStatusSchema,
     targetProfile: z.string().nullable(),
+    targetEnvironmentId: IdStringSchema.nullable(),
+    registryEnvironmentId: IdStringSchema.nullable(),
     publicUrl: z.string().nullable(),
     createdAt: IsoDateTimeSchema,
     updatedAt: IsoDateTimeSchema,

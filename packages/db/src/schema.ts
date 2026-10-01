@@ -38,6 +38,8 @@ export const DeploymentSchema = z.object({
   project_id: z.number().int().positive(),
   status: DeploymentStatus,
   target_profile: z.string().nullable(),
+  target_environment_id: z.number().int().positive().nullable(),
+  registry_environment_id: z.number().int().positive().nullable(),
   public_url: z.string().nullable(),
   created_at: z.date(),
   updated_at: z.date(),

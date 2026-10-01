@@ -12,6 +12,7 @@ import type {
   CreateDeploymentResponse,
   Deployment,
   DeploymentStatus,
+  TargetVendor,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
@@ -20,6 +21,8 @@ export interface DeploymentRow {
   project_id: number;
   status: DeploymentStatus;
   target_profile: string | null;
+  target_environment_id: number | string | null;
+  registry_environment_id: number | string | null;
   public_url: string | null;
   created_at: Date;
   updated_at: Date;
@@ -51,6 +54,12 @@ export function deploymentToDto(
     projectId: String(row.project_id),
     status: row.status,
     targetProfile: row.target_profile,
+    targetEnvironmentId:
+      row.target_environment_id == null ? null : String(row.target_environment_id),
+    registryEnvironmentId:
+      row.registry_environment_id == null
+        ? null
+        : String(row.registry_environment_id),
     publicUrl: row.public_url,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -76,6 +85,7 @@ export function deploymentToDto(
 
 export interface CreateDeploymentInput {
   projectId: number;
+  targetVendor: TargetVendor;
   targetProfile: string;
   fileBuffer: Buffer;
 }
@@ -88,7 +98,10 @@ export class DeploymentService {
   ) {}
 
   async create(input: CreateDeploymentInput): Promise<CreateDeploymentResponse> {
-    const { projectId, targetProfile, fileBuffer } = input;
+    const { projectId, targetVendor, targetProfile, fileBuffer } = input;
+
+    const { targetEnvironmentId, registryEnvironmentId } =
+      await this.resolveEnvironments(projectId, targetVendor);
 
     // 1. sha256 계산
     const sha256 = createHash("sha256").update(fileBuffer).digest("hex");
@@ -105,10 +118,11 @@ export class DeploymentService {
       await client.query("BEGIN");
 
       const depRes = await client.query<{ id: number }>(
-        `INSERT INTO deployments (project_id, status, target_profile)
-         VALUES ($1, 'received', $2)
+        `INSERT INTO deployments
+           (project_id, status, target_profile, target_environment_id, registry_environment_id)
+         VALUES ($1, 'received', $2, $3, $4)
          RETURNING id`,
-        [projectId, targetProfile]
+        [projectId, targetProfile, targetEnvironmentId, registryEnvironmentId]
       );
       deploymentId = depRes.rows[0]!.id;
 
@@ -145,7 +159,8 @@ export class DeploymentService {
 
   async get(id: number): Promise<Deployment> {
     const depRes = await this.pool.query<DeploymentRow>(
-      `SELECT id, project_id, status, target_profile, public_url,
+      `SELECT id, project_id, status, target_profile,
+              target_environment_id, registry_environment_id, public_url,
               created_at, updated_at, succeeded_at, failed_at, error
        FROM deployments WHERE id = $1`,
       [id]
@@ -201,5 +216,52 @@ export class DeploymentService {
         id,
       ]
     );
+  }
+
+  private async resolveEnvironments(
+    projectId: number,
+    targetVendor: TargetVendor,
+  ): Promise<{
+    targetEnvironmentId: number;
+    registryEnvironmentId: number;
+  }> {
+    const findDefault = async (type: "aws" | "onprem") => {
+      const result = await this.pool.query<{ id: number }>(
+        `SELECT id FROM environments
+         WHERE project_id = $1 AND type = $2 AND is_default = TRUE
+         LIMIT 1`,
+        [projectId, type],
+      );
+      return result.rows[0]?.id ?? null;
+    };
+
+    const targetEnvironmentId = await findDefault(targetVendor);
+    if (targetEnvironmentId === null) {
+      throw new ApiError(
+        409,
+        "TARGET_ENVIRONMENT_REQUIRED",
+        `${targetVendor} 기본 배포 환경이 등록되어 있지 않습니다.`,
+        `POST /environments 로 ${targetVendor} 환경을 먼저 등록하세요.`,
+      );
+    }
+
+    if (targetVendor === "aws") {
+      return {
+        targetEnvironmentId,
+        registryEnvironmentId: targetEnvironmentId,
+      };
+    }
+
+    const registryEnvironmentId = await findDefault("aws");
+    if (registryEnvironmentId === null) {
+      throw new ApiError(
+        409,
+        "AWS_REGISTRY_ENVIRONMENT_REQUIRED",
+        "On-Prem 배포 이미지를 저장할 기본 AWS 환경이 등록되어 있지 않습니다.",
+        "사용자 AWS 계정의 Private ECR을 사용하므로 AWS 환경을 먼저 등록하세요.",
+      );
+    }
+
+    return { targetEnvironmentId, registryEnvironmentId };
   }
 }

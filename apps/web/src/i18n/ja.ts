@@ -8,7 +8,7 @@ export const ja: Messages = {
     language: '言語',
     sound: { label: 'サウンド', on: 'オン', off: 'オフ' },
   },
-  nav: { label: 'メインメニュー', dashboard: 'ダッシュボード', projects: 'マイプロジェクト', deploy: 'かんたんデプロイ！', setup: '接続設定', setupNeeded: '(設定が必要)' },
+  nav: { label: 'メインメニュー', dashboard: 'ダッシュボード', projects: 'マイプロジェクト', deploy: 'かんたんデプロイ！' },
   stages: { source: 'ソースアップロード', analyze: 'AI分析', deploy: 'デプロイ', verify: '検証', done: '完了' },
   gadgets: { source: 'スタート台', analyze: 'ドミノ', deploy: 'じょうご', verify: '天びん', done: 'カップ' },
   status: {

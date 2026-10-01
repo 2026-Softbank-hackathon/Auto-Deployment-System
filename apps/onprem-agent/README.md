@@ -13,20 +13,31 @@
 - Tunnel Token을 `TUNNEL_TOKEN` 환경변수로만 전달하고 프로세스 준비·교체·정리
 - Intel Mac 사전검사와 macOS `LaunchAgent` 설치 기반
 - `TunnelProvider` 인터페이스와 테스트 전용 `FakeTunnelProvider`
-- `AgentControlPlaneClient` 인터페이스와 테스트 전용 `FakeControlPlaneClient`
+- 등록·Heartbeat HTTP Client와 권한 제한 장기 Agent 인증정보 파일
+- 나머지 `AgentControlPlaneClient` 인터페이스와 테스트 전용 `FakeControlPlaneClient`
 
 외부 노출 방식은 플랫폼 관리 Cloudflare Named Tunnel로 확정됐습니다. Agent는 Compose의 동적 포트로 로컬 헬스체크를 통과한 뒤 `jobId`와 숫자 `localPort`를 서버 경계에 전달합니다. 서버는 `http://127.0.0.1:<localPort>`로 ingress를 설정한 뒤 `tunnelId`, `token`, 외부 `hostname`을 반환하고, Agent는 해당 정보로 `cloudflared`를 실행합니다. Agent 결과의 `localUrl`은 로컬 실행·헬스 결과로 유지하고, 외부 `endpoint`는 검증된 hostname에 `https://`를 적용해 생성합니다.
 
-서버 Agent API 경로는 아직 확정되지 않았습니다. 따라서 실제 HTTP Control Plane Client는 구현하지 않았고, `src/main.ts`도 설정·Docker·Compose·`cloudflared` 사전검사 후 미연결 상태를 명시하고 종료합니다. 임의의 서버 endpoint나 Fake endpoint를 실제 서버에 보고하지 않습니다.
+서버의 등록·Heartbeat API는 연결됐지만 Job claim, ECR credential, Tunnel 준비, 결과 제출 API 경로는 아직 확정되지 않았습니다. 따라서 `src/main.ts`는 저장된 장기 Agent 인증키로 Heartbeat까지 확인한 뒤 실제 작업 수신 미연결 상태를 명시하고 종료합니다. 임의의 서버 endpoint나 Fake endpoint를 실제 서버에 보고하지 않습니다.
 
 ## 설정
 
-필수 환경변수는 다음과 같습니다.
+최초 등록 시에만 필요한 환경변수는 다음과 같습니다.
 
-- `ONPREM_AGENT_ID`: 영숫자로 시작하는 Agent 식별자
-- `ONPREM_AGENT_REGISTRATION_TOKEN`: 최초 등록 개발 테스트에만 사용할 1회용 토큰
+- `ONPREM_CONTROL_PLANE_URL`: HTTPS Control Plane origin. 로컬 개발에서는 loopback HTTP도 허용
+- `ONPREM_AGENT_REGISTRATION_TOKEN`: 서버가 발급한 단기 TTL의 1회용 토큰
 
-등록 토큰은 장기 런타임 인증정보가 아니며 LaunchAgent plist나 설치 파일에 저장하지 않습니다. 실제 등록 API가 연결되면 단기 TTL의 1회용 등록 토큰을 장기 Agent 인증키로 교환합니다. poll·heartbeat·취소 확인 주기와 상태 디렉터리는 `.env.example`을 참고합니다. 등록 토큰, Agent 인증키, ECR password, Tunnel Token, 컨테이너 환경변수 값은 구조화 로그에 기록하지 않습니다.
+등록 명령은 토큰을 `POST /api/v1/agents/register`에 한 번 전달하고 발급된 장기 Agent 인증키를 기본 경로 `~/Library/Application Support/Camellia/onprem-agent/credentials.json`에 저장합니다. 디렉터리는 `700`, 파일은 `600` 권한을 강제하며 원자적으로 교체합니다. 이후 실행은 저장된 Control Plane URL과 인증키를 재사용하므로 등록 토큰이 필요하지 않습니다. 등록 토큰과 인증키는 LaunchAgent plist·명령 인자·구조화 로그에 기록하지 않습니다.
+
+설치된 Agent의 최초 등록은 다음처럼 실행합니다.
+
+```bash
+ONPREM_CONTROL_PLANE_URL=https://server.example \
+ONPREM_AGENT_REGISTRATION_TOKEN=<one-time-token> \
+"$HOME/Library/Application Support/Camellia/onprem-agent/bin/camellia-onprem-agent" register
+```
+
+등록 명령은 발급된 장기 Key로 Heartbeat까지 성공해야 완료됩니다. 제거 스크립트는 장기 Key 파일을 휴지통으로 보내지 않고 삭제하지만 서버 Key를 폐기하지는 않습니다. 서버 측 Key 폐기 API는 후속 작업입니다. poll·heartbeat·취소 확인 주기와 상태 디렉터리는 `.env.example`을 참고합니다.
 
 ## ECR 보안 경계
 

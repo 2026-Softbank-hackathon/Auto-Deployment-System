@@ -1,20 +1,14 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 export type AgentConfig = {
-  agentId: string;
-  registrationToken: string;
+  controlPlaneUrl?: string;
+  registrationToken?: string;
   stateDirectory: string;
   pollIntervalMs: number;
   heartbeatIntervalMs: number;
   cancellationPollIntervalMs: number;
 };
-
-function requireValue(
-  environment: NodeJS.ProcessEnv,
-  name: string,
-): string {
-  const value = environment[name];
-  if (!value) throw new Error(`${name} 설정이 필요합니다.`);
-  return value;
-}
 
 function positiveInteger(
   environment: NodeJS.ProcessEnv,
@@ -33,23 +27,17 @@ function positiveInteger(
 export function loadAgentConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): AgentConfig {
-  const agentId = requireValue(environment, "ONPREM_AGENT_ID");
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(agentId)) {
-    throw new Error("ONPREM_AGENT_ID 형식이 올바르지 않습니다.");
-  }
-  const registrationToken = requireValue(
-    environment,
-    "ONPREM_AGENT_REGISTRATION_TOKEN",
-  );
-  if (registrationToken.length < 16) {
+  const registrationToken = environment.ONPREM_AGENT_REGISTRATION_TOKEN;
+  if (registrationToken !== undefined && registrationToken.length < 16) {
     throw new Error("ONPREM_AGENT_REGISTRATION_TOKEN이 너무 짧습니다.");
   }
 
   return {
-    agentId,
+    controlPlaneUrl: environment.ONPREM_CONTROL_PLANE_URL,
     registrationToken,
     stateDirectory:
-      environment.ONPREM_AGENT_STATE_DIR ?? ".camellia/onprem-agent",
+      environment.ONPREM_AGENT_STATE_DIR ??
+      join(homedir(), "Library", "Application Support", "Camellia", "onprem-agent"),
     pollIntervalMs: positiveInteger(
       environment,
       "ONPREM_AGENT_POLL_INTERVAL_MS",

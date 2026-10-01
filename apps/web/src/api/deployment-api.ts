@@ -43,6 +43,16 @@ export interface DeploymentIrResponse {
   ir: unknown;
   version: unknown;
   generatedAt: unknown;
+  /** "analyzer" | "ai_filled" | "analyzer_cache" | "user_edited" */
+  source: unknown;
+}
+
+export interface DeploymentHealthCheck { attempt: number; passed: boolean; statusCode?: number; latencyMs?: number }
+export interface DeploymentHealthResponse {
+  status: 'checking' | 'passed' | 'failed';
+  checks: DeploymentHealthCheck[];
+  consecutivePassed: number;
+  requiredPasses: number;
 }
 
 function endpoint(path: string): string {
@@ -62,13 +72,13 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
 
 /**
  * Current backend contract for the P0 demo upload endpoint.
- * The target profile remains frontend configuration and the project is created automatically.
+ * `target` is the vendor (aws | onprem); the server resolves it to a profile. The project is created automatically.
  */
-export async function createDeployment(source: File, projectId: string, targetProfile: string): Promise<CreateDeploymentResponse> {
+export async function createDeployment(source: File, projectId: string, target: string): Promise<CreateDeploymentResponse> {
   const form = new FormData();
   form.append('source', source);
   form.append('project_id', projectId);
-  form.append('target', targetProfile);
+  form.append('target', target);
 
   const response = await fetch(endpoint('/api/v1/deployments'), {
     method: 'POST',
@@ -127,16 +137,54 @@ export async function getDeploymentAnalysisReport(deploymentId: string): Promise
 export async function getDeploymentIr(deploymentId: string): Promise<DeploymentIrResponse> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/ir`), { credentials: 'include' });
   const body = asRecord(await readJson(response), 'IR');
-  return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt };
+  return { deploymentId: body.deploymentId, ir: body.ir, version: body.version, generatedAt: body.generatedAt, source: body.source };
+}
+
+export interface DeploymentPatchCandidate { description: string; diff: string }
+export interface DeploymentDiagnosisResponse { failedStep: string | null; summary: string; patchCandidates: DeploymentPatchCandidate[] }
+
+/** API-36 — 실패한 배포의 AI 진단. 진단이 아직 없으면(404) null. */
+export async function getDeploymentDiagnosis(deploymentId: string): Promise<DeploymentDiagnosisResponse | null> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/diagnosis`), { credentials: 'include' });
+  if (response.status === 404) return null;
+  const body = asRecord(await readJson(response), 'AI 진단');
+  if (typeof body.summary !== 'string') throw new Error('AI 진단 응답 형식이 올바르지 않습니다.');
+  const patchCandidates = (Array.isArray(body.patchCandidates) ? body.patchCandidates : []).flatMap((item): DeploymentPatchCandidate[] => {
+    if (!item || typeof item !== 'object') return [];
+    const { description, diff } = item as { description?: unknown; diff?: unknown };
+    return typeof description === 'string' && typeof diff === 'string' ? [{ description, diff }] : [];
+  });
+  return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: body.summary, patchCandidates };
+}
+
+/** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */
+export async function getDeploymentHealth(deploymentId: string): Promise<DeploymentHealthResponse | null> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/health`), { credentials: 'include' });
+  if (response.status === 404) return null;
+  const body = asRecord(await readJson(response), '헬스체크');
+  const status = body.status === 'passed' || body.status === 'failed' ? body.status : 'checking';
+  const checks = (Array.isArray(body.checks) ? body.checks : []).flatMap((item): DeploymentHealthCheck[] => {
+    if (!item || typeof item !== 'object') return [];
+    const check = item as Record<string, unknown>;
+    if (typeof check.attempt !== 'number' || typeof check.passed !== 'boolean') return [];
+    return [{ attempt: check.attempt, passed: check.passed, statusCode: typeof check.statusCode === 'number' ? check.statusCode : undefined, latencyMs: typeof check.latencyMs === 'number' ? check.latencyMs : undefined }];
+  });
+  return {
+    status,
+    checks,
+    consecutivePassed: typeof body.consecutivePassed === 'number' ? body.consecutivePassed : 0,
+    requiredPasses: typeof body.requiredPasses === 'number' ? body.requiredPasses : 3,
+  };
 }
 
 /** packages/contracts LOG_STEPS — the logs endpoint requires one of these as `step`. */
 export const deploymentLogSteps = ['analyze', 'build', 'provision', 'verify'] as const;
 export type DeploymentLogStep = typeof deploymentLogSteps[number];
 
-/** API-12 — the P0 non-streaming log view of one step. 204 (no log yet) → null. */
-export async function getDeploymentLogs(deploymentId: string, step: DeploymentLogStep): Promise<string | null> {
+/** API-12 — the P0 non-streaming log view of one step. 204 (no log yet) → null. `tail` limits to the last N lines. */
+export async function getDeploymentLogs(deploymentId: string, step: DeploymentLogStep, tail?: number): Promise<string | null> {
   const query = new URLSearchParams({ step });
+  if (tail) query.set('tail', String(tail));
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/logs?${query}`), { credentials: 'include' });
   if (response.status === 204) return null;
   if (!response.ok) throw new DeploymentApiError(response.status, `로그를 불러오지 못했습니다. (${response.status})`);
@@ -212,4 +260,15 @@ export async function listProjectDeployments(projectId: string, options: { limit
     }),
     nextCursor: optionalString(body.nextCursor),
   };
+}
+
+/** GET /projects/:id — used only to show the project name on the progress screen. */
+export async function getProject(projectId: string): Promise<ProjectSummary> {
+  const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { credentials: 'include' });
+  const body = asRecord(await readJson(response), '프로젝트');
+  const id = optionalString(body.id);
+  const name = optionalString(body.name);
+  const createdAt = optionalString(body.createdAt);
+  if (!id || !name || !createdAt) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
+  return { id, name, createdAt };
 }

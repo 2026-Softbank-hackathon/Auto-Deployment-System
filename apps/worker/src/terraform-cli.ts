@@ -61,9 +61,20 @@ export class TerraformCliError extends Error {
       | "TERRAFORM_APPLY_FAILED"
       | "TERRAFORM_OUTPUT_FAILED"
       | "TERRAFORM_OUTPUT_INVALID",
+    readonly detail?: string,
   ) {
-    super(code);
+    super(detail ? `${code}\n${detail}` : code);
     this.name = "TerraformCliError";
+  }
+}
+
+export class TerraformProcessError extends Error {
+  constructor(
+    message: string,
+    readonly stderrTail: string,
+  ) {
+    super(message);
+    this.name = "TerraformProcessError";
   }
 }
 
@@ -172,7 +183,8 @@ export class TerraformCli {
       ) {
         throw new TerraformCliError("TERRAFORM_BINARY_UNAVAILABLE");
       }
-      throw new TerraformCliError(failureCode);
+      const stderrTail = error instanceof TerraformProcessError ? error.stderrTail : undefined;
+      throw new TerraformCliError(failureCode, stderrTail);
     }
   }
 }
@@ -250,6 +262,8 @@ function parseTerraformOutputs(text: string): TerraformOutputs {
   return outputs;
 }
 
+const STDERR_TAIL_LIMIT = 4 * 1024;
+
 const executeTerraformCommand: TerraformCommandExecutor = ({
   executable,
   args,
@@ -264,6 +278,8 @@ const executeTerraformCommand: TerraformCommandExecutor = ({
     });
     let output = "";
     let capturedChars = 0;
+    let stderrOutput = "";
+    let stderrChars = 0;
 
     const capture = (chunk: Buffer) => {
       if (capturedChars >= MAX_CAPTURED_OUTPUT) return;
@@ -273,11 +289,27 @@ const executeTerraformCommand: TerraformCommandExecutor = ({
       capturedChars += text.length;
     };
 
+    const captureStderr = (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      stderrOutput += text;
+      stderrChars += text.length;
+      if (stderrChars > STDERR_TAIL_LIMIT) {
+        stderrOutput = stderrOutput.slice(stderrChars - STDERR_TAIL_LIMIT);
+        stderrChars = STDERR_TAIL_LIMIT;
+      }
+    };
+
     child.stdout.on("data", capture);
-    child.stderr.on("data", () => {});
+    child.stderr.on("data", captureStderr);
     child.once("error", reject);
     child.once("close", (code) => {
       if (code === 0) resolve(output);
-      else reject(new Error(`terraform exited with code ${code ?? "unknown"}`));
+      else
+        reject(
+          new TerraformProcessError(
+            `terraform exited with code ${code ?? "unknown"}`,
+            stderrOutput,
+          ),
+        );
     });
   });

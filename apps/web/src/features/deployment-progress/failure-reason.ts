@@ -67,7 +67,8 @@ const kinds: Record<string, FailureKind> = {
 };
 
 export function failureKind(code: string | null): FailureKind | null {
-  return code ? kinds[code.trim()] ?? null : null;
+  // 서버가 코드 뒤에 설명을 붙이기도 한다 (예: "PROJECT_ENV_VAR_NOT_FOUND: A,B"). 분류는 코드 부분만 본다.
+  return code ? kinds[code.split(':')[0].trim()] ?? null : null;
 }
 
 /** 연결 설정에서 풀 수 있는 실패인지 — 연결 설정으로 가는 버튼을 보여 줄지 정한다. */

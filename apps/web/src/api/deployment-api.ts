@@ -255,13 +255,13 @@ export async function listSecretNames(projectId: string): Promise<string[]> {
   return (Array.isArray(body) ? body : []).flatMap((item) => (item && typeof item === 'object' && typeof (item as { name?: unknown }).name === 'string' ? [(item as { name: string }).name] : []));
 }
 
-export interface ProjectEnvVar { name: string; value: string }
+export interface ProjectEnvVar { name: string; value: string; updatedAt: string | null }
 
 function envVarsOf(body: unknown): ProjectEnvVar[] {
   const items = body && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items) ? (body as { items: unknown[] }).items : [];
   return items.flatMap((item) => {
     const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-    return typeof record.name === 'string' && typeof record.value === 'string' ? [{ name: record.name, value: record.value }] : [];
+    return typeof record.name === 'string' && typeof record.value === 'string' ? [{ name: record.name, value: record.value, updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : null }] : [];
   });
 }
 

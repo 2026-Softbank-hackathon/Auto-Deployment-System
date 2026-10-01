@@ -44,7 +44,7 @@ function ProjectCard({ project, selected, onOpen, onNavigate }: { project: Deplo
   const latestView = status?.latest ? deploymentStatusView(status.latest.status) : null;
   return <li className={`project-card ${selected ? 'is-selected' : ''}`}>
     <div className="project-card__head">
-      <h2>{displayProjectName(project.name)}</h2>
+      <h2><a href={`/projects/${encodeURIComponent(project.id)}`} onClick={(event) => followAppLink(event, onNavigate)}>{displayProjectName(project.name)}</a></h2>
       {selected && <StatusTape tone="running">{copy.selected}</StatusTape>}
     </div>
     {failed && <p className="project-card__error" role="alert">{copy.statusError}</p>}
@@ -58,7 +58,7 @@ function ProjectCard({ project, selected, onOpen, onNavigate }: { project: Deplo
         : copy.neverDeployed}</dd></div>
     </dl>}
     <div className="project-card__actions">
-      <Keycap variant="secondary" onClick={() => onOpen('/setup')}>{t.nav.setup}</Keycap>
+      <Keycap variant="secondary" onClick={() => onOpen(`/projects/${encodeURIComponent(project.id)}`)}>{copy.openDetail}</Keycap>
       <Keycap onClick={() => onOpen('/deploy')}>{copy.deploy}</Keycap>
     </div>
   </li>;

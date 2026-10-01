@@ -12,7 +12,7 @@ interface SidebarProps {
 
 const menu = [
   { path: '/', label: 'dashboard', pages: ['dashboard'] },
-  { path: '/projects', label: 'projects', pages: ['projects'] },
+  { path: '/projects', label: 'projects', pages: ['projects', 'project'] },
   { path: '/deploy', label: 'deploy', pages: ['deploy', 'progress', 'result'] },
 ] as const satisfies ReadonlyArray<{ path: string; label: 'dashboard' | 'projects' | 'deploy'; pages: ReadonlyArray<Route['page']> }>;
 

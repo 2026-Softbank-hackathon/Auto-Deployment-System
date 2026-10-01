@@ -128,6 +128,13 @@ export const ja: Messages = {
     failed: '再デプロイを開始できませんでした。',
     uploadAgain: 'ZIPをもう一度入れる',
   },
+  rollback: {
+    button: 'このバージョンに戻す',
+    starting: 'ロールバックを開始しています…',
+    failed: 'ロールバックを開始できませんでした。',
+    confirm: (deployment) => `${deployment}のソースでデプロイし直して、そのバージョンに戻しますか？`,
+    confirmYes: 'ロールバック',
+  },
   notify: {
     title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },
     view: '確認する',

@@ -36,10 +36,17 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
   if (state === null) return <p className="dashboard-status" role="status">{t.dashboard.loading}</p>;
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
+  // 지금 서비스 중인 버전 = 가장 최근에 성공한 배포. 그보다 먼저 성공한 배포는 "이 버전으로 롤백"이 된다 (#139).
+  const succeededAt = (deployment: ProjectDeploymentSummary) => Date.parse(deployment.succeededAt ?? deployment.createdAt);
+  const live = state.items.filter((deployment) => deploymentStatusView(deployment.status).outcome === 'success').sort((a, b) => succeededAt(b) - succeededAt(a))[0] ?? null;
   return <section className="deployment-list" aria-label={t.dashboard.listLabel}>
-    {state.items.map((deployment) => <DeploymentRow key={deployment.id} deployment={{ ...deployment, projectName }} now={state.loadedAt} onNavigate={onNavigate}
-      extraAction={deploymentStatusView(deployment.status).outcome === 'active' ? undefined
-        : <RedeployButton compact variant="ghost" deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} />} />)}
+    {state.items.map((deployment) => {
+      const outcome = deploymentStatusView(deployment.status).outcome;
+      const olderVersion = outcome === 'success' && live !== null && deployment.id !== live.id;
+      return <DeploymentRow key={deployment.id} deployment={{ ...deployment, projectName }} now={state.loadedAt} onNavigate={onNavigate}
+        extraAction={outcome === 'active' ? undefined
+          : <RedeployButton compact variant="ghost" mode={olderVersion ? 'rollback' : 'redeploy'} deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} />} />;
+    })}
   </section>;
 }
 

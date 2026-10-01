@@ -126,6 +126,13 @@ export const ko = {
     failed: '재배포를 시작하지 못했어요.',
     uploadAgain: 'ZIP 다시 올리기',
   },
+  rollback: {
+    button: '이 버전으로 롤백',
+    starting: '롤백을 시작하고 있어요…',
+    failed: '롤백을 시작하지 못했어요.',
+    confirm: (deployment: string) => `${deployment}의 소스로 다시 배포해서 그 버전으로 되돌릴까요?`,
+    confirmYes: '롤백',
+  },
   notify: {
     title: { success: '배포가 완료됐어요', failed: '배포에 실패했어요', stopped: '배포가 중단됐어요' },
     view: '확인하기',

@@ -10,6 +10,7 @@ TRASH_ROOT="$HOME/.Trash"
 TRASH_TARGET="$TRASH_ROOT/Camellia-onprem-agent-$(date +%Y%m%d%H%M%S)-$$"
 
 launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+launchctl disable "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
 
 # 장기 Agent Key는 휴지통에 복구 가능한 상태로 남기지 않는다.
 if [ -f "$CREDENTIAL_PATH" ] && [ ! -L "$CREDENTIAL_PATH" ]; then

@@ -3,7 +3,7 @@ import { Keycap } from '../../components/ui/Keycap';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 import { displayProjectName } from '../dashboard/format';
 import type { DeployTarget } from './TargetToggle';
-import { missingFor, type useDeployProject } from './useDeployProject';
+import { awsKeysMissing, missingFor, type useDeployProject } from './useDeployProject';
 
 type DeployProjectState = ReturnType<typeof useDeployProject>['state'];
 
@@ -28,9 +28,15 @@ export function DeployReadiness({ target, state, onRetry, onOpenSetup }: {
   const defaultOf = (type: EnvironmentSummary['type']) => state.environments.find((environment) => environment.type === type && environment.isDefault);
   const aws = defaultOf('aws');
   const onprem = defaultOf('onprem');
+  const keysMissing = awsKeysMissing(state.environments, state.secretNames);
 
   return <div className="deploy-readiness" aria-live="polite">
-    {aws && <div className="deploy-readiness__row">
+    {aws && keysMissing && <div className="notice error deploy-readiness__need" role="alert">
+      <strong>{t.deploy.readiness.keysMissing}</strong>
+      <p>{t.deploy.readiness.keysMissingCopy}</p>
+      <div><Keycap variant="secondary" aria-haspopup="dialog" onClick={onOpenSetup}>{t.deploy.readiness.keysMissingAction}</Keycap></div>
+    </div>}
+    {aws && !keysMissing && <div className="deploy-readiness__row">
       <p className="deploy-readiness__ok">
         {state.project && <span className="deploy-readiness__app">{displayProjectName(state.project.name)}</span>}
         <span>✓ {t.deploy.readiness.awsReady}{aws.region ? ` · ${aws.region}` : ''}</span>

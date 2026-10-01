@@ -7,7 +7,7 @@ import { DeployReadiness } from '../features/deployment-start/DeployReadiness';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { SetupDialog } from '../features/deployment-start/SetupDialog';
 import { isDeployTarget, TargetToggle, type DeployTarget } from '../features/deployment-start/TargetToggle';
-import { missingFor, useDeployProject } from '../features/deployment-start/useDeployProject';
+import { awsKeysMissing, missingFor, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -30,7 +30,8 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const openSetup = () => { setSetupRound((round) => round + 1); setSetupOpen(true); };
 
   const project = projectState.phase === 'ready' ? projectState.project : null;
-  const environmentsReady = projectState.phase === 'ready' && project !== null && missingFor(target, projectState.environments).length === 0;
+  const environmentsReady = projectState.phase === 'ready' && project !== null && missingFor(target, projectState.environments).length === 0
+    && !awsKeysMissing(projectState.environments, projectState.secretNames);
   const canDeploy = Boolean(file) && environmentsReady;
   const awsEnvironment = projectState.phase === 'ready' ? projectState.environments.find((environment) => environment.type === 'aws' && environment.isDefault) ?? null : null;
 
@@ -61,7 +62,12 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   }
 
   const hint = isStarting ? t.deploy.hintStarting : !file ? t.deploy.hintEmpty : environmentsReady ? t.deploy.hintReady : t.deploy.hintNeedsSetup;
-  const startErrorCopy = error instanceof DeploymentApiError && error.code && environmentRequiredCodes.includes(error.code) ? t.deploy.readiness.environmentRequired : errorMessage(error, t, t.errors.startFailed);
+  // 아는 거절 사유는 안내 문구로, 모르는 사유는 서버가 준 설명을 그대로 보여 준다 (숫자 코드만 보이지 않게).
+  const startErrorCode = error instanceof DeploymentApiError ? error.code : undefined;
+  const environmentRejected = startErrorCode !== undefined && environmentRequiredCodes.includes(startErrorCode);
+  const startErrorCopy = environmentRejected ? t.deploy.readiness.environmentRequired
+    : error instanceof DeploymentApiError && error.serverMessage ? `${error.serverMessage} (${error.status})`
+      : errorMessage(error, t, t.errors.startFailed);
 
   return <>
     <div className="page-head">

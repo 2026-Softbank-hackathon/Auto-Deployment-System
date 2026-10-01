@@ -73,6 +73,27 @@ export class SecretService {
   }
 
   async delete(input: { projectId: number; name: string }): Promise<void> {
+    const references = await this.pool.query<{ id: number }>(
+      `SELECT id
+       FROM environments
+       WHERE project_id = $1
+         AND type = 'aws'
+         AND (
+           aws_config ->> 'accessKeyIdSecretName' = $2
+           OR aws_config ->> 'secretAccessKeySecretName' = $2
+         )
+       LIMIT 1`,
+      [input.projectId, input.name],
+    );
+    if (references.rows.length > 0) {
+      throw new ApiError(
+        409,
+        "SECRET_IN_USE",
+        `시크릿 '${input.name}' 이 AWS Environment에서 사용 중입니다.`,
+        "해당 Environment의 자격증명 참조를 변경한 뒤 삭제하세요.",
+      );
+    }
+
     const res = await this.pool.query(
       `DELETE FROM secrets WHERE project_id = $1 AND name = $2`,
       [input.projectId, input.name],

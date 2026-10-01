@@ -157,9 +157,24 @@ describe("GET /api/v1/projects", () => {
 // ── 3. POST /deployments multipart ───────────────────────────────────────────
 
 describe("POST /api/v1/deployments", () => {
-  function setupDeploymentMocks() {
+  function setupDeploymentMocks(options: { missingSecret?: string } = {}) {
     mockPool.on(/SELECT id FROM environments/, (params) => ({
       rows: [{ id: params[1] === "onprem" ? 20 : 10 }],
+    }));
+    mockPool.on(/SELECT aws_config FROM environments/, () => ({
+      rows: [{
+        aws_config: {
+          credentialsType: "access_key",
+          accessKeyIdSecretName: "aws-access-key-id",
+          secretAccessKeySecretName: "aws-secret-access-key",
+          region: "ap-northeast-2",
+        },
+      }],
+    }));
+    mockPool.on(/SELECT name FROM secrets/, () => ({
+      rows: ["aws-access-key-id", "aws-secret-access-key"]
+        .filter((name) => name !== options.missingSecret)
+        .map((name) => ({ name })),
     }));
     mockPool.on(/INSERT INTO deployments/, () => ({ rows: [{ id: 42 }] }));
     mockPool.on(/INSERT INTO source_versions/, () => ({ rows: [{ id: 1 }] }));
@@ -246,6 +261,30 @@ describe("POST /api/v1/deployments", () => {
     expect(capturedProfile).toBe("onprem-docker-basic");
     expect(capturedTargetEnvironment).toBe(20);
     expect(capturedRegistryEnvironment).toBe(10);
+  });
+
+  it("rejects deployment before storing the ZIP when an AWS credential Secret is missing", async () => {
+    setupDeploymentMocks({ missingSecret: "aws-secret-access-key" });
+
+    const form = new FormData();
+    form.append("project_id", "1");
+    form.append("target", "aws");
+    form.append("source", Buffer.from("PK fake zip"), {
+      filename: "app.zip",
+      contentType: "application/zip",
+    });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/deployments",
+      headers: form.getHeaders(),
+      payload: form.getBuffer(),
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("AWS_CREDENTIALS_MISSING");
+    expect(mockStorage.store.size).toBe(0);
+    expect(mockBoss.sentJobs).toHaveLength(0);
   });
 
   it("기본 target Environment가 없으면 업로드를 저장하지 않고 409", async () => {

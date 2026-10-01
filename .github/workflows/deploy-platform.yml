@@ -1,0 +1,184 @@
+# 플랫폼 CD: main 에 push(머지)되면 플랫폼 EC2 에서 deploy.sh <커밋 SHA> 를 실행한다.
+# GitHub OIDC → IAM 역할(infra/platform/terraform/github-cd.tf) → SSM Run Command. SSH · 장기 키 없음.
+# 설정 · 운영: docs/deploy-platform.md 4.7
+name: Deploy platform
+
+on:
+  push:
+    branches: [main]
+    # 문서만 바뀐 push 는 건너뛴다 (코드 · infra 가 하나라도 섞이면 배포)
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "배포할 브랜치 · 태그 · 커밋 (비우면 이 실행의 커밋). 실행 브랜치는 main 이어야 한다"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+# 배포는 한 번에 하나. 진행 중인 배포는 끊지 않고, 대기 중인 것은 가장 최신 것만 남는다
+concurrency:
+  group: deploy-platform
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to platform EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
+      INSTANCE_ID: ${{ vars.PLATFORM_INSTANCE_ID }}
+      PLATFORM_URL: ${{ vars.PLATFORM_URL || 'https://console.camellia-deploy.app' }}
+      INPUT_REF: ${{ inputs.ref }}
+    steps:
+      - name: Check settings
+        id: target
+        run: |
+          missing=()
+          [ -n "$ROLE_ARN" ] || missing+=(AWS_CD_ROLE_ARN)
+          [ -n "$INSTANCE_ID" ] || missing+=(PLATFORM_INSTANCE_ID)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=저장소 변수 없음::Settings › Secrets and variables › Actions › Variables 에 ${missing[*]} 를 설정해야 한다 (docs/deploy-platform.md 4.7)"
+            exit 1
+          fi
+          ref="${INPUT_REF:-$GITHUB_SHA}"
+          # SSM 셸 명령에 그대로 들어가므로 안전한 문자만 허용 (- 로 시작하면 git 옵션으로 읽힘)
+          if ! [[ "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/#-]*$ ]]; then
+            echo "::error title=잘못된 ref::'$ref' — 영문 · 숫자 · . _ / # - 만 쓸 수 있다"
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          role-session-name: deploy-platform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check SSM agent
+        run: |
+          ping="$(aws ssm describe-instance-information \
+            --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+            --query 'InstanceInformationList[0].PingStatus' --output text)"
+          if [ "$ping" != "Online" ]; then
+            echo "::error title=SSM 에이전트 연결 안 됨::$INSTANCE_ID PingStatus=$ping — 인스턴스가 꺼졌거나 부팅 중이다"
+            exit 1
+          fi
+          echo "$INSTANCE_ID SSM Online"
+
+      - name: Run deploy.sh via SSM
+        id: deploy
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+        run: |
+          # 전체 로그는 호스트 파일로, SSM 결과에는 마지막 100줄만 (SSM 출력은 앞 24,000자에서 잘린다)
+          log="/var/log/camellia-deploy/gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+          cmd="mkdir -p /var/log/camellia-deploy; bash /opt/camellia/platform/infra/platform/scripts/deploy.sh '$REF' > $log 2>&1; rc=\$?; tail -n 100 $log; echo \"[gha] full log: $log (exit \$rc)\"; exit \$rc"
+          params="$(jq -nc --arg cmd "$cmd" '{commands: [$cmd], executionTimeout: ["1800"]}')"
+
+          command_id="$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "GitHub Actions run ${GITHUB_RUN_ID} ${REF:0:40}" \
+            --timeout-seconds 600 \
+            --parameters "$params" \
+            --query Command.CommandId --output text)"
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "SSM command $command_id → deploy.sh $REF"
+
+          deadline=$(( $(date +%s) + 35 * 60 ))
+          errors=0
+          status=Pending
+          while :; do
+            sleep 15
+            if out="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+                --query Status --output text 2>&1)"; then
+              errors=0
+              [ "$out" = "$status" ] || echo "$(date -u +%T) $out"
+              status="$out"
+            elif grep -q InvocationDoesNotExist <<<"$out"; then
+              : # 전송 직후에는 invocation 이 아직 없다
+            elif [ $(( errors += 1 )) -ge 5 ]; then
+              echo "$out" >&2
+              status=PollError
+              break
+            fi
+            case "$status" in
+              Success | Failed | Cancelled | TimedOut) break ;;
+            esac
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              status=PollTimeout
+              break
+            fi
+          done
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+          result="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" --output json 2>/dev/null || echo '{}')"
+          stdout="$(jq -r '.StandardOutputContent // ""' <<<"$result")"
+          commit="$(grep -o '\[camellia-deploy\] commit: .*' <<<"$stdout" | tail -n 1 | sed 's/^\[camellia-deploy\] commit: //' || true)"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+          echo "::group::deploy.sh stdout (tail)"
+          echo "$stdout"
+          echo "::endgroup::"
+          stderr="$(jq -r '.StandardErrorContent // ""' <<<"$result")"
+          if [ -n "$stderr" ]; then
+            echo "::group::stderr (tail)"
+            tail -n 40 <<<"$stderr"
+            echo "::endgroup::"
+          fi
+
+          if [ "$status" != "Success" ]; then
+            echo "::error title=배포 실패::SSM $command_id status=$status $(jq -r '.StatusDetails // ""' <<<"$result") — 호스트 로그: $log"
+            exit 1
+          fi
+
+      - name: Wait for /health
+        id: health
+        run: |
+          for _ in $(seq 1 30); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PLATFORM_URL/health" || true)"
+            if [ "$code" = "200" ]; then
+              echo "code=200" >> "$GITHUB_OUTPUT"
+              echo "$PLATFORM_URL/health → 200"
+              exit 0
+            fi
+            echo "$(date -u +%T) /health → ${code:-no response}"
+            sleep 10
+          done
+          echo "code=${code:-none}" >> "$GITHUB_OUTPUT"
+          echo "::error title=헬스체크 실패::$PLATFORM_URL/health 가 5분 동안 200 이 아니다 (마지막 $code)"
+          exit 1
+
+      - name: Summary
+        if: always()
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+          COMMAND_ID: ${{ steps.deploy.outputs.command_id }}
+          STATUS: ${{ steps.deploy.outputs.status }}
+          COMMIT: ${{ steps.deploy.outputs.commit }}
+          HEALTH: ${{ steps.health.outputs.code }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## 플랫폼 배포 — ${JOB_STATUS}"
+            echo
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| 요청 ref | \`${REF:-?}\` |"
+            echo "| 배포된 커밋 | ${COMMIT:-?} |"
+            echo "| 트리거 커밋 | [\`${GITHUB_SHA:0:7}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) (${GITHUB_EVENT_NAME}) |"
+            echo "| 인스턴스 | \`${INSTANCE_ID:-?}\` (${AWS_REGION}) |"
+            echo "| SSM command | \`${COMMAND_ID:-—}\` → ${STATUS:-—} |"
+            echo "| /health | ${HEALTH:-—} |"
+            echo "| 콘솔 | ${PLATFORM_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -72,7 +72,8 @@ On-Prem Agent 는 `ONPREM_CONTROL_PLANE_URL=https://console.camellia-deploy.app`
 | `infra/platform/compose.local.yaml` | 로컬 검증용: web 을 `127.0.0.1:8080` 에 publish |
 | `infra/platform/platform.env.example` | `.env` 항목 전체 |
 | `infra/platform/scripts/deploy.sh` | 호스트에서 git checkout → SSM → `.env` → `compose up --build` |
-| `infra/platform/terraform/` | VPC · SG · IAM · EC2 · Cloudflare Tunnel · DNS · SSM(Tunnel token), `tests/` mock plan 테스트 |
+| `infra/platform/terraform/` | VPC · SG · IAM · EC2 · Cloudflare Tunnel · DNS · SSM(Tunnel token), `github-cd.tf`(CD 용 GitHub OIDC · IAM 역할), `tests/` mock plan 테스트 |
+| `.github/workflows/deploy-platform.yml` | CD: main push → SSM 으로 `deploy.sh <커밋 SHA>` → `/health` 확인 (4.7) |
 
 ## 4. 배포 런북
 
@@ -163,6 +164,8 @@ sudo bash /opt/camellia/platform/infra/platform/scripts/deploy.sh seohyun/feat#1
 
 SSM 값만 바꾼 경우에도 같은 명령이다 (`.env` 를 다시 만든다).
 
+`main` 머지는 CD 가 자동으로 이 명령을 실행한다 (4.7). 수동 실행도 4.7 의 `workflow_dispatch` 가 편하다.
+
 ### 4.5 로그
 
 ```bash
@@ -185,6 +188,106 @@ aws ssm get-parameters-by-path --path /camellia/platform/env --query 'Parameters
 ```
 
 인스턴스와 EBS 가 지워지므로 Postgres 데이터도 사라진다.
+
+### 4.7 CD — main 머지 시 자동 재배포
+
+`main` 에 push(머지)되면 GitHub Actions 가 4.4 와 같은 `deploy.sh` 를 **머지된 커밋 SHA** 로 실행한다.
+
+```
+main push ─▶ GitHub Actions (.github/workflows/deploy-platform.yml)
+   │ OIDC 토큰 (aud=sts.amazonaws.com, sub=이 리포 main)
+   ▼
+ STS AssumeRoleWithWebIdentity → IAM 역할 camellia-platform-github-cd (1시간 임시 자격증명)
+   │ ssm:SendCommand (플랫폼 인스턴스 + AWS-RunShellScript 만)
+   ▼
+ EC2: deploy.sh <SHA> → git fetch/checkout → SSM → .env → compose up --build
+   ▼
+ Actions: get-command-invocation 폴링 → 로그 마지막 100줄 → /health 200 대기(5분) → Job summary
+```
+
+- **트리거**: `main` push. `docs/**` · `*.md` 만 바뀐 push 는 건너뛴다 (하나라도 다른 파일이 섞이면 배포). 수동 실행은 `workflow_dispatch`(아래)
+- **배포 대상**: `github.sha` 그대로. `deploy.sh` 의 `git fetch origin <SHA>` 는 GitHub 가 도달 가능한 커밋 SHA fetch 를 허용해서 동작한다 (브랜치 끝이 아닌 커밋으로 확인함)
+- **동시 실행**: concurrency group 하나. 진행 중인 배포는 끝까지 가고, 그 사이 들어온 push 는 가장 최신 것 하나만 대기한다 (중간 것은 GitHub 가 취소 — 최신 커밋에 다 포함되므로 문제 없음). 4.4 처럼 손으로 보낸 SSM 명령과는 막지 않으니 겹치지 않게 한다
+- **실패 조건**: 저장소 변수 없음, SSM 에이전트 Offline, `deploy.sh` 종료 코드 ≠ 0 (SSM `Failed` · `TimedOut` · `Cancelled`), `/health` 가 5분 안에 200 아님. Job 제한 40분 (SSM 실행 제한 30분, 명령 전달 제한 10분)
+- **로그**: Actions 에는 마지막 100줄. 전체는 호스트 `/var/log/camellia-deploy/gha-<run_id>-<attempt>.log`
+- **하지 않는 것**: Terraform apply (`infra/platform/terraform` 변경은 사람이 apply), SSM 값 변경. Actions 에서 실행을 취소해도 호스트의 `deploy.sh` 는 끝까지 돈다 (역할에 `CancelCommand` 권한을 주지 않음)
+
+#### 권한 (`infra/platform/terraform/github-cd.tf`)
+
+| 항목 | 내용 |
+|---|---|
+| OIDC provider | `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`. 계정당 하나 — 이미 있으면 `create_github_oidc_provider = false` (조회만) |
+| 신뢰 정책 | `aud = sts.amazonaws.com`, `sub = repo:2026-Softbank-hackathon@335012022/Auto-Deployment-System@1396159841:ref:refs/heads/main` (둘 다 StringEquals). 다른 브랜치 · PR · fork · 다른 리포는 역할을 못 받는다 |
+| `ssm:SendCommand` | 플랫폼 인스턴스 ARN + `arn:aws:ssm:<region>::document/AWS-RunShellScript` (둘 다 맞아야 허용) |
+| `ssm:GetCommandInvocation` · `ssm:ListCommandInvocations` · `ssm:DescribeInstanceInformation` | `*` — 리소스 수준 권한을 지원하지 않는 읽기 API |
+
+`sub` 형식 주의: 2026-07-15 이후 만든 리포(이 리포 포함)는 GitHub 가 **immutable subject**(`owner@<id>/repo@<id>`)를 쓴다. 이름 기반 `repo:2026-Softbank-hackathon/Auto-Deployment-System:...` 으로는 역할을 못 받는다. 확인: `gh api repos/2026-Softbank-hackathon/Auto-Deployment-System/actions/oidc/customization/sub --jq .sub_claim_prefix` → 변수 `github_oidc_sub_prefix`. 워크플로에 `environment:` 를 붙이면 `sub` 가 `...:environment:<이름>` 으로 바뀌므로 신뢰 정책도 같이 바꿔야 한다.
+
+#### 최초 설정 (1회)
+
+1. 역할 만들기 — 4.2 와 같은 state 디렉터리에서
+
+   ```bash
+   cd infra/platform/terraform
+   export MSYS_NO_PATHCONV=1                                   # Windows Git Bash
+   eval "$(aws configure export-credentials --profile camellia --format env)"
+   export CLOUDFLARE_API_TOKEN=...                             # 셸에서만 (provider 초기화에 필요)
+   terraform plan                                              # 3 to add, 0 to change, 0 to destroy 확인
+   terraform apply \
+     -target=aws_iam_openid_connect_provider.github \
+     -target=aws_iam_role.github_cd \
+     -target=aws_iam_role_policy.github_cd
+   terraform output -raw github_cd_role_arn
+   ```
+
+2. 저장소 변수 (Settings › Secrets and variables › Actions › **Variables**. 비밀이 아니다 — 역할은 신뢰 정책 때문에 이 리포 main 에서만 쓸 수 있다)
+
+   ```bash
+   R=2026-Softbank-hackathon/Auto-Deployment-System
+   gh variable set AWS_CD_ROLE_ARN      --repo "$R" --body "$(terraform output -raw github_cd_role_arn)"
+   gh variable set PLATFORM_INSTANCE_ID --repo "$R" --body "$(terraform output -raw instance_id)"
+   # 선택 — 기본값과 다를 때만
+   gh variable set AWS_REGION   --repo "$R" --body ap-northeast-2                       # 기본 ap-northeast-2
+   gh variable set PLATFORM_URL --repo "$R" --body https://console.camellia-deploy.app  # 기본 이 값
+   ```
+
+3. 다음 `main` push 부터 자동. 바로 확인하려면 아래 수동 실행
+
+인스턴스를 교체(`-replace=aws_instance.host`)하면 `terraform apply` 로 정책의 인스턴스 ARN 이 갱신되고, `PLATFORM_INSTANCE_ID` 도 새 ID 로 바꿔야 한다.
+
+#### 수동 실행 · 롤백
+
+```bash
+R=2026-Softbank-hackathon/Auto-Deployment-System
+gh workflow run deploy-platform.yml --repo "$R" --ref main                             # main 최신
+gh workflow run deploy-platform.yml --repo "$R" --ref main -f ref=seohyun/feat#110     # 다른 브랜치 · 태그
+gh workflow run deploy-platform.yml --repo "$R" --ref main -f ref=<이전 커밋 SHA>      # 롤백
+gh run watch --repo "$R"
+```
+
+웹에서는 Actions › Deploy platform › Run workflow. **실행 브랜치(`--ref` / Use workflow from)는 항상 `main`** — 다른 브랜치에서 돌리면 OIDC `sub` 가 달라 역할을 못 받는다. 배포할 코드는 `ref` 입력으로 고른다 (영문 · 숫자 · `. _ / # -` 만, `-` 로 시작 불가).
+
+#### 끄기
+
+```bash
+gh workflow disable deploy-platform.yml --repo "$R"   # 다시 켜기: gh workflow enable
+```
+
+완전히 없애려면 워크플로 파일을 지우고 `terraform destroy -target=aws_iam_role_policy.github_cd -target=aws_iam_role.github_cd -target=aws_iam_openid_connect_provider.github` (OIDC provider 를 다른 곳에서도 쓰면 provider 는 빼고).
+
+#### 실패할 때
+
+| 증상 (Actions 로그) | 원인 · 대응 |
+|---|---|
+| `저장소 변수 없음` | 위 2단계 `gh variable set` |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 실행 브랜치가 main 이 아님 / `github_oidc_sub_prefix` 가 실제 `sub` 와 다름(immutable 형식 확인) / `AWS_CD_ROLE_ARN` 오타 / OIDC provider 없음 |
+| `Credentials could not be loaded` · id-token 관련 | 워크플로 `permissions: id-token: write` 확인. fork 에서 온 실행은 토큰을 못 받는다 |
+| `SSM 에이전트 연결 안 됨` | 인스턴스 정지 · 재부팅 · 첫 부팅 중. `aws ec2 describe-instances --instance-ids <id>`, `aws ssm describe-instance-information` |
+| `AccessDenied ... ssm:SendCommand` | `PLATFORM_INSTANCE_ID` 가 Terraform 의 인스턴스와 다름 (교체 후 apply · 변수 갱신 안 함) |
+| `배포 실패 ... status=Failed` | `deploy.sh` 실패. 로그 tail 확인, 전체는 호스트 로그 파일. 흔한 원인: SSM 필수 값 누락, 이미지 빌드 실패(디스크 · 메모리), git fetch 실패(ref 오타) |
+| `status=TimedOut` / `PollTimeout` | 빌드가 30분 넘음. 호스트에서 아직 돌 수 있으니 `docker compose --profile tunnel ps` · 로그(4.5) 확인 후 다시 실행 |
+| `StatusDetails=DeliveryTimedOut` · `Undeliverable` | 에이전트가 10분 안에 명령을 못 받음 → 위 에이전트 항목 |
+| `헬스체크 실패` | 컨테이너는 떴지만 api · web unhealthy 또는 Tunnel 문제 → 4.5 로그, `cloudflared` 확인 |
 
 ## 5. 로컬에서 같은 스택 검증
 

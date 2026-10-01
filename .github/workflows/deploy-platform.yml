@@ -1,6 +1,7 @@
 # 플랫폼 CD: main 에 push(머지)되면 플랫폼 EC2 에서 deploy.sh <커밋 SHA> 를 실행한다.
 # GitHub OIDC → IAM 역할(infra/platform/terraform/github-cd.tf) → SSM Run Command. SSH · 장기 키 없음.
-# 설정 · 운영: docs/deploy-platform.md 4.7
+# infra/platform/terraform 이 바뀐 push 는 terraform-platform.yml(apply)을 먼저 호출하고 성공해야 배포한다.
+# 설정 · 운영: docs/deploy-platform.md 4.7, 8절
 name: Deploy platform
 
 on:
@@ -28,8 +29,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # push 에 infra/platform/terraform 변경이 있으면 배포 전에 Terraform apply 를 먼저 한다 (docs/deploy-platform.md 8절)
+  changes:
+    name: Detect infra changes
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          # 기본 base = 이 push 의 이전 커밋(github.event.before) → 머지된 PR 전체 변경
+          filters: |
+            infra:
+              - "infra/platform/terraform/**"
+              - ".github/workflows/terraform-platform.yml"
+
+  infra:
+    name: Terraform
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    uses: ./.github/workflows/terraform-platform.yml
+    with:
+      apply: true
+    # 호출되는 잡이 PR 코멘트용 pull-requests: write 를 선언하므로 같은 권한을 넘겨야 한다 (main 에선 쓰지 않음)
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
   deploy:
     name: Deploy to platform EC2
+    needs: [changes, infra]
+    # infra 가 성공했거나 건너뛴 경우만 (수동 실행 · infra 변경 없는 push 는 둘 다 skipped)
+    if: >-
+      ${{ !cancelled()
+        && contains(fromJSON('["success","skipped"]'), needs.changes.result)
+        && contains(fromJSON('["success","skipped"]'), needs.infra.result) }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:

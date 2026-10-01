@@ -1,0 +1,190 @@
+# 플랫폼 Terraform(infra/platform/terraform) CI.
+#   PR      → fmt · validate · mock test · plan(-lock=false, tf-plan 역할) → PR 에 plan 코멘트 하나(갱신)
+#   main    → deploy-platform.yml 이 infra 변경을 감지하면 이 워크플로를 호출(workflow_call) → plan → apply(tf-apply 역할)
+#             → 성공해야 같은 실행의 deploy 잡이 돈다 (apply 가 배포보다 먼저)
+#   수동    → workflow_dispatch (main 만): plan, 또는 apply=true 면 apply
+# 역할 · 설정: infra/platform/terraform/github-terraform.tf, docs/deploy-platform.md 8절
+name: Terraform platform
+
+on:
+  pull_request:
+    paths:
+      - "infra/platform/terraform/**"
+      - ".github/workflows/terraform-platform.yml"
+  workflow_call:
+    inputs:
+      apply:
+        description: "plan 후 apply"
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "plan 후 apply 까지 (실행 브랜치는 main 이어야 한다)"
+        type: boolean
+        default: false
+
+jobs:
+  terraform:
+    name: ${{ inputs.apply && 'Plan & apply' || 'Plan' }}
+    # fork PR 은 OIDC 토큰을 못 받으므로 돌리지 않는다
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # workflow_call 에서도 같은 권한이 필요하다 (호출하는 쪽이 같은 권한을 줘야 한다)
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    # apply 는 한 번에 하나(진행 중인 것은 끊지 않음). PR plan 은 같은 PR 의 이전 실행을 취소
+    concurrency:
+      group: ${{ inputs.apply && 'terraform-platform-apply' || format('terraform-platform-plan-{0}', github.event.pull_request.number || github.run_id) }}
+      cancel-in-progress: ${{ !inputs.apply }}
+    defaults:
+      run:
+        working-directory: infra/platform/terraform
+    env:
+      APPLY: ${{ inputs.apply && 'true' || 'false' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      PLAN_ROLE_ARN: ${{ vars.AWS_TF_PLAN_ROLE_ARN }}
+      APPLY_ROLE_ARN: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
+      # SSM 의 Cloudflare API token (Account: Cloudflare Tunnel Edit, Zone: DNS Edit)
+      CLOUDFLARE_TOKEN_PARAMETER: /camellia/platform/env/CLOUDFLARE_API_TOKEN
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+    steps:
+      - name: Check settings
+        working-directory: .
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error title=main 만 가능::수동 실행 · apply 는 main 에서만 한다 (지금 $GITHUB_REF)"
+            exit 1
+          fi
+          if [ "$APPLY" = true ]; then var=AWS_TF_APPLY_ROLE_ARN role="$APPLY_ROLE_ARN"; else var=AWS_TF_PLAN_ROLE_ARN role="$PLAN_ROLE_ARN"; fi
+          if [ -z "$role" ]; then
+            echo "::error title=저장소 변수 없음::Settings › Secrets and variables › Actions › Variables 에 $var 를 설정해야 한다 (docs/deploy-platform.md 8절)"
+            exit 1
+          fi
+          echo "ROLE_ARN=$role" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.4
+          # 래퍼는 stdout 을 가로채 show -json 파싱을 깨므로 끈다
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform validate · test (mock, 자격증명 없음)
+        run: |
+          terraform init -backend=false -input=false -no-color
+          terraform validate -no-color
+          terraform test -no-color
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          role-session-name: terraform-platform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform init (S3 backend)
+        run: terraform init -input=false -no-color -reconfigure
+
+      - name: terraform plan
+        id: plan
+        run: |
+          CLOUDFLARE_API_TOKEN="$(aws ssm get-parameter --name "$CLOUDFLARE_TOKEN_PARAMETER" --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          export CLOUDFLARE_API_TOKEN
+
+          # PR plan 은 잠그지 않는다 (읽기 전용 · 동시에 여러 PR). apply 경로는 잠근다
+          lock=$([ "$APPLY" = true ] && echo true || echo false)
+          set +e
+          terraform plan -input=false -no-color -lock="$lock" -detailed-exitcode -out=tfplan > plan.log 2>&1
+          rc=$?
+          set -e
+          echo "exitcode=$rc" >> "$GITHUB_OUTPUT"
+          # 0 = 변경 없음, 2 = 변경 있음, 1 = 오류
+          if [ "$rc" -eq 1 ]; then
+            cat plan.log
+            echo "::error title=terraform plan 실패::위 로그 확인"
+            exit 1
+          fi
+          tail -n 3 plan.log
+
+      - name: Plan summary
+        if: always() && steps.plan.outputs.exitcode != ''
+        env:
+          PLAN_EXIT: ${{ steps.plan.outputs.exitcode }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # show -json 에는 민감 값이 평문으로 있으므로 주소 · 액션만 뽑고 출력하지 않는다.
+          # 본문 plan 은 show(텍스트) — Terraform 이 (sensitive value) 로 가린다.
+          {
+            echo "<!-- terraform-platform-plan -->"
+            echo "### Terraform plan — \`infra/platform/terraform\`"
+            echo
+            if [ "$PLAN_EXIT" = 1 ]; then
+              echo "**plan 실패** — [실행 로그]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            else
+              # 개수는 Terraform 자신의 요약 줄 (replace 는 add 와 destroy 양쪽에 들어간다)
+              echo "**$(grep -m1 -E '^(Plan: |No changes\.)' plan.log || echo '요약 줄 없음')**"
+              echo
+              terraform show -json tfplan | jq -r '
+                [.resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"])]
+                | if length == 0 then "변경 없음" else .[] | "- `\(.change.actions | join("/"))` \(.address)" end'
+              echo
+              echo "<details><summary>전체 plan</summary>"
+              echo
+              echo '```'
+              terraform show -no-color tfplan > plan.txt
+              # GitHub 코멘트 한도 65,536자 — 머리말 · 링크 여유를 두고 자른다
+              if [ "$(wc -c < plan.txt)" -gt 55000 ]; then
+                head -c 55000 plan.txt
+                echo
+                echo "... (잘림 — 전체는 실행 로그)"
+              else
+                cat plan.txt
+              fi
+              echo '```'
+              echo "</details>"
+            fi
+            echo
+            echo "<sub>커밋 \`${HEAD_SHA:0:7}\` · [실행 ${GITHUB_RUN_ID}]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) · 역할 \`${ROLE_ARN##*/}\`</sub>"
+          } > plan-comment.md
+          cat plan-comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post plan to PR (sticky)
+        if: always() && github.event_name == 'pull_request' && steps.plan.outputs.exitcode != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          marker="<!-- terraform-platform-plan -->"
+          ids="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")"
+          id="${ids%%$'\n'*}"
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@plan-comment.md > /dev/null
+            echo "코멘트 갱신: $id"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -F body=@plan-comment.md > /dev/null
+            echo "코멘트 작성"
+          fi
+
+      - name: terraform apply
+        if: env.APPLY == 'true' && steps.plan.outputs.exitcode == '2'
+        run: |
+          CLOUDFLARE_API_TOKEN="$(aws ssm get-parameter --name "$CLOUDFLARE_TOKEN_PARAMETER" --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          export CLOUDFLARE_API_TOKEN
+          # 위에서 검토 · 요약한 plan 파일 그대로 적용 (그 사이 state 가 바뀌면 Terraform 이 거부)
+          terraform apply -input=false -no-color tfplan
+          {
+            echo
+            echo "**apply 완료** ($(date -u +%FT%TZ))"
+          } >> "$GITHUB_STEP_SUMMARY"

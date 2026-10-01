@@ -1,5 +1,6 @@
 import type { Route } from '../../app/routes';
 import { followAppLink, type Navigate } from '../../app/navigation';
+import { setupStatus, useDeployProject } from '../../features/deployment-start/useDeployProject';
 import { useI18n } from '../../i18n/I18nProvider';
 import { Marble } from '../ui/Marble';
 import { Rail } from '../ui/Rail';
@@ -25,6 +26,8 @@ function BrandMark() {
 
 export function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const { t } = useI18n();
+  const status = setupStatus(useDeployProject().state);
+  const setupNeeded = status.ready && !status.awsReady;
   return <aside className="sidebar">
     <div className="sidebar__brand">
       <div className="sidebar__brand-row">
@@ -46,5 +49,12 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
         })}
       </Rail>
     </nav>
+    <a href="/setup" className="sidebar__setup" aria-current={activePage === 'setup' ? 'page' : undefined} onClick={(event) => followAppLink(event, onNavigate)}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 7 H5 a4 4 0 0 0 0 8 H9" /><path d="M15 7 H19 a4 4 0 0 1 0 8 H15" /><path d="M8 11 H16" />
+      </svg>
+      {t.nav.setup}
+      {setupNeeded && <><span className="sidebar__setup-dot" aria-hidden="true" /><span className="visually-hidden"> {t.nav.setupNeeded}</span></>}
+    </a>
   </aside>;
 }

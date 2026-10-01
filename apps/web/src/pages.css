@@ -298,12 +298,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .diagnosis__patches { display: grid; gap: 8px; }
 .diagnosis pre { overflow-x: auto; }
 
-/* 배포 준비 상태 · AWS 키 등록 */
-.deploy-readiness { display: grid; gap: 10px; margin: 0; font-size: 14px; color: var(--ink-soft); }
-.deploy-readiness p { margin: 0; }
-.deploy-readiness__ok { color: var(--moss-text); font-weight: 700; }
-.deploy-readiness__need { display: grid; gap: 10px; }
-.deploy-readiness__need p { color: var(--ink); }
+/* AWS 키 등록 폼 */
 .aws-key-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; align-items: end; }
 .aws-key-form__field { display: grid; gap: 6px; min-width: 0; }
 .aws-key-form__field label { font-size: 13px; font-weight: 700; color: var(--ink); }
@@ -315,33 +310,42 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .aws-key-form__note, .aws-key-form > .notice { grid-column: 1 / -1; }
 .aws-key-form__note { font-size: 13px; color: var(--ink-soft); }
 
-.deploy-readiness__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .aws-key-form__actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* 처음 설정 모달 */
-.setup-dialog {
-  width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; overflow-y: auto;
-  color: var(--ink); background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-lift);
-}
-.setup-dialog::backdrop { background: color-mix(in srgb, var(--ink) 45%, transparent); }
-.setup-dialog__head { display: flex; align-items: center; gap: 12px; }
-.setup-dialog__head h2 { flex: 1; margin: 0; font-family: var(--font-display); font-size: 22px; }
-.setup-dialog__close { width: 44px; height: 44px; border: 0; border-radius: var(--radius-input); background: transparent; color: var(--ink-soft); font-size: 26px; line-height: 1; cursor: pointer; }
-.setup-dialog__close:hover { color: var(--ink); background: var(--paper-sunken); }
-.setup-dialog__close:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
-.setup-steps { display: flex; gap: 8px; margin: 20px 0 0; padding: 0; list-style: none; }
-.setup-steps__item { flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--ink-soft); border: 1.5px dashed var(--line-strong); border-radius: var(--radius-input); }
-.setup-steps__item.is-current { border: 2.5px solid var(--koro); color: var(--koro-text); font-weight: 700; }
-.setup-steps__item.is-done { border-style: solid; border-color: var(--line); color: var(--moss-text); }
-.setup-steps__no { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--paper-sunken); font-family: var(--font-mono); font-size: 12px; }
-.setup-dialog__body { display: grid; gap: 12px; margin-top: 20px; }
-.setup-dialog__body h3 { margin: 0; font-size: 18px; }
-.setup-dialog__body p { margin: 0; color: var(--ink-soft); }
-.setup-dialog__body .setup-dialog__app { font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
-.setup-dialog__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-.deploy-readiness__ok { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.deploy-readiness__app { padding: 2px 8px; border: var(--border); border-radius: var(--radius-tape); font-family: var(--font-mono); color: var(--ink); font-weight: 500; }
+/* 실패 원인 안내 */
+.run-failure__code { font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.run-failure .run-failure__code { color: var(--ink-soft); }
+.run-failure__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 연결 설정 화면 */
+.setup-card { display: grid; gap: 16px; padding: 24px; margin-bottom: 16px; background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
+.setup-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.setup-card__head h2 { margin: 0; font-family: var(--font-display); font-size: 22px; }
+.setup-card__body { display: grid; gap: 12px; }
+.setup-card__body p { margin: 0; color: var(--ink-soft); }
+.setup-card__body .setup-card__value { font-family: var(--font-mono); font-size: 16px; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.setup-card__body .setup-card__alert { color: var(--brick-text); font-weight: 700; }
+.setup-form { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+.setup-form .aws-key-form__field { flex: 1 1 240px; }
+.setup-requirements { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.setup-requirements li { padding: 4px 10px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); background: var(--paper-sunken); border-radius: var(--radius-tape); }
+.setup-agent-steps { display: grid; gap: 16px; margin: 0; padding-left: 22px; }
+.setup-agent-steps li { display: grid; gap: 8px; min-width: 0; }
+.setup-agent-steps li::marker { font-family: var(--font-mono); font-weight: 700; color: var(--ink-soft); }
+.setup-agent-steps strong { color: var(--ink); }
+.command-block { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.command-block pre { flex: 1; min-width: 0; margin: 0; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: var(--ink); background: var(--paper-sunken); border: var(--border); border-radius: var(--radius-input); white-space: pre; }
+.command-block pre:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+
+/* 간단 배포의 연결 상태 한 줄 */
+.setup-summary { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 0; font-size: 14px; color: var(--ink-soft); }
+.setup-summary__app { padding: 2px 8px; border: var(--border); border-radius: var(--radius-tape); font-family: var(--font-mono); color: var(--ink); }
+.setup-summary__item.is-ok { color: var(--moss-text); font-weight: 700; }
+.setup-summary__item.is-missing { color: var(--brick-text); font-weight: 700; }
+.setup-summary__link { margin-left: auto; color: var(--koro-text); font-weight: 700; }
+.setup-summary__link:hover { color: var(--koro-text-hover); }
 @media (max-width: 760px) {
-  .setup-dialog { padding: 20px 16px; }
-  .setup-steps { flex-direction: column; }
+  .setup-card { padding: 20px 16px; }
+  .command-block { flex-direction: column; }
+  .command-block pre { width: 100%; }
 }

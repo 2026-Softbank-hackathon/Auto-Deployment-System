@@ -1,8 +1,11 @@
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '');
 
 export class DeploymentApiError extends Error {
-  /** code — 서버 오류 본문의 error.code (예: DEPLOYMENT_LOCKED). 본문을 읽은 경우에만 있다. */
-  constructor(public readonly status: number, message: string, public readonly code?: string) {
+  /**
+   * code — 서버 오류 본문의 error.code (예: DEPLOYMENT_LOCKED). 본문을 읽은 경우에만 있다.
+   * serverMessage — 서버가 준 설명(error.message). 화면이 모르는 오류 코드일 때 그대로 보여 준다.
+   */
+  constructor(public readonly status: number, message: string, public readonly code?: string, public readonly serverMessage?: string) {
     super(message);
     this.name = 'DeploymentApiError';
   }
@@ -64,9 +67,10 @@ function endpoint(path: string): string {
 /** 실패 응답이면 서버 오류 코드(error.code)를 담아 던진다. */
 async function assertOk(response: Response): Promise<void> {
   if (response.ok) return;
-  const body = await response.json().catch(() => null) as { error?: { code?: unknown } } | null;
+  const body = await response.json().catch(() => null) as { error?: { code?: unknown; message?: unknown } } | null;
   const code = typeof body?.error?.code === 'string' ? body.error.code : undefined;
-  throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`, code);
+  const serverMessage = typeof body?.error?.message === 'string' && body.error.message.trim() ? body.error.message : undefined;
+  throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`, code, serverMessage);
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -182,7 +186,11 @@ export async function approveDeploymentTarget(deploymentId: string, note: string
 }
 
 /** 배포 환경 (API-24). 화면에는 종류 · 기본 여부 · 표시용 값(리전 / 호스트 이름)만 쓴다. */
-export interface EnvironmentSummary { id: string; name: string; type: 'aws' | 'onprem'; isDefault: boolean; region: string | null; hostname: string | null }
+export interface EnvironmentSummary {
+  id: string; name: string; type: 'aws' | 'onprem'; isDefault: boolean; region: string | null; hostname: string | null;
+  /** 이 환경이 참조하는 시크릿 이름 (AWS access_key 방식). 값은 응답에 없다. */
+  secretNames: string[];
+}
 
 /** API-24 — 프로젝트에 등록된 배포 환경 목록. */
 export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
@@ -197,8 +205,44 @@ export async function listEnvironments(projectId: string): Promise<EnvironmentSu
     return [{
       id: String(record.id), name: typeof record.name === 'string' ? record.name : '', type: record.type, isDefault: record.isDefault === true,
       region: typeof aws.region === 'string' ? aws.region : null, hostname: typeof onprem.hostname === 'string' ? onprem.hostname : null,
+      secretNames: [aws.accessKeyIdSecretName, aws.secretAccessKeySecretName].filter((name): name is string => typeof name === 'string'),
     }];
   });
+}
+
+const ONPREM_ENVIRONMENT_NAME = 'onprem-default';
+
+/**
+ * 온프레미스 환경 등록 (API-23). 계약상 onpremConfig.agentRegistrationToken이 필수라 임의 값을 넣는다.
+ * Agent 인증에는 쓰이지 않는다 — 실제 등록 토큰은 issueAgentRegistrationToken으로 따로 발급한다.
+ */
+export async function createOnpremEnvironment(projectId: string, hostname: string): Promise<EnvironmentSummary> {
+  const placeholder = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const response = await fetch(endpoint('/api/v1/environments'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId: Number(projectId), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: true, onpremConfig: { agentRegistrationToken: placeholder, hostname } }),
+    credentials: 'include',
+  });
+  const body = asRecord(await readJson(response), '환경 등록');
+  return { id: String(body.id), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: body.isDefault === true, region: null, hostname, secretNames: [] };
+}
+
+export interface AgentRegistrationToken { token: string; expiresAt: string }
+
+/** On-Prem Agent 1회용 등록 토큰 발급 (10분 유효). 값은 이 응답에서 한 번만 받는다. */
+export async function issueAgentRegistrationToken(environmentId: string): Promise<AgentRegistrationToken> {
+  const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}/agent-registration-token`), { method: 'POST', credentials: 'include' });
+  const body = asRecord(await readJson(response), '등록 토큰');
+  if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new Error('등록 토큰 응답 형식이 올바르지 않습니다.');
+  return { token: body.token, expiresAt: body.expiresAt };
+}
+
+/** API-29 — 프로젝트에 저장된 시크릿 이름 목록 (값은 응답에 없다). */
+export async function listSecretNames(projectId: string): Promise<string[]> {
+  const response = await fetch(endpoint(`/api/v1/secrets?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });
+  const body = await readJson(response);
+  return (Array.isArray(body) ? body : []).flatMap((item) => (item && typeof item === 'object' && typeof (item as { name?: unknown }).name === 'string' ? [(item as { name: string }).name] : []));
 }
 
 /** 팀이 정한 시크릿 이름 (2026-10-01). 환경은 이 이름으로만 키를 참조한다. */

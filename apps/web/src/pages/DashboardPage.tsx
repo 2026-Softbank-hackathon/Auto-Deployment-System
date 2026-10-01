@@ -5,6 +5,7 @@ import { Koro } from '../components/ui/Koro';
 import { StatusTape } from '../components/ui/StatusTape';
 import { DeploymentRow } from '../features/dashboard/DeploymentRow';
 import { useDeploymentList, type DeploymentListItem } from '../features/dashboard/useDeploymentList';
+import { isStalled } from '../features/dashboard/format';
 import { deploymentStatusView } from '../features/deployment-status/status-view';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -36,14 +37,18 @@ function EmptyState({ onNavigate }: { onNavigate: Navigate }) {
   </section>;
 }
 
-function Counts({ items }: { items: DeploymentListItem[] }) {
+function Counts({ items, now }: { items: DeploymentListItem[]; now: number }) {
   const { t } = useI18n();
-  const outcomes = items.map((item) => deploymentStatusView(item.status).outcome);
+  const outcomes = items.map((item) => {
+    const outcome = deploymentStatusView(item.status).outcome;
+    return isStalled(outcome === 'active', item.createdAt, now) ? 'stalled' : outcome;
+  });
   const count = (outcome: string) => outcomes.filter((value) => value === outcome).length;
   return <div className="dashboard-counts">
     <StatusTape tone="running">{t.dashboard.countActive(count('active'))}</StatusTape>
     <StatusTape tone="success">{t.dashboard.countSuccess(count('success'))}</StatusTape>
     <StatusTape tone="failed">{t.dashboard.countFailed(count('failed'))}</StatusTape>
+    {count('stalled') > 0 && <StatusTape tone="waiting">{t.dashboard.countStalled(count('stalled'))}</StatusTape>}
     <span className="dashboard-counts__note">{t.dashboard.countBasis(items.length)}</span>
   </div>;
 }
@@ -69,7 +74,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
     {state.phase === 'ready' && state.items.length === 0 && <EmptyState onNavigate={onNavigate} />}
 
     {state.phase === 'ready' && state.items.length > 0 && <>
-      <Counts items={state.items} />
+      <Counts items={state.items} now={state.loadedAt} />
       {state.partialFailures > 0 && <p className="dashboard-status">{t.dashboard.partialFailures(state.partialFailures)}</p>}
       <section className="deployment-list" aria-label={t.dashboard.listLabel}>
         {state.items.map((deployment) => <DeploymentRow key={deployment.id} deployment={deployment} now={state.loadedAt} onNavigate={onNavigate} />)}

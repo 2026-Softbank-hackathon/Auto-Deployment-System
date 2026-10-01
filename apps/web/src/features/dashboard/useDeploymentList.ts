@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listProjectDeployments, listProjects, type ProjectDeploymentSummary, type ProjectSummary } from '../../api/deployment-api';
 import { deploymentStatusView } from '../deployment-status/status-view';
+import { isStalled } from './format';
 
 /**
  * 전역 배포 목록 API가 없어서 GET /projects → 최근 프로젝트별 GET /projects/:id/deployments 로 모은다.
@@ -64,8 +65,8 @@ export function useDeploymentList() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // 진행 중인 배포가 있으면 실제 상태를 다시 조회한다 (진행률을 추정하지 않는다).
-  const hasActive = state.phase === 'ready' && state.items.some((item) => deploymentStatusView(item.status).outcome === 'active');
+  // 진행 중인 배포가 있으면 실제 상태를 다시 조회한다 (진행률을 추정하지 않는다). 멈춘 배포만 남았으면 반복 조회하지 않는다.
+  const hasActive = state.phase === 'ready' && state.items.some((item) => deploymentStatusView(item.status).outcome === 'active' && !isStalled(true, item.createdAt, state.loadedAt));
   useEffect(() => {
     if (!hasActive) return;
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, ACTIVE_REFRESH_MS);

@@ -509,3 +509,12 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .dashboard-tools__clear:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .pager__status { min-width: 64px; text-align: center; font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
+
+/* 배포를 골라서 재배포 */
+.deployment-pick { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 12px; }
+.deployment-pick__box { width: 20px; height: 20px; margin: 0; accent-color: var(--koro); }
+input.deployment-pick__box { cursor: pointer; }
+input.deployment-pick__box:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.selection-bar { position: sticky; top: 8px; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; font-weight: 700; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
+.selection-bar > span { margin-right: auto; }
+input.deployment-pick__box:disabled { cursor: not-allowed; opacity: 0.45; }

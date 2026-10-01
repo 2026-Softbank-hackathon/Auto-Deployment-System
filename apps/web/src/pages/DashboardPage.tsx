@@ -3,7 +3,6 @@ import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { Keycap } from '../components/ui/Keycap';
 import { Koro } from '../components/ui/Koro';
 import { StatusTape } from '../components/ui/StatusTape';
-import { RedeployButton } from '../features/deployment-progress/RedeployButton';
 import { DeploymentBrowser } from '../features/dashboard/DeploymentBrowser';
 import { useDeploymentList, type DeploymentListItem } from '../features/dashboard/useDeploymentList';
 import { isStalled } from '../features/dashboard/format';
@@ -56,7 +55,7 @@ function Counts({ items, now }: { items: DeploymentListItem[]; now: number }) {
 
 export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
-  const { state, retry } = useDeploymentList();
+  const { state, retry, refresh } = useDeploymentList();
   const hasItems = state.phase === 'ready' && state.items.length > 0;
 
   return <>
@@ -78,9 +77,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
       <Counts items={state.items} now={state.loadedAt} />
       {state.partialFailures > 0 && <p className="dashboard-status">{t.dashboard.partialFailures(state.partialFailures)}</p>}
 
-      <DeploymentBrowser items={state.items} now={state.loadedAt} onNavigate={onNavigate} searchPlaceholder={t.dashboard.searchPlaceholder}
-        extraAction={(deployment) => ['failed', 'stopped'].includes(deploymentStatusView(deployment.status).outcome)
-          ? <RedeployButton compact variant="ghost" deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} /> : undefined} />
+      <DeploymentBrowser items={state.items} now={state.loadedAt} onNavigate={onNavigate} searchPlaceholder={t.dashboard.searchPlaceholder} selection="multi" onRedeployed={refresh} />
     </>}
   </>;
 }

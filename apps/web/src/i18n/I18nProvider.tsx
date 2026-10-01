@@ -63,3 +63,8 @@ export function errorMessage(error: unknown, t: Messages, fallback: string): str
   if (error instanceof TypeError) return t.errors.network;
   return error instanceof Error ? error.message : fallback;
 }
+
+/** 서버가 거절한 사유. 서버가 준 설명이 있으면 그대로, 없으면 현재 언어의 일반 문구. */
+export function serverReasonText(error: unknown, t: Messages, fallback: string): string {
+  return error instanceof DeploymentApiError && error.serverMessage ? error.serverMessage : errorMessage(error, t, fallback);
+}

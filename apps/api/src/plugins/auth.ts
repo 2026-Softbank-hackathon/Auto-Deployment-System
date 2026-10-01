@@ -56,7 +56,15 @@ const authPlugin: FastifyPluginAsync<{
       return;
     }
 
-    // Agent 전용 키 검증은 Job claim 라우트가 처리한다.
+    // Agent 등록·Heartbeat: 등록 토큰 / 장기 키 자체가 크레덴셜 — 세션 인증 불필요
+    if (
+      request.method === "POST" &&
+      (path === "/api/v1/agents/register" || path === "/api/v1/agents/heartbeat")
+    ) {
+      return;
+    }
+
+    // Job claim은 Agent 전용 키로 인증한다. 라우트가 bearer key를 검증한다.
     if (
       opts.agentJobClaimEnabled &&
       request.method === "POST" &&

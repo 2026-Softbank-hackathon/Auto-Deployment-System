@@ -29,8 +29,10 @@ import { AiUsageService } from "./services/ai-usage-service.js";
 import { SecretService } from "./services/secret-service.js";
 import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
+import { AgentService } from "./services/agent-service.js";
 
 import projectsRoutes from "./routes/projects.js";
+import agentsRoutes from "./routes/agents.js";
 import projectEnvRoutes from "./routes/project-env.js";
 import deploymentsRoutes from "./routes/deployments.js";
 import deploymentEventsRoutes from "./routes/deployment-events.js";
@@ -96,7 +98,7 @@ export async function buildServer(opts: BuildServerOptions) {
   await fastify.register(authPlugin, {
     apiKey: opts.apiKey,
     nodeEnv: opts.nodeEnv,
-    agentJobClaimEnabled: opts.agentAuthenticator !== undefined,
+    agentJobClaimEnabled: true,
   });
   await fastify.register(multipartPlugin);
   await fastify.register(sseBrokerPlugin);
@@ -123,6 +125,9 @@ export async function buildServer(opts: BuildServerOptions) {
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
+  const agentService = new AgentService(opts.pool);
+  const authenticateAgent = opts.agentAuthenticator ??
+    ((token: string) => agentService.authenticate(token));
   const sseBroker = fastify.sseBroker;
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
@@ -253,15 +258,17 @@ export async function buildServer(opts: BuildServerOptions) {
       environmentService,
     });
 
-    if (opts.agentAuthenticator) {
-      v1.register(agentJobsRoutes, {
-        prefix: "/agents",
-        agentJobService,
-        authenticate: opts.agentAuthenticator,
-        pollTimeoutMs: opts.agentJobPollTimeoutMs,
-        pollIntervalMs: opts.agentJobPollIntervalMs,
-      });
-    }
+    v1.register(agentsRoutes, {
+      agentService,
+    });
+
+    v1.register(agentJobsRoutes, {
+      prefix: "/agents",
+      agentJobService,
+      authenticate: authenticateAgent,
+      pollTimeoutMs: opts.agentJobPollTimeoutMs,
+      pollIntervalMs: opts.agentJobPollIntervalMs,
+    });
   }, { prefix: "/api/v1" });
 
   return fastify;

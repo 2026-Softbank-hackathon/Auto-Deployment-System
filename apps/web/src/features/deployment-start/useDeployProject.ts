@@ -1,5 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { createOnpremEnvironment, createProject, getProject, listEnvironments, listProjects, listSecretNames, registerAwsEnvironment, type EnvironmentSummary } from '../../api/deployment-api';
+import { createOnpremEnvironment, deleteEnvironment, createProject, getProject, listEnvironments, listProjects, listSecretNames, registerAwsEnvironment, type EnvironmentSummary } from '../../api/deployment-api';
 import type { DeployTarget } from './TargetToggle';
 
 /**
@@ -111,7 +111,16 @@ function useDeployProjectState() {
     }
   }, [state, refresh]);
 
-  return { state, refresh, createDeployProject, selectProject, registerAws, registerOnprem };
+  /** 등록한 온프레미스 서버를 해제한다. */
+  const removeEnvironment = useCallback(async (environmentId: string) => {
+    try {
+      await deleteEnvironment(environmentId);
+    } finally {
+      await refresh();
+    }
+  }, [refresh]);
+
+  return { state, refresh, createDeployProject, selectProject, registerAws, registerOnprem, removeEnvironment };
 }
 
 type DeployProjectValue = ReturnType<typeof useDeployProjectState>;

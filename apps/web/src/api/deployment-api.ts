@@ -191,6 +191,8 @@ export interface EnvironmentSummary {
   id: string; name: string; type: 'aws' | 'onprem'; isDefault: boolean; region: string | null; hostname: string | null;
   /** 이 환경이 참조하는 시크릿 이름 (AWS access_key 방식). 값은 응답에 없다. */
   secretNames: string[];
+  /** 온프레미스 Agent가 마지막으로 연결을 알린 시각. 서버가 아직 채우지 않으면 null (모르는 상태). */
+  lastSeenAt: string | null;
 }
 
 /** API-24 — 프로젝트에 등록된 배포 환경 목록. */
@@ -207,8 +209,15 @@ export async function listEnvironments(projectId: string): Promise<EnvironmentSu
       id: String(record.id), name: typeof record.name === 'string' ? record.name : '', type: record.type, isDefault: record.isDefault === true,
       region: typeof aws.region === 'string' ? aws.region : null, hostname: typeof onprem.hostname === 'string' ? onprem.hostname : null,
       secretNames: [aws.accessKeyIdSecretName, aws.secretAccessKeySecretName].filter((name): name is string => typeof name === 'string'),
+      lastSeenAt: typeof record.lastSeenAt === 'string' ? record.lastSeenAt : null,
     }];
   });
+}
+
+/** 배포 환경 삭제. 진행 중인 배포가 있으면 409, 이 환경으로 배포한 기록이 있으면 서버가 거절한다(deployments가 환경을 참조). */
+export async function deleteEnvironment(environmentId: string): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}`), { method: 'DELETE', credentials: 'include' });
+  await assertOk(response);
 }
 
 const ONPREM_ENVIRONMENT_NAME = 'onprem-default';
@@ -226,7 +235,7 @@ export async function createOnpremEnvironment(projectId: string, hostname: strin
     credentials: 'include',
   });
   const body = asRecord(await readJson(response), '환경 등록');
-  return { id: String(body.id), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: body.isDefault === true, region: null, hostname, secretNames: [] };
+  return { id: String(body.id), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: body.isDefault === true, region: null, hostname, secretNames: [], lastSeenAt: null };
 }
 
 export interface AgentRegistrationToken { token: string; expiresAt: string }

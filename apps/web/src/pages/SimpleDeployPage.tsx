@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react';
-import { createDeployment, DeploymentApiError } from '../api/deployment-api';
+import { createDeployment, DeploymentApiError, listProjectEnv } from '../api/deployment-api';
+import { loadEnvPlan, missingEnvNames } from '../features/setup/env-plan';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { followAppLink, type Navigate } from '../app/navigation';
 import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
@@ -30,6 +31,18 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   useEffect(() => { void refreshProject(); }, [refreshProject]);
 
   const project = status.ready ? status.project : null;
+  // 최근 배포의 분석 기준으로, 등록하지 않으면 배포가 실패하는 환경변수 개수. 새 ZIP은 다를 수 있어 배포를 막지는 않고 알리기만 한다.
+  const projectId = project?.id ?? null;
+  const [envMissing, setEnvMissing] = useState(0);
+  useEffect(() => {
+    setEnvMissing(0);
+    if (!projectId) return;
+    let active = true;
+    Promise.all([loadEnvPlan(projectId), listProjectEnv(projectId)]).then(([plan, registered]) => {
+      if (active && plan) setEnvMissing(missingEnvNames(plan, registered).length);
+    }, () => { /* 안내용이라 읽지 못하면 표시하지 않는다 */ });
+    return () => { active = false; };
+  }, [projectId]);
   // 고른 대상에 필요한 연결이 다 됐는지. AWS 키는 어느 대상이든 필요하다(온프레미스도 이미지를 ECR에 둔다).
   const targetReady = status.ready && project !== null && status.awsReady && missingFor(target, projectState.phase === 'ready' ? projectState.environments : []).length === 0;
   const canDeploy = Boolean(file) && targetReady;
@@ -75,7 +88,7 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
       <ZipUploader file={file} onChange={(next) => { setFile(next); setError(null); }} disabled={isStarting} />
       {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.startError}</strong><br />{startErrorCopy}</div>}
       <TargetToggle value={target} onChange={setTarget} disabled={isStarting} />
-      <SetupSummary target={target} state={projectState} onRetry={() => void refreshProject()} onNavigate={onNavigate}
+      <SetupSummary target={target} state={projectState} envMissing={envMissing} onRetry={() => void refreshProject()} onNavigate={onNavigate}
         onSelectProject={(projectId) => { setError(null); void selectProject(projectId); }} disabled={isStarting} />
       <div className="deploy-card__footer">
         <p className={`deploy-card__hint ${canDeploy ? 'is-ready' : ''}`} aria-live="polite">{hint}</p>

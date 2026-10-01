@@ -11,7 +11,7 @@ type DeployProjectState = ReturnType<typeof useDeployProject>['state'];
 /**
  * 간단 배포 화면의 연결 상태 한 줄. 등록 · 변경은 연결 설정 화면(/setup)에서 한다.
  */
-export function SetupSummary({ target, state, onRetry, onNavigate, onSelectProject, disabled }: { target: DeployTarget; state: DeployProjectState; onRetry: () => void; onNavigate: Navigate; onSelectProject: (projectId: string) => void; disabled?: boolean }) {
+export function SetupSummary({ target, state, envMissing = 0, onRetry, onNavigate, onSelectProject, disabled }: { target: DeployTarget; state: DeployProjectState; /** 등록이 필요한 환경변수 개수 */ envMissing?: number; onRetry: () => void; onNavigate: Navigate; onSelectProject: (projectId: string) => void; disabled?: boolean }) {
   const { t } = useI18n();
   if (state.phase === 'loading') return <p className="setup-summary" aria-live="polite">{t.deploy.summary.checking}</p>;
   if (state.phase === 'error') return <div className="notice error" role="alert">
@@ -35,6 +35,7 @@ export function SetupSummary({ target, state, onRetry, onNavigate, onSelectProje
     {target === 'onprem' && (status.onprem
       ? <span className="setup-summary__item is-ok">✓ {t.deploy.targets.onprem}{status.onprem.hostname ? ` · ${status.onprem.hostname}` : ''}</span>
       : <span className="setup-summary__item is-missing">{t.deploy.summary.onpremMissing}</span>)}
+    {envMissing > 0 && <span className="setup-summary__item is-missing">{t.deploy.summary.envMissing(envMissing)}</span>}
     {setupLink}
   </div>;
 }

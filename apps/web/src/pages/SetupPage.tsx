@@ -87,7 +87,7 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </Card>
 
     <Card title={t.setup.env.title} tone="waiting" status={t.setup.status.optional}>
-      <EnvVarsCard projectId={project?.id ?? null} />
+      <EnvVarsCard projectId={project?.id ?? null} awsRegion={aws?.region ?? null} />
     </Card>
   </>;
 }

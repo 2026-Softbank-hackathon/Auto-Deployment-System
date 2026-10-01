@@ -1,8 +1,9 @@
 # cp terraform.tfvars.example terraform.tfvars  (terraform.tfvars 는 .gitignore 대상)
 # 비밀 값은 여기에 넣지 않는다. Cloudflare API token 은 환경변수 CLOUDFLARE_API_TOKEN 으로.
 
-cloudflare_account_id = "<Cloudflare account ID>"
-cloudflare_zone_id    = "<camellia-deploy.app zone ID>"
+# 기본값(variables.tf)이 팀 계정 · camellia-deploy.app 이라 보통은 이 파일이 필요 없다. 바꿀 때만
+# cloudflare_account_id = "<Cloudflare account ID>"
+# cloudflare_zone_id    = "<camellia-deploy.app zone ID>"
 
 # region            = "ap-northeast-2"
 # instance_type     = "t3.large"

@@ -72,8 +72,9 @@ On-Prem Agent 는 `ONPREM_CONTROL_PLANE_URL=https://console.camellia-deploy.app`
 | `infra/platform/compose.local.yaml` | 로컬 검증용: web 을 `127.0.0.1:8080` 에 publish |
 | `infra/platform/platform.env.example` | `.env` 항목 전체 |
 | `infra/platform/scripts/deploy.sh` | 호스트에서 git checkout → SSM → `.env` → `compose up --build` |
-| `infra/platform/terraform/` | VPC · SG · IAM · EC2 · Cloudflare Tunnel · DNS · SSM(Tunnel token), `github-cd.tf`(CD 용 GitHub OIDC · IAM 역할), `tests/` mock plan 테스트 |
-| `.github/workflows/deploy-platform.yml` | CD: main push → SSM 으로 `deploy.sh <커밋 SHA>` → `/health` 확인 (4.7) |
+| `infra/platform/terraform/` | VPC · SG · IAM · EC2 · Cloudflare Tunnel · DNS · SSM(Tunnel token), `github-cd.tf`(CD 용 GitHub OIDC · IAM 역할), `github-terraform.tf`(Terraform CI 용 plan · apply 역할), `backend.tf`(S3 state), `tests/` mock plan 테스트 |
+| `.github/workflows/deploy-platform.yml` | CD: main push → (infra 변경 시 Terraform apply 먼저) → SSM 으로 `deploy.sh <커밋 SHA>` → `/health` 확인 (4.7) |
+| `.github/workflows/terraform-platform.yml` | Terraform CI: PR 에 plan 코멘트, main 에서 apply (8절) |
 
 ## 4. 배포 런북
 
@@ -119,9 +120,9 @@ aws ssm put-parameter --name $P/TERRAFORM_STATE_KMS_KEY_ID --type String --value
 
 ```bash
 cd infra/platform/terraform
-cp terraform.tfvars.example terraform.tfvars      # account ID · zone ID 입력
+# account ID · zone ID 는 variables.tf 기본값 (다른 계정 · 도메인이면 terraform.tfvars)
 export CLOUDFLARE_API_TOKEN=...                   # 셸에서만
-# (팀 공유 state) cp backend.tf.example backend.tf 후 bucket 입력
+# state 는 S3 (backend.tf). 평소 변경은 PR → CI apply (8절) — 여기는 최초 구축 · 비상용
 terraform init
 terraform plan
 terraform apply
@@ -205,12 +206,12 @@ main push ─▶ GitHub Actions (.github/workflows/deploy-platform.yml)
  Actions: get-command-invocation 폴링 → 로그 마지막 100줄 → /health 200 대기(5분) → Job summary
 ```
 
-- **트리거**: `main` push. `docs/**` · `*.md` 만 바뀐 push 는 건너뛴다 (하나라도 다른 파일이 섞이면 배포). 수동 실행은 `workflow_dispatch`(아래)
+- **트리거**: `main` push. `docs/**` · `*.md` 만 바뀐 push 는 건너뛴다 (하나라도 다른 파일이 섞이면 배포). 수동 실행은 `workflow_dispatch`(아래). `infra/platform/terraform/**` 가 바뀐 push 는 같은 실행에서 Terraform apply 가 먼저 성공해야 배포한다 (8절)
 - **배포 대상**: `github.sha` 그대로. `deploy.sh` 의 `git fetch origin <SHA>` 는 GitHub 가 도달 가능한 커밋 SHA fetch 를 허용해서 동작한다 (브랜치 끝이 아닌 커밋으로 확인함)
 - **동시 실행**: concurrency group 하나. 진행 중인 배포는 끝까지 가고, 그 사이 들어온 push 는 가장 최신 것 하나만 대기한다 (중간 것은 GitHub 가 취소 — 최신 커밋에 다 포함되므로 문제 없음). 4.4 처럼 손으로 보낸 SSM 명령과는 막지 않으니 겹치지 않게 한다
 - **실패 조건**: 저장소 변수 없음, SSM 에이전트 Offline, `deploy.sh` 종료 코드 ≠ 0 (SSM `Failed` · `TimedOut` · `Cancelled`), `/health` 가 5분 안에 200 아님. Job 제한 40분 (SSM 실행 제한 30분, 명령 전달 제한 10분)
 - **로그**: Actions 에는 마지막 100줄. 전체는 호스트 `/var/log/camellia-deploy/gha-<run_id>-<attempt>.log`
-- **하지 않는 것**: Terraform apply (`infra/platform/terraform` 변경은 사람이 apply), SSM 값 변경. Actions 에서 실행을 취소해도 호스트의 `deploy.sh` 는 끝까지 돈다 (역할에 `CancelCommand` 권한을 주지 않음)
+- **하지 않는 것**: SSM 값 변경. (Terraform apply 는 같은 워크플로의 `infra` 잡이 한다 — 8절) Actions 에서 실행을 취소해도 호스트의 `deploy.sh` 는 끝까지 돈다 (역할에 `CancelCommand` 권한을 주지 않음)
 
 #### 권한 (`infra/platform/terraform/github-cd.tf`)
 
@@ -326,8 +327,139 @@ docker compose -f compose.yaml -f compose.local.yaml down -v   # 정리 (볼륨 
 - **콘솔 = API 전체 권한**: Basic Auth 를 통과하면 nginx 가 API Key 를 붙인다. 콘솔 비밀번호를 API Key 처럼 다룬다. 노출되면 SSM 값을 바꾸고 4.4 실행
 - **IMDS 차단**: hop limit 1 이라 컨테이너는 인스턴스 역할 자격증명을 못 얻는다(의도). worker 는 사용자 등록 AWS 키만 쓴다
 - **업로드 100MB**: Cloudflare 무료 플랜 요청 본문 한도가 100MB, API 한도도 100MB
-- **Tunnel token 이 state 에 있음**: S3 backend 를 쓸 때 암호화 · 접근 제한 bucket 사용
+- **Tunnel token 이 state 에 있음**: state 는 암호화 · 퍼블릭 차단 S3 bucket, 읽을 수 있는 주체는 8절 표
 - **AMI · user-data 변경은 무시**(`ignore_changes`): 인스턴스를 의도치 않게 갈아엎지 않기 위함. OS 를 새로 받으려면 `terraform apply -replace=aws_instance.host` (DB 백업 후)
 - **같은 호스트에서 빌드**: 플랫폼 갱신 빌드와 사용자 앱 빌드가 CPU · 메모리를 나눠 쓴다. 2GiB swap 추가. 오래된 이미지 · 빌드 캐시는 매일 정리(72h 초과)
 - **감사 로그 IP**: API 가 `trustProxy` 를 켜지 않아 요청 IP 가 nginx 컨테이너 IP 로 기록된다 (앱 변경 범위 밖)
-- 실제 AWS · Cloudflare 에는 아직 apply 해 보지 않았다. 로컬 compose 검증 + `terraform validate` · mock `terraform test` 까지만 했다
+- **CI apply 역할 권한**: 읽기 권한은 실제 plan 의 API 호출(CloudTrail)과 정책 시뮬레이터로 확인했다. 쓰기 권한은 시뮬레이터로만 확인 — EC2 교체 같은 경로를 처음 탈 때 `AccessDenied` 가 나면 메시지의 액션을 `github-terraform.tf` 에 추가한다 (8절)
+
+## 8. Terraform state · CI — PR 에 plan, main 머지 때 apply
+
+플랫폼 Terraform 은 한 PC 에 묶이지 않는다. state 는 S3 에 있고, 변경은 PR 에서 plan 을 보고 리뷰한 뒤 main 머지 때 CI 가 apply 한다. 사람이 로컬에서 apply 하는 것은 최초 구축(4.2) · 아래 1회 설정 · 비상시뿐이다.
+
+```
+PR (infra/platform/terraform/** 변경)
+  └─ terraform-platform.yml: fmt · validate · test(mock) → plan -lock=false (tf-plan 역할)
+       └─ PR 코멘트 1개를 갱신: "Plan: N to add, …" + 바뀌는 리소스 목록 + 전체 plan(<details>)
+리뷰 · 머지 → main push
+  └─ deploy-platform.yml
+       changes ─ paths-filter: infra/platform/terraform/** 바뀜?
+         ├ 예    → infra = terraform-platform.yml 호출: plan → 그 plan 파일 그대로 apply (tf-apply 역할)
+         └ 아니오 → infra skipped
+       deploy (needs: changes, infra — 둘 다 성공 또는 skipped 일 때만) → SSM deploy.sh <SHA> (4.7)
+```
+
+- **순서**: infra 와 deploy 가 한 워크플로 실행 안에서 `needs:` 로 묶여 있어 apply 가 끝나야 배포한다. apply 가 실패하면 그 push 의 배포는 건너뛴다 (고친 뒤 Actions › Re-run failed jobs 또는 다음 push). 배포는 push 당 한 번 — infra 만 바뀐 push 도 배포한다 (SSM 값이 바뀌었을 수 있어 `.env` 를 다시 만든다)
+- **동시 실행**: apply 는 concurrency group `terraform-platform-apply`(수동 실행과 공유) + S3 잠금 파일. PR plan 은 잠그지 않고, 같은 PR 의 새 push 가 이전 plan 을 취소한다. fork PR 은 OIDC 토큰을 못 받아 건너뛴다
+- **PR 코멘트 vs 실제 apply**: 다른 PR 이 먼저 머지되면 main 의 plan 이 PR 코멘트와 다를 수 있다. 실제 apply 한 plan 은 그 실행의 Job summary 에 남는다
+- **민감 값**: 코멘트 · summary 는 `terraform show` 텍스트라 민감 값은 `(sensitive value)` 로 가려진다. JSON plan(평문 포함)은 주소 · 액션만 뽑고 출력하지 않는다. Cloudflare token 은 SSM 에서 읽어 `::add-mask::` 후 그 스텝의 환경변수로만 쓴다
+- **Cloudflare account · zone ID**: 비밀이 아닌 식별자라 `variables.tf` 기본값으로 커밋했다 → 로컬 · CI 가 tfvars 없이 같은 값을 쓴다. 비밀은 API token 하나뿐이고 SSM `/camellia/platform/env/CLOUDFLARE_API_TOKEN` 에 있다
+
+### State
+
+| 항목 | 내용 |
+|---|---|
+| 위치 | `s3://camellia-tfstate-725072160743/camellia/platform/terraform.tfstate` (ap-northeast-2, `backend.tf`) |
+| bucket 설정 | 버전 관리 on, 기본 암호화 SSE-S3, 퍼블릭 액세스 전부 차단, bucket policy 없음 (IAM 으로만 접근) |
+| 잠금 | `use_lockfile = true` → 같은 key + `.tflock` 객체 (DynamoDB 없음) |
+| 읽을 수 있는 주체 | 팀 계정 IAM 사용자(admin 그룹 6명), `camellia-platform-tf-plan` · `-tf-apply` 역할(이 key 와 잠금 파일만). state 에 Cloudflare Tunnel token 이 들어 있으므로 더 넓히지 않는다 |
+| 되돌리기 | 잘못된 apply 뒤 이전 state 가 필요하면 이전 버전을 복사한다. 되돌린 뒤 반드시 plan 으로 실제 리소스와의 차이를 확인 |
+
+```bash
+B=camellia-tfstate-725072160743; K=camellia/platform/terraform.tfstate
+aws s3api list-object-versions --bucket $B --prefix $K --query 'Versions[].[VersionId,LastModified,Size]' --output table
+aws s3api copy-object --bucket $B --key $K --copy-source "$B/$K?versionId=<VersionId>"
+```
+
+### 역할 (`infra/platform/terraform/github-terraform.tf`)
+
+| 역할 | 받을 수 있는 곳 (OIDC `sub`, StringEquals) | 권한 |
+|---|---|---|
+| `camellia-platform-tf-plan` | `<prefix>:pull_request`, `<prefix>:ref:refs/heads/main` | state key 읽기 + 잠금 파일, `ec2:Describe*`, `camellia-platform-*` IAM 역할 · 인스턴스 프로파일 · GitHub OIDC provider 조회, SSM 은 `CLOUDFLARE_TUNNEL_TOKEN` · `CLOUDFLARE_API_TOKEN` 두 개와 Ubuntu AMI 공개 파라미터만 (+ 그 둘의 `kms:Decrypt` — SSM 경유 · 암호화 컨텍스트 조건) |
+| `camellia-platform-tf-apply` | `<prefix>:ref:refs/heads/main` 만 | 위 읽기 + state 쓰기, EC2 · VPC 생성 계열(리전 조건) / 삭제 · 변경 계열(`Project=camellia` · `Component=platform` 태그 조건) / 태그는 생성 시에만, IAM 은 `camellia-platform-*` 역할 · 인스턴스 프로파일 · GitHub OIDC provider 만, `iam:PassRole` 은 EC2 로만, SSM 은 `/camellia/platform/env/*` |
+
+`<prefix>` = `github_oidc_sub_prefix` (4.7 의 immutable subject). AWS 관리형 `ReadOnlyAccess` 를 쓰지 않은 이유: 계정의 모든 S3 객체(사용자 앱 state 포함)와 모든 SSM SecureString(DB 비밀번호 · API Key · 마스터 키)을 읽게 되는데, plan 역할은 리뷰 전 코드(PR)에서 받을 수 있다.
+
+주의:
+
+- **tf-plan 은 PR 에서 받을 수 있다** → 이 리포에 push 권한이 있는 사람은 PR 에서 워크플로를 고쳐 Cloudflare API token(Tunnel · DNS 편집 권한)과 state(Tunnel token)를 읽을 수 있다. push 권한이 팀원에게만 있다는 전제다. 줄이려면 plan 전용 읽기 토큰(Tunnel Read · DNS Read)을 따로 SSM 에 두면 된다 (미적용)
+- **tf-apply 는 사실상 관리자 상당** → `camellia-platform-*` IAM 역할의 정책을 고칠 수 있어 자기 권한도 넓힐 수 있다. 신뢰 정책을 main 으로만 묶었으므로 **main 브랜치 보호(PR 리뷰 필수)가 실질적인 경계**다. 2026-10-01 기준 main 에 브랜치 보호 · ruleset 이 없다 → push 권한이 있으면 main 에 직접 push 해 이 역할을 받을 수 있다. ruleset(PR 필수 · force push 금지)을 켜는 것을 권장한다 (CD 역할 `github-cd` 도 같은 경계)
+- **새 리소스 종류를 추가하면** (예: S3 bucket, CloudWatch, Bedrock 관련 리소스) tf-apply 정책(`github_tf_write`)과 조회 권한(`github_tf_read`)에도 같은 PR 에서 추가한다. 정책과 리소스가 한 apply 에서 병렬로 만들어지면 첫 apply 가 `AccessDenied` 로 실패할 수 있다 → Re-run 하면 된다. 기존 `camellia-platform-*` 역할에 인라인 정책을 붙이는 것(`aws_iam_role_policy`)은 이미 허용된다
+- EC2 삭제 · 변경 권한은 provider `default_tags` 의 태그에 기대므로 이 태그를 없애는 변경은 하지 않는다
+
+### 로컬에서 plan (읽기 전용)
+
+```bash
+cd infra/platform/terraform
+export MSYS_NO_PATHCONV=1                                   # Windows Git Bash
+eval "$(aws configure export-credentials --profile camellia --format env)"
+export CLOUDFLARE_API_TOKEN="$(aws ssm get-parameter --name /camellia/platform/env/CLOUDFLARE_API_TOKEN \
+  --with-decryption --query Parameter.Value --output text)"  # 화면에 찍지 않기
+terraform init                                              # 처음 한 번 — backend.tf 의 S3 state
+terraform plan -lock=false                                  # 잠그지 않아 CI apply 를 막지 않는다
+```
+
+terraform 이 없으면 `docker run --rm -v "$PWD:/w" -w /w -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e CLOUDFLARE_API_TOKEN hashicorp/terraform:1.16.4 plan -lock=false` (init 도 같은 방식). 로컬 apply 는 비상시만, 잠금을 켠 채로 한다.
+
+### 최초 설정 (1회, 관리자)
+
+CI 역할은 자기 자신을 만들 수 없으므로 관리자 자격증명으로 한 번 만든다.
+
+```bash
+cd infra/platform/terraform
+# 위 "로컬에서 plan" 의 export 3줄
+terraform init
+terraform plan        # 5 to add, 0 to change, 0 to destroy (tf-plan · tf-apply 역할과 정책) 확인
+terraform apply \
+  -target=aws_iam_role.github_tf_plan -target=aws_iam_role_policy.github_tf_plan_read \
+  -target=aws_iam_role.github_tf_apply -target=aws_iam_role_policy.github_tf_apply_read \
+  -target=aws_iam_role_policy.github_tf_apply_write
+
+R=2026-Softbank-hackathon/Auto-Deployment-System
+gh variable set AWS_TF_PLAN_ROLE_ARN  --repo "$R" --body "$(terraform output -raw github_tf_plan_role_arn)"
+gh variable set AWS_TF_APPLY_ROLE_ARN --repo "$R" --body "$(terraform output -raw github_tf_apply_role_arn)"
+```
+
+역할 ARN 은 비밀이 아니다 (신뢰 정책 때문에 이 리포의 PR · main 에서만 쓸 수 있다). `AWS_REGION` 변수는 CD 와 같이 쓴다 (기본 ap-northeast-2).
+
+### 수동 실행
+
+```bash
+gh workflow run terraform-platform.yml --repo "$R" --ref main               # plan 만 (Job summary)
+gh workflow run terraform-platform.yml --repo "$R" --ref main -f apply=true # plan → apply
+```
+
+실행 브랜치는 항상 `main`. 수동 apply 는 배포(deploy.sh)를 하지 않는다.
+
+### 실패할 때
+
+| 증상 | 원인 · 대응 |
+|---|---|
+| `저장소 변수 없음` | 위 `gh variable set` |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 역할 미생성(최초 설정) / 실행 브랜치가 main 이 아님(수동 실행) / `github_oidc_sub_prefix` 불일치 |
+| `terraform fmt` 실패 | 로컬에서 `terraform fmt -recursive` 후 커밋 |
+| plan `AccessDenied` | 새 리소스 종류의 조회 권한이 `github_tf_read` 에 없음 → 추가. 그 PR 의 plan 은 관리자가 로컬 plan 으로 대신 확인 |
+| apply `AccessDenied` | 메시지의 액션 · 리소스를 `github_tf_write` 에 추가. 정책 자체를 고치는 apply 가 막히면 관리자가 로컬에서 그 정책만 `-target` apply |
+| `Error acquiring the state lock` | 다른 apply 진행 중이거나 중단된 실행의 잠금 파일이 남음 → 진행 중인 실행이 없으면 `terraform force-unlock <ID>` |
+| `Saved plan is stale` | plan 과 apply 사이에 state 가 바뀜 → 다시 실행 |
+
+### 사용자 앱 state (worker)
+
+플랫폼 state 와 별개로, worker 가 사용자 앱(`infra/terraform/profiles/aws-ecs-basic`)을 배포할 때도 Terraform 을 실행한다.
+
+- worker 는 S3 backend 만 지원한다 (`apps/worker/src/terraform-config.ts`, `handlers/provision.ts`). 로컬 state 로 대체하는 경로가 없어서 `TERRAFORM_STATE_BUCKET` · `_REGION` · `_KMS_KEY_ID` 가 없으면 AWS 배포가 `TERRAFORM_DEPENDENCY_MISSING` 으로 실패한다. 지금 SSM 에는 셋 다 없다 (On-Prem 배포는 영향 없음)
+- state key 는 코드에 고정된 `projects/<projectId>/environments/<environmentId>/terraform.tfstate` 다. 같은 bucket 을 써도 플랫폼 key(`camellia/platform/…`)와 겹치지 않고, tf-plan · tf-apply 역할은 이 key 들을 못 읽는다
+- backend 자격증명은 **사용자가 등록한 AWS 키**다 (worker 가 `AWS_*` 환경변수를 지우고 그 키만 넣는다). 그래서 bucket 은 그 키로 접근할 수 있어야 한다. 데모처럼 팀 계정 키를 등록하면 같은 bucket 을 쓸 수 있다
+- `kms_key_id` 는 코드상 필수다. 보안상으로는 bucket 기본 SSE-S3 로 충분하다 (같은 계정, 접근 통제는 IAM). KMS 고객 관리 키가 꼭 필요한 경우는 다른 계정의 키로 같은 bucket 을 쓰게 할 때(키 정책으로 교차 계정 허용)뿐이다. 코드 변경 없이 쓰려면 AWS 관리형 키 `alias/aws/s3` 를 지정한다 (Terraform 이 받아들이는 것 확인, 키는 처음 쓸 때 AWS 가 만든다, 키 비용 없음, 같은 계정에서만 사용 가능)
+
+권장 설정 (같은 bucket, 코드 변경 없음):
+
+```bash
+P=/camellia/platform/env
+aws ssm put-parameter --name $P/TERRAFORM_STATE_BUCKET     --type String --value camellia-tfstate-725072160743
+aws ssm put-parameter --name $P/TERRAFORM_STATE_REGION     --type String --value ap-northeast-2
+aws ssm put-parameter --name $P/TERRAFORM_STATE_KMS_KEY_ID --type String --value alias/aws/s3
+gh workflow run deploy-platform.yml --repo "$R" --ref main   # .env 재생성 → worker 재시작
+```
+
+등록하는 AWS 키(IAM 사용자)에는 앱 리소스 권한 외에 `s3:ListBucket`(bucket), `s3:GetObject` · `s3:PutObject` · `s3:DeleteObject`(`arn:aws:s3:::camellia-tfstate-725072160743/projects/*`)가 필요하다. 지금 팀 IAM 사용자는 모두 admin 그룹이라 추가 작업이 없다. 다른 계정 사용자까지 받으려면 bucket 을 사용자 계정 쪽에 두도록 worker 를 바꿔야 한다 (환경별 backend 설정 — 코드 변경, 미적용).

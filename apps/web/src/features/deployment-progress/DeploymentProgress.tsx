@@ -249,8 +249,9 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
 
       {view.outcome === 'failed' && <div className="notice error run-failure" role="alert">
         <strong>{t.run.failedCause}</strong>
-        <p>{failure ? t.run.failureReasons[failure] : failureMessage ?? t.progress.failedCopy}</p>
-        {failure && failureMessage && <p className="run-failure__code">{t.run.failureCode(failureMessage)}</p>}
+        {/* 분류하지 못한 코드도 코드만 덩그러니 보이지 않게, 일반 안내 문구 아래에 작게 둔다. */}
+        <p>{failure ? t.run.failureReasons[failure] : failureMessage ? t.run.failureUnknown : t.progress.failedCopy}</p>
+        {failureMessage && <p className="run-failure__code">{t.run.failureCode(failureMessage)}</p>}
         <FailureDiagnosis deploymentId={deploymentId} />
         <div className="run-failure__actions">
           {fixableByAwsKey(failure) && onFixAwsKey && <Keycap onClick={onFixAwsKey}>{t.run.fixAwsKey}</Keycap>}

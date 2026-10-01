@@ -1,10 +1,12 @@
 /**
  * 배포 실패 코드(deployments.error) → 사용자가 무엇을 하면 되는지에 따른 분류.
  * 코드는 워커의 빌드 · 프로비저닝 핸들러가 남긴다 (apps/worker handlers/build.ts normalizeBuildFailure,
- * handlers/provision.ts normalizeProvisionFailure, packages/aws-registry · packages/build-handler 의 오류 코드). 모르는 코드는 분류하지 않고 그대로 보여 준다.
+ * handlers/provision.ts normalizeProvisionFailure, packages/aws-registry · packages/build-handler · packages/adapters 의 오류 코드).
+ * 모르는 코드는 분류하지 않는다. 화면은 일반 안내 문구와 함께 코드를 작게 보여 준다.
  */
 export type FailureKind = 'awsKey' | 'awsKeyStored' | 'awsPermission' | 'registry' | 'source' | 'build' | 'buildTool'
-  | 'setup' | 'appSecret' | 'envVar' | 'infra' | 'agent' | 'server';
+  | 'setup' | 'appSecret' | 'envVar' | 'infra' | 'agent' | 'server'
+  | 'multiService' | 'resources' | 'port' | 'profile';
 
 const kinds: Record<string, FailureKind> = {
   AWS_ECR_AUTHENTICATION_FAILED: 'awsKey',
@@ -23,6 +25,17 @@ const kinds: Record<string, FailureKind> = {
   BUILD_TOOL_UNAVAILABLE: 'buildTool',
   BUILD_DEPENDENCY_MISSING: 'buildTool',
   DOCKER_AUTH_UNAVAILABLE: 'buildTool',
+  // IR → 배포 계획 변환 (packages/adapters). 빌드 · 프로비저닝 어느 쪽에서도 날 수 있다.
+  P0_SINGLE_HTTP_SERVICE_REQUIRED: 'multiService',
+  P0_RESOURCES_UNSUPPORTED: 'resources',
+  SERVICE_PORT_REQUIRED: 'port',
+  ROUTE_TARGET_INVALID: 'port',
+  PROFILE_INCOMPATIBLE: 'profile',
+  PROFILE_MISMATCH: 'profile',
+  PROFILE_NOT_FOUND: 'profile',
+  SIZE_MAPPING_NOT_FOUND: 'profile',
+  PROFILE_CONFIGURATION_INVALID: 'server',
+  ADAPTER_NOT_FOUND: 'server',
   // 프로비저닝 단계
   AWS_CREDENTIALS_UNSUPPORTED: 'awsKey',
   TARGET_ENVIRONMENT_REQUIRED: 'setup',

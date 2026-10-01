@@ -14,11 +14,14 @@
 - Intel Mac 사전검사와 macOS `LaunchAgent` 설치 기반
 - `TunnelProvider` 인터페이스와 테스트 전용 `FakeTunnelProvider`
 - 등록·Heartbeat HTTP Client와 권한 제한 장기 Agent 인증정보 파일
-- 나머지 `AgentControlPlaneClient` 인터페이스와 테스트 전용 `FakeControlPlaneClient`
+- Job claim·ECR credential·Tunnel 준비·결과 제출 HTTP Client
+- 15초 Heartbeat 기반 90초 Job lease 갱신과 취소 처리
 
 외부 노출 방식은 플랫폼 관리 Cloudflare Named Tunnel로 확정됐습니다. Agent는 Compose의 동적 포트로 로컬 헬스체크를 통과한 뒤 `jobId`와 숫자 `localPort`를 서버 경계에 전달합니다. 서버는 `http://127.0.0.1:<localPort>`로 ingress를 설정한 뒤 `tunnelId`, `token`, 외부 `hostname`을 반환하고, Agent는 해당 정보로 `cloudflared`를 실행합니다. Agent 결과의 `localUrl`은 로컬 실행·헬스 결과로 유지하고, 외부 `endpoint`는 검증된 hostname에 `https://`를 적용해 생성합니다.
 
-서버의 등록·Heartbeat API는 연결됐지만 Job claim, ECR credential, Tunnel 준비, 결과 제출 API 경로는 아직 확정되지 않았습니다. 따라서 `src/main.ts`는 저장된 장기 Agent 인증키로 Heartbeat까지 확인한 뒤 실제 작업 수신 미연결 상태를 명시하고 종료합니다. 임의의 서버 endpoint나 Fake endpoint를 실제 서버에 보고하지 않습니다.
+Agent는 저장된 장기 인증키로 서버를 인증한 뒤 Job을 long polling합니다. 실행 중 Heartbeat는 생존 보고, Job lease 갱신, 취소 확인을 함께 처리합니다. ECR credential과 Tunnel token 응답에는 `no-store`가 적용되며 Agent는 두 값을 메모리에서만 사용합니다.
+
+P0 데모는 일반 환경변수만 지원합니다. `secretNames`가 포함된 Plan은 Worker와 Agent 양쪽에서 거부하며 application secret 복호화·전달은 후속 범위입니다.
 
 ## 설정
 
@@ -37,7 +40,7 @@ ONPREM_AGENT_REGISTRATION_TOKEN=<one-time-token> \
 "$HOME/Library/Application Support/Camellia/onprem-agent/bin/camellia-onprem-agent" register
 ```
 
-등록 명령은 발급된 장기 Key로 Heartbeat까지 성공해야 완료됩니다. 제거 스크립트는 장기 Key 파일을 휴지통으로 보내지 않고 삭제하지만 서버 Key를 폐기하지는 않습니다. 서버 측 Key 폐기 API는 후속 작업입니다. poll·heartbeat·취소 확인 주기와 상태 디렉터리는 `.env.example`을 참고합니다.
+등록 명령은 발급된 장기 Key로 Heartbeat까지 성공해야 완료됩니다. 제거 스크립트는 장기 Key 파일을 휴지통으로 보내지 않고 삭제하지만 서버 Key를 폐기하지는 않습니다. 서버 측 Key 폐기 API는 후속 작업입니다. poll·heartbeat 주기와 상태 디렉터리는 `.env.example`을 참고합니다.
 
 ## ECR 보안 경계
 
@@ -68,7 +71,7 @@ pnpm --filter @camellia/onprem-agent build
 apps/onprem-agent/install/macos/install.sh
 ```
 
-설치 스크립트는 Agent 파일과 plist를 준비하지만 서버 등록 API가 없는 현재 상태에서는 서비스를 자동 시작하지 않습니다. 등록과 장기 인증키 연결이 완료된 뒤 설치된 `camellia-onprem-agent-service start`로 로그인 사용자의 `LaunchAgent`를 활성화합니다. `service.sh`는 `start`, `stop`, `restart`, `status`를 제공하고 `uninstall.sh`는 Agent와 plist를 macOS 휴지통으로 이동하며 로그는 보존합니다.
+설치 스크립트는 Agent 파일과 plist를 준비하되 1회용 등록 토큰 입력을 위해 서비스를 자동 시작하지 않습니다. 최초 등록을 마친 뒤 설치된 `camellia-onprem-agent-service start`로 로그인 사용자의 `LaunchAgent`를 활성화합니다. `service.sh`는 `start`, `stop`, `restart`, `status`를 제공하고 `uninstall.sh`는 Agent와 plist를 macOS 휴지통으로 이동하며 로그는 보존합니다.
 
 ## 검증
 

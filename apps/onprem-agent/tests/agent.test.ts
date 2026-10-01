@@ -23,13 +23,13 @@ describe("Agent 작업 수신과 상태 보고", () => {
       },
     };
     const service = new AgentService(client, executor, {
-      cancellationPollIntervalMs: 5,
+      heartbeatIntervalMs: 5,
     });
 
     await service.sendHeartbeat();
     await service.pollOnce();
 
-    expect(client.heartbeatCount).toBe(1);
+    expect(client.heartbeats).toEqual([undefined, "job-001"]);
     expect(client.reportedResults).toHaveLength(1);
     expect(client.reportedResults[0]?.jobId).toBe("job-001");
   });
@@ -69,7 +69,7 @@ describe("Agent 작업 수신과 상태 보고", () => {
       },
     };
     const service = new AgentService(client, executor, {
-      cancellationPollIntervalMs: 1,
+      heartbeatIntervalMs: 1,
     });
 
     await service.pollOnce();

@@ -7,7 +7,6 @@ export type AgentConfig = {
   stateDirectory: string;
   pollIntervalMs: number;
   heartbeatIntervalMs: number;
-  cancellationPollIntervalMs: number;
 };
 
 function positiveInteger(
@@ -47,11 +46,6 @@ export function loadAgentConfig(
       environment,
       "ONPREM_AGENT_HEARTBEAT_INTERVAL_MS",
       15_000,
-    ),
-    cancellationPollIntervalMs: positiveInteger(
-      environment,
-      "ONPREM_AGENT_CANCELLATION_POLL_INTERVAL_MS",
-      1_000,
     ),
   };
 }

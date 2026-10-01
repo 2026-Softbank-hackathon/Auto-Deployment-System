@@ -30,10 +30,6 @@ export interface AuthenticateResult {
   environmentId: number;
 }
 
-export interface HeartbeatResult {
-  deploymentCancelled?: boolean;
-}
-
 export class AgentService {
   constructor(private readonly pool: Pool) {}
 
@@ -153,31 +149,12 @@ export class AgentService {
     return { agentId: row.id, environmentId: row.environment_id };
   }
 
-  /** last_seen_at 갱신 + (있으면) currentJobId 가 속한 deployment 취소 여부 확인. */
-  async recordHeartbeat(
-    agentId: number,
-    currentJobId?: string,
-  ): Promise<HeartbeatResult> {
+  /** Agent 생존 시각 갱신. Job lease와 취소는 AgentJobService가 소유한다. */
+  async recordHeartbeat(agentId: number): Promise<void> {
     await this.pool.query(
       `UPDATE agents SET last_seen_at = now() WHERE id = $1`,
       [agentId],
     );
 
-    if (!currentJobId) {
-      return {};
-    }
-
-    // currentJobId 가 속한 deployment 상태 조회 (은영 Job 테이블 연결 전 임시: deployments 직접 조회)
-    // Job 테이블이 생기면 jobs.deployment_id → deployments.status 로 조회 경로가 바뀜
-    const depRes = await this.pool.query<{ status: string }>(
-      `SELECT status FROM deployments WHERE id = $1`,
-      [currentJobId],
-    );
-    const dep = depRes.rows[0];
-    if (dep?.status === "cancelled") {
-      return { deploymentCancelled: true };
-    }
-
-    return {};
   }
 }

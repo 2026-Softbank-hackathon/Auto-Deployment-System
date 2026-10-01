@@ -15,6 +15,15 @@ describe("On-Prem Agent 입력 검증", () => {
     ["지원하지 않는 platform", { image: { ...createJob().image, platform: "linux/arm64" } }],
     ["잘못된 Plan target", { plan: { ...createJob().plan, target: "aws" } }],
     ["잘못된 health path", { plan: { ...createJob().plan, health: { ...createJob().plan.health, path: "health" } } }],
+    [
+      "데모 범위 밖 시크릿",
+      {
+        plan: {
+          ...createJob().plan,
+          service: { ...createJob().plan.service, secretNames: ["API_TOKEN"] },
+        },
+      },
+    ],
   ])("%s를 invalid_job으로 거부한다", (_label, overrides) => {
     expect(() => parseOnpremAgentJob({ ...createJob(), ...overrides })).toThrowError(
       expect.objectContaining({ code: "invalid_job" }),

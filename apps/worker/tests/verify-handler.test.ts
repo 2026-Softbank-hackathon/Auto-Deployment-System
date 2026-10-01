@@ -22,7 +22,11 @@ afterEach(async () => {
   );
 });
 
-async function startStatusServer(statuses: number[], responseDelayMs = 0) {
+async function startStatusServer(
+  statuses: number[],
+  responseDelayMs = 0,
+  onRequest?: () => void,
+) {
   let requestCount = 0;
   const paths: string[] = [];
 
@@ -30,6 +34,7 @@ async function startStatusServer(statuses: number[], responseDelayMs = 0) {
     paths.push(request.url ?? "");
     const status = statuses[Math.min(requestCount, statuses.length - 1)] ?? 500;
     requestCount += 1;
+    onRequest?.();
 
     setTimeout(() => {
       response.writeHead(status);
@@ -307,9 +312,10 @@ describe("handleVerify", () => {
   });
 
   it("진행 중인 요청이 취소되면 이후 재시도를 실행하지 않음", async () => {
-    const target = await startStatusServer([200], 100);
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 10);
+    // 고정 타이머로 취소하면 부하 시 요청이 서버에 닿기 전에 취소돼 requestCount 가 0 이 된다.
+    // 서버가 요청을 받은 시점(응답 지연 100ms 중)에 취소해 "진행 중" 을 보장한다.
+    const target = await startStatusServer([200], 100, () => controller.abort());
 
     const result = await handleVerify(
       { data: makePayload(target.targetUrl) },

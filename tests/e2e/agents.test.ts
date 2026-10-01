@@ -94,6 +94,10 @@ describeWithPostgres("Agent 등록·인증 + Heartbeat 실 Postgres E2E", () => 
   // ── per-test cleanup ───────────────────────────────────────────────────────
 
   afterEach(async () => {
+    await pool.query(
+      `DELETE FROM deployments WHERE project_id = $1`,
+      [projectId],
+    );
     // agents 와 agent_registration_tokens 는 FK 관계이므로 tokens 를 먼저 삭제
     await pool.query(
       `DELETE FROM agent_registration_tokens WHERE environment_id = $1`,
@@ -288,5 +292,99 @@ describeWithPostgres("Agent 등록·인증 + Heartbeat 실 Postgres E2E", () => 
       payload: {},
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  it("Job claim 후 heartbeat가 실제 lease를 갱신하고 취소를 반환한다", async () => {
+    const { token } = await issueToken();
+    const registration = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/register",
+      payload: { registrationToken: token },
+    });
+    const { longLivedKey, agentId } = registration.json<{
+      longLivedKey: string;
+      agentId: string;
+    }>();
+    const deployment = await pool.query<{ id: string }>(
+      `INSERT INTO deployments(project_id, status, target_environment_id)
+       VALUES ($1, 'deploying', $2)
+       RETURNING id`,
+      [projectId, environmentId],
+    );
+    const deploymentId = Number(deployment.rows[0]!.id);
+    await pool.query(
+      `INSERT INTO onprem_agent_jobs(
+         job_id, deployment_id, environment_id, status, payload
+       ) VALUES ($1, $2, $3, 'pending', $4::jsonb)`,
+      [
+        String(deploymentId),
+        deploymentId,
+        environmentId,
+        JSON.stringify({
+          jobId: String(deploymentId),
+          attempt: 1,
+          deploymentId,
+          environmentId: String(environmentId),
+          plan: { target: "onprem" },
+          image: { digest: `sha256:${"a".repeat(64)}` },
+        }),
+      ],
+    );
+
+    const claimed = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/jobs/claim",
+      headers: { authorization: `Bearer ${longLivedKey}` },
+    });
+    expect(claimed.statusCode).toBe(200);
+    expect(claimed.json<{ job: { jobId: string } }>().job.jobId).toBe(
+      String(deploymentId),
+    );
+
+    const beforeHeartbeat = await pool.query<{
+      status: string;
+      lease_owner_id: string;
+      lease_expires_at: Date;
+    }>(
+      `SELECT status, lease_owner_id, lease_expires_at
+       FROM onprem_agent_jobs WHERE job_id = $1`,
+      [String(deploymentId)],
+    );
+    expect(beforeHeartbeat.rows[0]!.status).toBe("claimed");
+    expect(String(beforeHeartbeat.rows[0]!.lease_owner_id)).toBe(agentId);
+
+    const heartbeat = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/heartbeat",
+      headers: { authorization: `Bearer ${longLivedKey}` },
+      payload: { currentJobId: String(deploymentId) },
+    });
+    expect(heartbeat.statusCode).toBe(200);
+    expect(heartbeat.json()).toEqual({ ok: true });
+
+    const afterHeartbeat = await pool.query<{
+      status: string;
+      lease_expires_at: Date;
+    }>(
+      `SELECT status, lease_expires_at
+       FROM onprem_agent_jobs WHERE job_id = $1`,
+      [String(deploymentId)],
+    );
+    expect(afterHeartbeat.rows[0]!.status).toBe("running");
+    expect(afterHeartbeat.rows[0]!.lease_expires_at.getTime()).toBeGreaterThanOrEqual(
+      beforeHeartbeat.rows[0]!.lease_expires_at.getTime(),
+    );
+
+    await pool.query(`UPDATE deployments SET status = 'cancelled' WHERE id = $1`, [
+      deploymentId,
+    ]);
+    const cancelled = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/heartbeat",
+      headers: { authorization: `Bearer ${longLivedKey}` },
+      payload: { currentJobId: String(deploymentId) },
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json()).toEqual({ ok: true, deploymentCancelled: true });
   });
 });

@@ -4,7 +4,6 @@ import type {
 } from "./contracts.js";
 
 type AgentServiceOptions = {
-  cancellationPollIntervalMs?: number;
   pollIntervalMs?: number;
   heartbeatIntervalMs?: number;
 };
@@ -28,7 +27,6 @@ function wait(milliseconds: number, signal?: AbortSignal): Promise<void> {
 }
 
 export class AgentService {
-  private readonly cancellationPollIntervalMs: number;
   private readonly pollIntervalMs: number;
   private readonly heartbeatIntervalMs: number;
   private readonly activeControllers = new Map<string, AbortController>();
@@ -39,8 +37,6 @@ export class AgentService {
     private readonly executor: OnpremJobExecutor,
     options: AgentServiceOptions = {},
   ) {
-    this.cancellationPollIntervalMs =
-      options.cancellationPollIntervalMs ?? 1_000;
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
   }
@@ -55,24 +51,25 @@ export class AgentService {
 
     const controller = new AbortController();
     this.activeControllers.set(job.jobId, controller);
-    let cancellationCheckRunning = false;
-    const checkCancellation = async (): Promise<void> => {
-      if (cancellationCheckRunning || controller.signal.aborted) return;
-      cancellationCheckRunning = true;
+    let heartbeatRunning = false;
+    const heartbeat = async (): Promise<void> => {
+      if (heartbeatRunning || controller.signal.aborted) return;
+      heartbeatRunning = true;
       try {
-        if (await this.client.isJobCancelled(job.jobId)) controller.abort();
+        const result = await this.client.sendHeartbeat(job.jobId);
+        if (result.jobCancelled) controller.abort();
       } finally {
-        cancellationCheckRunning = false;
+        heartbeatRunning = false;
       }
     };
     const timer = setInterval(
-      () => void checkCancellation().catch(() => undefined),
-      this.cancellationPollIntervalMs,
+      () => void heartbeat().catch(() => controller.abort()),
+      this.heartbeatIntervalMs,
     );
 
     const execution = (async () => {
       try {
-        await checkCancellation();
+        await heartbeat();
         const result = await this.executor.execute(job, {
           signal: controller.signal,
         });

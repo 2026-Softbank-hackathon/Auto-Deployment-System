@@ -65,11 +65,12 @@ const authPlugin: FastifyPluginAsync<{
       return;
     }
 
-    // Job claim은 Agent 전용 키로 인증한다. 라우트가 bearer key를 검증한다.
+    // Agent Job API는 라우트에서 장기 Agent Key와 Job 소유권을 함께 검증한다.
     if (
       opts.agentJobClaimEnabled &&
       request.method === "POST" &&
-      path === "/api/v1/agents/jobs/claim"
+      (path === "/api/v1/agents/jobs/claim" ||
+        /^\/api\/v1\/agents\/jobs\/[^/]+\/(?:tunnel|result)$/.test(path))
     ) {
       return;
     }

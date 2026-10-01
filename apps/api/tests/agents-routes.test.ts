@@ -214,13 +214,13 @@ describe("POST /api/v1/agents/heartbeat", () => {
     expect(body.deploymentCancelled).toBeUndefined();
   });
 
-  it("currentJobId 포함 + cancelled deployment → deploymentCancelled: true", async () => {
+  it("currentJobId heartbeat가 lease를 갱신하고 취소 신호를 반환한다", async () => {
     pool.on(/FROM agents WHERE long_lived_key_hash/, () => ({
       rows: [{ id: 3, environment_id: 7 }],
     }));
     pool.on(/UPDATE agents/, () => ({ rows: [] }));
-    pool.on(/FROM deployments/, () => ({
-      rows: [{ status: "cancelled" }],
+    pool.on(/WITH current_job AS/, () => ({
+      rows: [{ lease_renewed: false, job_cancelled: true }],
     }));
 
     const res = await server.inject({

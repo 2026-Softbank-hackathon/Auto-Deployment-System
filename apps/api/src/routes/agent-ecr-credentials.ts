@@ -25,7 +25,7 @@ const agentEcrCredentialRoutes: FastifyPluginAsync<AgentEcrCredentialRouteOption
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const token = bearerToken(request.headers["authorization"]);
       const agent = token ? await options.authenticate(token) : null;
       if (!agent) {
@@ -34,7 +34,14 @@ const agentEcrCredentialRoutes: FastifyPluginAsync<AgentEcrCredentialRouteOption
       if (!/^\d+$/.test(request.params.jobId)) {
         throw new ApiError(400, "VALIDATION_ERROR", "Job ID 형식이 올바르지 않습니다.");
       }
-      return options.service.issue({ agent, jobId: request.params.jobId });
+      const credential = await options.service.issue({
+        agent,
+        jobId: request.params.jobId,
+      });
+      return reply
+        .header("cache-control", "no-store")
+        .header("pragma", "no-cache")
+        .send(credential);
     },
   );
 };

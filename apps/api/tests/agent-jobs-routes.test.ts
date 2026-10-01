@@ -7,9 +7,17 @@ import agentJobsRoutes from "../src/routes/agent-jobs.js";
 let server: FastifyInstance;
 let claimNext: ReturnType<typeof vi.fn>;
 let authenticate: ReturnType<typeof vi.fn>;
+let prepareTunnel: ReturnType<typeof vi.fn>;
+let reportResult: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
   claimNext = vi.fn(async () => null);
+  prepareTunnel = vi.fn(async () => ({
+    tunnelId: "tunnel-73",
+    token: "tunnel-token",
+    hostname: "verify-d73.camellia-deploy.app",
+  }));
+  reportResult = vi.fn(async () => undefined);
   authenticate = vi.fn(async (token: string) => token === "valid-agent-key"
     ? { agentId: 7, environmentId: 12 }
     : null);
@@ -27,12 +35,91 @@ beforeEach(async () => {
   });
   server.register(agentJobsRoutes, {
     prefix: "/api/v1/agents",
-    agentJobService: { claimNext },
+    agentJobService: {
+      claimNext,
+      prepareTunnel,
+      reportResult,
+    },
     authenticate,
     pollTimeoutMs: 10,
     pollIntervalMs: 1,
   });
   await server.ready();
+});
+
+describe("Agent Job 실행 API", () => {
+  it("동적 localPort만 서버 Tunnel 준비 경계에 전달한다", async () => {
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/jobs/73/tunnel",
+      headers: { authorization: "Bearer valid-agent-key" },
+      payload: { deploymentId: 73, environmentId: "12", localPort: 49_152 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      tunnelId: "tunnel-73",
+      token: "tunnel-token",
+      hostname: "verify-d73.camellia-deploy.app",
+    });
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(prepareTunnel).toHaveBeenCalledWith(7, 12, "73", {
+      deploymentId: 73,
+      environmentId: "12",
+      localPort: 49_152,
+    });
+  });
+
+  it("Agent 결과를 인증된 Job 소유권과 함께 제출한다", async () => {
+    const result = {
+      deploymentId: 73,
+      environmentId: "12",
+      jobId: "73",
+      status: "ready_for_verify",
+      imageUri: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/1@sha256:${"a".repeat(64)}`,
+      runningDigest: `sha256:${"a".repeat(64)}`,
+      localUrl: "http://127.0.0.1:49152",
+      endpoint: "https://verify-d73.camellia-deploy.app",
+      startedAt: "2026-10-01T00:00:00.000Z",
+      finishedAt: "2026-10-01T00:00:01.000Z",
+    };
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/jobs/73/result",
+      headers: { authorization: "Bearer valid-agent-key" },
+      payload: result,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(reportResult).toHaveBeenCalledWith(7, 12, "73", result);
+  });
+
+  it("다른 Agent Key와 잘못된 localPort·result 계약을 거부한다", async () => {
+    const unauthorized = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/jobs/73/tunnel",
+      headers: { authorization: "Bearer wrong-key" },
+      payload: { deploymentId: 73, environmentId: "12", localPort: 49_152 },
+    });
+    const invalidTunnel = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/jobs/73/tunnel",
+      headers: { authorization: "Bearer valid-agent-key" },
+      payload: { deploymentId: 73, environmentId: "12", localPort: 70_000 },
+    });
+    const invalidResult = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/jobs/73/result",
+      headers: { authorization: "Bearer valid-agent-key" },
+      payload: { status: "ready_for_verify" },
+    });
+
+    expect(unauthorized.statusCode).toBe(401);
+    expect(invalidTunnel.statusCode).toBe(400);
+    expect(invalidResult.statusCode).toBe(400);
+    expect(prepareTunnel).not.toHaveBeenCalled();
+    expect(reportResult).not.toHaveBeenCalled();
+  });
 });
 
 afterEach(async () => {

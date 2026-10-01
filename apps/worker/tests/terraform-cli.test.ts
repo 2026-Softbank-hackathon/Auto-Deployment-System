@@ -98,7 +98,7 @@ describe("TerraformCli", () => {
       "-backend-config=kms_key_id=arn:aws:kms:ap-northeast-2:123456789012:key/example",
     );
     expect(commands[2]?.args.at(-1)).toBeDefined();
-    expect(commands[3]?.args.at(-1)).toMatch(/\/tfplan$/);
+    expect(commands[3]?.args.at(-1)).toMatch(/[\\/]tfplan$/);
     expect(commands[0]?.env["AWS_ACCESS_KEY_ID"]).toBe("user-access-key");
     expect(commands[0]?.env["AWS_SECRET_ACCESS_KEY"]).toBe("user-secret-key");
     expect(commands[0]?.env["AWS_SESSION_TOKEN"]).toBeUndefined();

@@ -482,3 +482,9 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .picker-list__item strong { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .picker-list__item span { grid-column: 1; font-size: 13px; color: var(--ink-soft); }
 .picker-list__item .picker-list__current { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 700; color: var(--koro-text); }
+
+/* 재배포 (#138) */
+.redeploy { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.redeploy__error { font-size: 13px; color: var(--brick-text); max-width: 320px; }
+.deployment-row__action { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.redeploy.is-compact { align-items: flex-end; }

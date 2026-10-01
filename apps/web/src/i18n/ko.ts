@@ -120,6 +120,11 @@ export const ko = {
     tabsLabel: '프로젝트 메뉴',
     tabs: { deployments: '배포 내역', env: '환경변수', settings: '설정' },
   },
+  redeploy: {
+    button: '재배포',
+    starting: '재배포를 시작하고 있어요…',
+    failed: '재배포를 시작하지 못했어요.',
+  },
   notify: {
     title: { success: '배포가 완료됐어요', failed: '배포에 실패했어요', stopped: '배포가 중단됐어요' },
     view: '확인하기',

@@ -122,6 +122,11 @@ export const ja: Messages = {
     tabsLabel: 'プロジェクトメニュー',
     tabs: { deployments: 'デプロイ履歴', env: '環境変数', settings: '設定' },
   },
+  redeploy: {
+    button: '再デプロイ',
+    starting: '再デプロイを開始しています…',
+    failed: '再デプロイを開始できませんでした。',
+  },
   notify: {
     title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },
     view: '確認する',

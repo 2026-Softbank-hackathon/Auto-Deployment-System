@@ -12,6 +12,7 @@ import { deploymentStatusView, railStages, type DeploymentStatusView } from '../
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
 import { failureKind, fixableByAwsKey } from './failure-reason';
+import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { HealthProgress } from './HealthProgress';
 
@@ -77,9 +78,9 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
   </ol>;
 }
 
-interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void }
+interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
 
-export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment, onFixSettings }: DeploymentProgressProps) {
+export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment, onFixSettings, onRedeployed }: DeploymentProgressProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -255,6 +256,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
         <FailureDiagnosis deploymentId={deploymentId} />
         <div className="run-failure__actions">
           {fixableByAwsKey(failure) && onFixSettings && <Keycap onClick={() => onFixSettings(projectId)}>{t.run.fixAwsKey}</Keycap>}
+          {onRedeployed && <RedeployButton deploymentId={deploymentId} onStarted={onRedeployed} />}
           {onNewDeployment && <Keycap variant="secondary" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
         </div>
       </div>}

@@ -170,6 +170,20 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
   return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: body.summary, patchCandidates };
 }
 
+/**
+ * 재배포 (#138) — 끝난 배포의 소스 · IR · 대상 환경을 그대로 써서 새 배포를 만든다. 분석과 대상 승인을 건너뛰고 빌드부터 시작한다.
+ * 소스 배포가 진행 중이거나 환경이 사용 중이면 409, 분석 결과가 없으면 400.
+ */
+export async function redeployDeployment(deploymentId: string): Promise<{ deploymentId: string }> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/redeploy`), {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+  });
+  const body = asRecord(await readJson(response), '재배포');
+  const id = typeof body.deploymentId === 'string' || typeof body.deploymentId === 'number' ? String(body.deploymentId) : '';
+  if (!id) throw new Error('재배포 응답 형식이 올바르지 않습니다.');
+  return { deploymentId: id };
+}
+
 export type ApprovalGate = 'target' | 'plan';
 
 /**

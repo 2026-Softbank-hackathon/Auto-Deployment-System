@@ -15,7 +15,7 @@ describe("LaunchAgent plist", () => {
     expect(plist).toContain("<key>KeepAlive</key>\n  <true/>");
     expect(plist).toContain("<key>EnvironmentVariables</key>");
     expect(plist).toContain(
-      "<string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>",
+      "<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>",
     );
     expect(plist).toContain(
       "<string>/Users/demo/Camellia Agent/bin/camellia-onprem-agent</string>",

@@ -6,9 +6,28 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 1
 fi
 
-if [ "$(uname -m)" != "x86_64" ]; then
-  echo "P0 On-Prem Agent는 Intel Mac(x86_64)만 지원합니다." >&2
-  exit 1
+case "$(uname -m)" in
+  x86_64)
+    DETECTED_ARCH=x64
+    ;;
+  arm64)
+    DETECTED_ARCH=arm64
+    ;;
+  *)
+    echo "지원하지 않는 macOS 아키텍처입니다: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SOURCE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+
+if [ -f "$SOURCE_ROOT/ARCHITECTURE" ]; then
+  EXPECTED_ARCH=$(cat "$SOURCE_ROOT/ARCHITECTURE")
+  if [ "$EXPECTED_ARCH" != "$DETECTED_ARCH" ]; then
+    echo "Release 아키텍처($EXPECTED_ARCH)와 현재 Mac($DETECTED_ARCH)이 일치하지 않습니다." >&2
+    exit 1
+  fi
 fi
 
 command -v node >/dev/null 2>&1 || {
@@ -36,8 +55,6 @@ docker compose version >/dev/null 2>&1 || {
   exit 1
 }
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SOURCE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 INSTALL_ROOT="$HOME/Library/Application Support/Camellia/onprem-agent"
 LOG_ROOT=${CAMELLIA_AGENT_LOG_ROOT:-"$HOME/Library/Logs/Camellia"}
 BIN_DIR="$INSTALL_ROOT/bin"

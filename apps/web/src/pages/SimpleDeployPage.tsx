@@ -24,7 +24,7 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   const [target, setTarget] = useState<DeployTarget>(defaultTarget);
   const [error, setError] = useState<unknown>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const { state: projectState, refresh: refreshProject } = useDeployProject();
+  const { state: projectState, refresh: refreshProject, selectProject } = useDeployProject();
   const status = setupStatus(projectState);
   // 화면에 들어올 때 연결 상태를 다시 읽는다 (다른 탭이나 연결 설정 화면에서 바뀌었을 수 있다).
   useEffect(() => { void refreshProject(); }, [refreshProject]);
@@ -74,7 +74,8 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
       <ZipUploader file={file} onChange={(next) => { setFile(next); setError(null); }} disabled={isStarting} />
       {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.startError}</strong><br />{startErrorCopy}</div>}
       <TargetToggle value={target} onChange={setTarget} disabled={isStarting} />
-      <SetupSummary target={target} state={projectState} onRetry={() => void refreshProject()} onNavigate={onNavigate} />
+      <SetupSummary target={target} state={projectState} onRetry={() => void refreshProject()} onNavigate={onNavigate}
+        onSelectProject={(projectId) => { setError(null); void selectProject(projectId); }} disabled={isStarting} />
       <div className="deploy-card__footer">
         <p className={`deploy-card__hint ${canDeploy ? 'is-ready' : ''}`} aria-live="polite">{hint}</p>
         {mustSetUp

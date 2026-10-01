@@ -6,6 +6,7 @@ import { Keycap } from '../components/ui/Keycap';
 import { StatusTape } from '../components/ui/StatusTape';
 import type { MarbleTone } from '../components/ui/Marble';
 import { displayProjectName } from '../features/dashboard/format';
+import { AppPicker } from '../features/deployment-start/AppPicker';
 import { AwsKeyForm } from '../features/deployment-start/AwsKeyForm';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { OnpremCard } from '../features/setup/OnpremCard';
@@ -24,7 +25,7 @@ function Card({ id, title, tone, status, children }: { id?: string; title: strin
   </section>;
 }
 
-function AppNameForm({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
+function AppNameForm({ onCreate, onCancel }: { onCreate: (name: string) => Promise<void>; onCancel?: () => void }) {
   const { t } = useI18n();
   const nameId = useId();
   const [name, setName] = useState('');
@@ -47,6 +48,7 @@ function AppNameForm({ onCreate }: { onCreate: (name: string) => Promise<void> }
         <input id={nameId} value={name} onChange={(event) => setName(event.target.value)} maxLength={NAME_MAX} required autoComplete="off" spellCheck={false} disabled={saving} />
       </div>
       <Keycap type="submit" variant="secondary" disabled={saving || !name.trim()}>{saving ? t.deploy.aws.saving : t.setup.app.save}</Keycap>
+      {onCancel && <Keycap variant="ghost" disabled={saving} onClick={onCancel}>{t.deploy.aws.cancel}</Keycap>}
     </form>
     {error !== null && <div className="notice error" role="alert">
       {error instanceof DeploymentApiError && error.status === 409 ? t.setup.app.nameTaken : errorMessage(error, t, t.setup.app.nameError)}
@@ -60,8 +62,9 @@ function AppNameForm({ onCreate }: { onCreate: (name: string) => Promise<void> }
  */
 export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
-  const { state, refresh, createDeployProject, registerAws, registerOnprem } = useDeployProject();
+  const { state, refresh, createDeployProject, selectProject, registerAws, registerOnprem } = useDeployProject();
   const [changingKey, setChangingKey] = useState(false);
+  const [addingApp, setAddingApp] = useState(false);
   const status = setupStatus(state);
   // 화면에 들어올 때 연결 상태를 다시 읽는다.
   useEffect(() => { void refresh(); }, [refresh]);
@@ -76,7 +79,7 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </>;
   }
 
-  const { project, aws, onprem, keysMissing, awsReady } = status;
+  const { projects, project, aws, onprem, keysMissing, awsReady } = status;
   const awsTone: MarbleTone = awsReady ? 'success' : keysMissing ? 'failed' : 'waiting';
   const awsStatus = awsReady ? t.setup.status.done : keysMissing ? t.setup.status.fix : t.setup.status.needed;
   const showKeyForm = project !== null && (!aws || keysMissing || changingKey);
@@ -88,9 +91,18 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </div>
 
     <Card title={t.setup.app.title} tone={project ? 'success' : 'waiting'} status={project ? t.setup.status.done : t.setup.status.needed}>
-      {project
-        ? <><p className="setup-card__value">{displayProjectName(project.name)}</p><p>{t.setup.app.doneCopy}</p></>
-        : <><p>{t.setup.app.copy}</p><AppNameForm onCreate={createDeployProject} /></>}
+      {projects.length > 1 || (projects.length === 1 && !project)
+        ? <AppPicker projects={projects} value={project?.id ?? null} disabled={addingApp} onChange={(projectId) => { setChangingKey(false); void selectProject(projectId); }} />
+        : project && <p className="setup-card__value">{displayProjectName(project.name)}</p>}
+      {project && !addingApp && <>
+        <p>{t.setup.app.doneCopy}</p>
+        <div><Keycap variant="secondary" onClick={() => setAddingApp(true)}>{t.setup.app.add}</Keycap></div>
+      </>}
+      {(!project || addingApp) && <>
+        <p>{project ? t.setup.app.addCopy : t.setup.app.copy}</p>
+        <AppNameForm onCancel={addingApp ? () => setAddingApp(false) : undefined}
+          onCreate={async (name) => { await createDeployProject(name); setAddingApp(false); setChangingKey(false); }} />
+      </>}
     </Card>
 
     <Card title={t.setup.aws.title} tone={awsTone} status={awsStatus}>
@@ -103,13 +115,13 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
       </>}
       {showKeyForm && <>
         <p>{aws && !keysMissing ? t.setup.aws.changeCopy : t.setup.aws.copy}</p>
-        <AwsKeyForm initialRegion={aws?.region} onCancel={changingKey ? () => setChangingKey(false) : undefined}
+        <AwsKeyForm key={project?.id} initialRegion={aws?.region} onCancel={changingKey ? () => setChangingKey(false) : undefined}
           onSubmit={async (input) => { await registerAws(input); setChangingKey(false); }} />
       </>}
     </Card>
 
     <Card id="onprem" title={t.setup.onprem.title} tone={onprem ? 'success' : 'waiting'} status={onprem ? t.setup.status.registered : t.setup.status.optional}>
-      <OnpremCard hasProject={project !== null} environment={onprem} onRegisterHost={registerOnprem} />
+      <OnpremCard key={project?.id} hasProject={project !== null} environment={onprem} onRegisterHost={registerOnprem} />
     </Card>
   </>;
 }

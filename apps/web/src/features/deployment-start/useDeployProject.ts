@@ -15,30 +15,30 @@ export interface DeployProject { id: string; name: string }
 type State =
   | { phase: 'loading' }
   | { phase: 'error'; error: unknown }
-  | { phase: 'ready'; project: DeployProject | null; environments: EnvironmentSummary[]; /** 저장된 시크릿 이름. 목록을 읽지 못했으면 null (모르는 상태로 두고 막지 않는다) */ secretNames: string[] | null };
+  | { phase: 'ready'; /** 고를 수 있는 앱 전체 (최근 것부터) */ projects: DeployProject[]; project: DeployProject | null; environments: EnvironmentSummary[]; /** 저장된 시크릿 이름. 목록을 읽지 못했으면 null (모르는 상태로 두고 막지 않는다) */ secretNames: string[] | null };
 
 function readStoredId(): string | null { try { return window.localStorage.getItem(STORAGE_KEY); } catch { return null; } }
 function storeId(id: string): void { try { window.localStorage.setItem(STORAGE_KEY, id); } catch { /* 저장하지 못해도 이번 화면에서는 동작한다 */ } }
 
-type Found = { project: DeployProject | null; environments: EnvironmentSummary[]; secretNames: string[] | null };
+type Found = { projects: DeployProject[]; project: DeployProject | null; environments: EnvironmentSummary[]; secretNames: string[] | null };
 
-async function withSecrets(project: DeployProject, environments: EnvironmentSummary[]): Promise<Found> {
-  return { project, environments, secretNames: await listSecretNames(project.id).catch(() => null) };
+async function withSecrets(projects: DeployProject[], project: DeployProject, environments: EnvironmentSummary[]): Promise<Found> {
+  return { projects, project, environments, secretNames: await listSecretNames(project.id).catch(() => null) };
 }
 
 async function findProject(): Promise<Found> {
+  const projects: DeployProject[] = (await listProjects({ limit: 100 })).items.sort((a, b) => Number(b.id) - Number(a.id)).map(({ id, name }) => ({ id, name }));
   const storedId = readStoredId();
   if (storedId) {
-    const project = await getProject(storedId).catch(() => null);
-    if (project) return withSecrets(project, await listEnvironments(project.id));
+    const project = projects.find((candidate) => candidate.id === storedId) ?? await getProject(storedId).catch(() => null);
+    if (project) return withSecrets(projects.some((candidate) => candidate.id === project.id) ? projects : [project, ...projects], project, await listEnvironments(project.id));
   }
   // 다른 브라우저에서 등록해 둔 프로젝트가 있으면 이어서 쓴다.
-  const recent = (await listProjects({ limit: 100 })).items.sort((a, b) => Number(b.id) - Number(a.id)).slice(0, RECENT_PROJECTS_TO_CHECK);
-  for (const project of recent) {
+  for (const project of projects.slice(0, RECENT_PROJECTS_TO_CHECK)) {
     const environments = await listEnvironments(project.id).catch(() => []);
-    if (environments.some((environment) => environment.isDefault)) { storeId(project.id); return withSecrets(project, environments); }
+    if (environments.some((environment) => environment.isDefault)) { storeId(project.id); return withSecrets(projects, project, environments); }
   }
-  return { project: null, environments: [], secretNames: null };
+  return { projects, project: null, environments: [], secretNames: null };
 }
 
 /** 고른 대상에 배포하려면 무엇이 더 필요한지. 온프레미스는 이미지를 사용자 AWS 계정의 ECR에 두므로 AWS 환경도 필요하다. */
@@ -66,12 +66,18 @@ function useDeployProjectState() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  /** 처음 설정 1단계 — 앱 이름으로 프로젝트를 만든다. 같은 이름이 있으면 서버가 409를 돌려준다. */
+  /** 앱 이름으로 프로젝트를 만들고 그 앱으로 바꾼다. 같은 이름이 있으면 서버가 409를 돌려준다. */
   const createDeployProject = useCallback(async (name: string) => {
     const project = await createProject(name);
     storeId(project.id);
-    setState({ phase: 'ready', project, environments: [], secretNames: [] });
+    setState((current) => ({ phase: 'ready', projects: [project, ...(current.phase === 'ready' ? current.projects : [])], project, environments: [], secretNames: [] }));
   }, []);
+
+  /** 배포할 앱을 바꾼다. 연결 상태(AWS 키 · 환경)도 그 앱의 것으로 다시 읽는다. */
+  const selectProject = useCallback(async (projectId: string) => {
+    storeId(projectId);
+    await refresh();
+  }, [refresh]);
 
   /** AWS 키를 등록하거나 바꾼다. 프로젝트가 먼저 있어야 한다. */
   const registerAws = useCallback(async (input: { accessKeyId: string; secretAccessKey: string; region: string }) => {
@@ -94,7 +100,7 @@ function useDeployProjectState() {
     }
   }, [state, refresh]);
 
-  return { state, refresh, createDeployProject, registerAws, registerOnprem };
+  return { state, refresh, createDeployProject, selectProject, registerAws, registerOnprem };
 }
 
 type DeployProjectValue = ReturnType<typeof useDeployProjectState>;
@@ -117,5 +123,5 @@ export function setupStatus(state: DeployProjectValue['state']) {
   const defaultOf = (type: EnvironmentSummary['type']) => state.environments.find((environment) => environment.type === type && environment.isDefault) ?? null;
   const aws = defaultOf('aws');
   const keysMissing = awsKeysMissing(state.environments, state.secretNames);
-  return { ready: true as const, project: state.project, aws, onprem: defaultOf('onprem'), keysMissing, awsReady: aws !== null && !keysMissing };
+  return { ready: true as const, projects: state.projects, project: state.project, aws, onprem: defaultOf('onprem'), keysMissing, awsReady: aws !== null && !keysMissing };
 }

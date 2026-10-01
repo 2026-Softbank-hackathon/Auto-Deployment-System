@@ -10,6 +10,7 @@ import type { Storage } from "@camellia/storage";
 import type {
   ApprovalGate,
   AwsConfig,
+  CancelDeploymentResponse,
   CreateDeploymentResponse,
   Deployment,
   DeploymentStatus,
@@ -199,6 +200,93 @@ export class DeploymentService {
     const approval = approvalRes.rows[0] ?? null;
 
     return deploymentToDto(row, step, approval, this.platformDomain);
+  }
+
+  /**
+   * POST /deployments/:id/cancel
+   * - deployments.status → cancelled (state-machine 전 상태에서 유효 전이)
+   * - onprem_agent_jobs 중 pending/claimed/running → cancelled (Agent 다음 polling 때 skip)
+   * - env_locks DELETE (같은 환경 재배포 unblock)
+   * - pg_notify 로 SSE state_changed 자동 발행 (pg-listener plugin 이 relay)
+   */
+  async cancel(id: number, reason?: string): Promise<CancelDeploymentResponse> {
+    const TERMINAL = new Set(["succeeded", "failed", "cancelled", "rejected"]);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const depRes = await client.query<{ status: string }>(
+        "SELECT status FROM deployments WHERE id = $1 FOR UPDATE",
+        [id],
+      );
+      const dep = depRes.rows[0];
+      if (!dep) {
+        throw new ApiError(
+          404,
+          "NOT_FOUND",
+          `배포 ID ${id}를 찾을 수 없습니다.`,
+        );
+      }
+      if (TERMINAL.has(dep.status)) {
+        throw new ApiError(
+          409,
+          "CONFLICT",
+          `이미 종료된 배포입니다 (status: ${dep.status})`,
+          "진행 중인 배포만 취소할 수 있습니다.",
+        );
+      }
+
+      const now = new Date();
+      await client.query(
+        `UPDATE deployments
+         SET status = 'cancelled',
+             updated_at = NOW(),
+             failed_at = COALESCE(failed_at, $1),
+             error = COALESCE($2, error)
+         WHERE id = $3`,
+        [now, reason ?? "user_cancelled", id],
+      );
+
+      // 온프레미스 Agent job 신호 — pending/claimed/running 전부 cancelled.
+      // Agent 가 다음 claim polling 때 skip 하고, 이미 claim 한 경우 다음 상태 보고 때 플랫폼이 거절.
+      await client.query(
+        `UPDATE onprem_agent_jobs
+         SET status = 'cancelled', updated_at = NOW()
+         WHERE deployment_id = $1
+           AND status IN ('pending', 'claimed', 'running', 'ready_for_verify')`,
+        [id],
+      );
+
+      await client.query(
+        "DELETE FROM env_locks WHERE deployment_id = $1",
+        [id],
+      );
+
+      // pg_notify — pg-listener plugin 이 SSE 로 relay.
+      await client.query(
+        `SELECT pg_notify('deployment_events', $1::text)`,
+        [
+          JSON.stringify({
+            deployment_id: String(id),
+            event: "state_changed",
+            payload: { status: "cancelled" },
+          }),
+        ],
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        deploymentId: String(id),
+        status: "cancelled" as const,
+        cancelledAt: now.toISOString(),
+      };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async updateStatus(id: number, status: string, extra?: { error?: string; public_url?: string }) {

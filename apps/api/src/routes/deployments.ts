@@ -5,10 +5,15 @@
 
 import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
-import { TARGET_VENDORS, type TargetVendor, RedeployBodySchema } from "@camellia/contracts";
+import {
+  TARGET_VENDORS,
+  type TargetVendor,
+  CancelDeploymentBodySchema,
+  RedeployBodySchema,
+} from "@camellia/contracts";
 import { DeploymentService } from "../services/deployment-service.js";
 import { resolveProfile } from "../services/profile-resolver.js";
-import { idParams } from "../plugins/swagger.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const VALID_VENDORS = new Set<string>(TARGET_VENDORS);
 
@@ -133,6 +138,29 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
 
     const result = await svc.redeploy(id, { targetEnvironmentId });
     return reply.status(202).send(result);
+  });
+
+  // POST /deployments/:id/cancel — 진행 중 배포 취소
+  fastify.post<{ Params: { id: string } }>("/:id/cancel", {
+    schema: {
+      tags: ["deployments"],
+      summary: "진행 중 배포 취소 (cancelled 전이 + env_lock 해제, 200)",
+      params: idParams,
+      body: toJsonSchema(CancelDeploymentBodySchema),
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");
+    }
+
+    const parsed = CancelDeploymentBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new ApiError(400, "VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "잘못된 요청");
+    }
+
+    const result = await svc.cancel(id, parsed.data.reason);
+    return reply.status(200).send(result);
   });
 };
 

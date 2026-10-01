@@ -264,6 +264,30 @@ export const RedeployResponseSchema = z
   .strict();
 export type RedeployResponse = z.infer<typeof RedeployResponseSchema>;
 
+// ── POST /deployments/:id/cancel ─────────────────────────────────────────────
+
+/**
+ * 진행 중 배포를 즉시 취소한다.
+ *   - deployments.status → cancelled (state-machine 상 전 상태에서 유효)
+ *   - onprem_agent_jobs.status → cancelled (Agent 가 다음 polling 때 skip)
+ *   - env_locks DELETE (같은 환경 재배포 unblock)
+ * 이미 terminal (succeeded/failed/cancelled/rejected) 이면 409.
+ */
+export const CancelDeploymentBodySchema = z.object({
+  /** 취소 사유 (선택). deployments.error 에 저장. */
+  reason: z.string().max(500).optional(),
+});
+export type CancelDeploymentBody = z.input<typeof CancelDeploymentBodySchema>;
+
+export const CancelDeploymentResponseSchema = z
+  .object({
+    deploymentId: IdStringSchema,
+    status: z.literal("cancelled"),
+    cancelledAt: IsoDateTimeSchema,
+  })
+  .strict();
+export type CancelDeploymentResponse = z.infer<typeof CancelDeploymentResponseSchema>;
+
 // ── GET /deployments/:id/ai-usage ─────────────────────────────────────────────
 
 export const AiUsageBreakdownSchema = z

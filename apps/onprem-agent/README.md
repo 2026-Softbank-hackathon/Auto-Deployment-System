@@ -68,7 +68,7 @@ cloudflared --version
 
 ```bash
 curl -fsSL \
-  https://github.com/2026-Softbank-hackerton/Auto-Deployment-System/releases/download/onprem-agent-v0.1.0/install-agent.sh \
+  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.0/install-agent.sh \
   | sh -s -- v0.1.0
 ```
 

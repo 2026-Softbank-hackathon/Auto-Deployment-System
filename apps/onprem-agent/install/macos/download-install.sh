@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPOSITORY="2026-Softbank-hackerton/Auto-Deployment-System"
+REPOSITORY="2026-Softbank-hackathon/Auto-Deployment-System"
 VERSION=${1:-}
 
 if ! printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then

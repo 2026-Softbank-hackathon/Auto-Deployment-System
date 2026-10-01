@@ -40,5 +40,9 @@ export function runLanguageTransition(update: () => void): void {
     update();
     return;
   }
-  document.startViewTransition(update);
+  // 화면이 가려져 있거나 전환이 겹치면 브라우저가 전환을 취소한다. update는 이미 실행됐으므로 취소는 무시한다.
+  const transition = document.startViewTransition(update);
+  transition.updateCallbackDone.catch(() => {});
+  transition.ready.catch(() => {});
+  transition.finished.catch(() => {});
 }

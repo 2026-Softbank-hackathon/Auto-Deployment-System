@@ -134,19 +134,20 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
   // 이미 끝난 배포를 열었을 때는 넘어가지 않는다 (결과 화면의 "진행 화면" 버튼으로 돌아올 수 있어야 한다).
   const { play } = useSound();
   const onSucceededRef = useRef(onSucceeded);
-  useEffect(() => { onSucceededRef.current = onSucceeded; }, [onSucceeded]);
+  const playRef = useRef(play);
+  useEffect(() => { onSucceededRef.current = onSucceeded; playRef.current = play; }, [onSucceeded, play]);
   const previousStatus = useRef<string | null>(null);
   useEffect(() => {
     const previous = previousStatus.current;
     previousStatus.current = currentStatus;
     const transitioned = Boolean(previous) && previous !== currentStatus && previous !== 'succeeded' && previous !== 'failed';
-    if (transitioned && currentStatus === 'failed') play('failure');
+    if (transitioned && currentStatus === 'failed') playRef.current('failure');
     if (currentStatus !== 'succeeded' || !transitioned) return;
-    play('success');
+    playRef.current('success');
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     const timer = window.setTimeout(() => onSucceededRef.current?.(), reduced ? 0 : SUCCESS_LANDING_MS);
     return () => window.clearTimeout(timer);
-  }, [currentStatus, play]);
+  }, [currentStatus]);
 
   const now = useNow(view.outcome === 'active');
   const createdAt = text(status?.createdAt);
@@ -173,6 +174,15 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
   }
 
   if (loading) return <section className="panel"><h2>{t.progress.heading}</h2><p>{t.progress.checking}</p></section>;
+  // 상태를 한 번도 받지 못했으면(없는 배포 · 서버 오류) 진행 중인 것처럼 그리지 않는다.
+  if (!status) return <section className="panel">
+    <h2>{t.progress.heading}</h2>
+    {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
+    <div className="page-actions">
+      <Keycap variant="secondary" onClick={() => void refresh()}>{t.progress.refresh}</Keycap>
+      {onNewDeployment && <Keycap variant="ghost" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
+    </div>
+  </section>;
 
   return <>
     <section className={`run-stage is-${view.outcome}`} aria-labelledby="run-title">

@@ -24,6 +24,7 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
   const [report, setReport] = useState<DeploymentAnalysisReportResponse | null>(null);
   const [ir, setIr] = useState<DeploymentIrResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -33,6 +34,7 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
         getDeploymentIr(deploymentId),
       ]);
       if (!active) return;
+      setLoaded(true);
       if (reportResult.status === 'fulfilled') setReport(reportResult.value);
       if (irResult.status === 'fulfilled') setIr(irResult.value);
       const failure = [reportResult, irResult].find((result) => result.status === 'rejected');
@@ -50,7 +52,7 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
   const reused = ir?.source === 'analyzer_cache';
   // 이미 끝난 배포인데 분석 결과가 없으면 "진행 중"이 아니라 "결과 없음"이다.
   const finished = deploymentStatus !== null && finishedStatuses.includes(deploymentStatus);
-  const missing = finished && !report;
+  const missing = finished && loaded && !report;
   return <section className="panel analysis-panel">
     <div className="panel-title"><div><h2>{t.analysis.title}</h2><p>{t.analysis.description}</p></div><span className="chip">{report ? t.analysis.done : missing ? t.analysis.none : t.analysis.running}</span></div>
     {error !== null && <div className="notice error"><strong>{t.analysis.error}</strong><br />{errorMessage(error, t, t.errors.analysisFailed)}</div>}

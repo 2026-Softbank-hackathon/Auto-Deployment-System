@@ -355,7 +355,7 @@ describe("GET /api/v1/deployments/:id publicUrl 계산", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json<{ publicUrl: string }>().publicUrl).toBe(
-      "https://service-1.apps.camellia.app",
+      "https://service-1.camellia.app",
     );
 
     await domainServer.close();

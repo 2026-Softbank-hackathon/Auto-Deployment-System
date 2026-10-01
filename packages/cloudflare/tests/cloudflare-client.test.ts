@@ -112,7 +112,7 @@ describe("CloudflareClient", () => {
         {
           id: "dns-1",
           type: "CNAME",
-          name: "service-42.apps.example.com",
+          name: "service-42.example.com",
           content: "old-origin.example.net",
           proxied: true,
         },
@@ -120,7 +120,7 @@ describe("CloudflareClient", () => {
       .mockResolvedValueOnce(apiResponse({
         id: "dns-1",
         type: "CNAME",
-        name: "service-42.apps.example.com",
+        name: "service-42.example.com",
         content: "new-origin.example.net",
         proxied: true,
       }));
@@ -128,7 +128,7 @@ describe("CloudflareClient", () => {
 
     await expect(client.switchServiceOrigin({
       zoneId: "zone-1",
-      serviceHostname: "service-42.apps.example.com",
+      serviceHostname: "service-42.example.com",
       originHostname: "new-origin.example.net",
     })).resolves.toMatchObject({ content: "new-origin.example.net", proxied: true });
     const updateRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
@@ -146,7 +146,7 @@ describe("CloudflareClient", () => {
       .mockResolvedValueOnce(apiResponse({
         id: "dns-new",
         type: "CNAME",
-        name: "candidate-42.apps.example.com",
+        name: "candidate-42.example.com",
         content: "tunnel.example.net",
         proxied: true,
       }));
@@ -154,14 +154,14 @@ describe("CloudflareClient", () => {
 
     await expect(client.ensureCname({
       zoneId: "zone-1",
-      hostname: "candidate-42.apps.example.com",
+      hostname: "candidate-42.example.com",
       target: "tunnel.example.net",
     })).resolves.toMatchObject({ id: "dns-new", proxied: true });
     const createRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
     expect(createRequest[1].method).toBe("POST");
     expect(JSON.parse(String(createRequest[1].body))).toMatchObject({
       type: "CNAME",
-      name: "candidate-42.apps.example.com",
+      name: "candidate-42.example.com",
       content: "tunnel.example.net",
       ttl: 1,
       proxied: true,
@@ -173,7 +173,7 @@ describe("CloudflareClient", () => {
       {
         id: "dns-existing",
         type: "CNAME",
-        name: "service-42.apps.example.com",
+        name: "service-42.example.com",
         content: "alb.example.net",
         proxied: true,
       },
@@ -182,7 +182,7 @@ describe("CloudflareClient", () => {
 
     await expect(client.ensureCname({
       zoneId: "zone-1",
-      hostname: "service-42.apps.example.com",
+      hostname: "service-42.example.com",
       target: "alb.example.net",
     })).resolves.toMatchObject({ id: "dns-existing", content: "alb.example.net" });
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -194,7 +194,7 @@ describe("CloudflareClient", () => {
         config: {
           originRequest: { connectTimeout: 10 },
           ingress: [
-            { hostname: "service-42.apps.example.com", service: "http://localhost:3000" },
+            { hostname: "service-42.example.com", service: "http://localhost:3000" },
             { service: "http_status:404" },
           ],
         },
@@ -204,7 +204,7 @@ describe("CloudflareClient", () => {
 
     await client.setTunnelOrigin({
       tunnelId: "tunnel-1",
-      hostname: "service-42.apps.example.com",
+      hostname: "service-42.example.com",
       serviceUrl: "http://localhost:49152",
     });
     const updateRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
@@ -212,7 +212,7 @@ describe("CloudflareClient", () => {
       config: {
         originRequest: { connectTimeout: 10 },
         ingress: [
-          { hostname: "service-42.apps.example.com", service: "http://localhost:49152" },
+          { hostname: "service-42.example.com", service: "http://localhost:49152" },
           { service: "http_status:404" },
         ],
       },

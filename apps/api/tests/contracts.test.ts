@@ -277,7 +277,7 @@ describe("deployments 응답 계약", () => {
     const res = await domainServer.inject({ method: "GET", url: "/api/v1/deployments/42" });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().publicUrl).toBe("https://service-1.apps.camellia.app");
+    expect(res.json().publicUrl).toBe("https://service-1.camellia.app");
     expectContract(DeploymentSchema, res.json());
 
     await domainServer.close();

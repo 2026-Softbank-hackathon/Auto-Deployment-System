@@ -1,6 +1,6 @@
 # 플랫폼 콘솔용 Cloudflare Named Tunnel. packages/cloudflare 와 같은 방식
 # (config_src = cloudflare 원격 설정, <tunnel-id>.cfargotunnel.com 으로 proxied CNAME).
-# 사용자 앱 영역(service-*.apps.<도메인>)과는 별개의 Tunnel · 호스트명이다.
+# 사용자 앱 영역(service-*.<도메인>)과는 별개의 Tunnel · 호스트명이다.
 
 locals {
   console_hostname = "${var.console_subdomain}.${var.platform_domain}"

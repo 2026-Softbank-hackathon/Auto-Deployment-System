@@ -77,7 +77,7 @@ function createSessionProvider(): TunnelSessionProvider & {
       return {
         tunnelId: `tunnel-${input.deploymentId}`,
         token: "sensitive-tunnel-token",
-        hostname: `verify-${input.deploymentId}.apps.example.test`,
+        hostname: `verify-${input.deploymentId}.example.test`,
       };
     },
   };
@@ -110,7 +110,7 @@ describe("CloudflaredTunnelProvider", () => {
       }),
     ).resolves.toEqual({
       tunnelId: "tunnel-42",
-      endpoint: "https://verify-42.apps.example.test",
+      endpoint: "https://verify-42.example.test",
     });
 
     expect(sessions.inputs).toEqual([

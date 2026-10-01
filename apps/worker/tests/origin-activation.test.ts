@@ -35,7 +35,7 @@ function cloudflare() {
     ensureNamedTunnel: vi.fn(async () => ({ id: "tunnel-4", name: "camellia-service-4", endpoint: "tunnel-4.cfargotunnel.com" })),
     ensureCname: vi.fn(async () => ({ id: "verify-dns-42" })),
     setTunnelOrigin: vi.fn(async () => undefined),
-    switchServiceOrigin: vi.fn(async () => ({ id: "dns-4", name: "service-4.apps.example.com", content: "origin.example.com", proxied: true })),
+    switchServiceOrigin: vi.fn(async () => ({ id: "dns-4", name: "service-4.example.com", content: "origin.example.com", proxied: true })),
   };
 }
 
@@ -70,7 +70,7 @@ describe("DeploymentOriginActivator", () => {
     }).activate(awsPayload);
 
     expect(cf.switchServiceOrigin).toHaveBeenCalledWith({
-      zoneId: "zone-1", serviceHostname: "service-4.apps.example.com",
+      zoneId: "zone-1", serviceHostname: "service-4.example.com",
       originHostname: "demo.ap-northeast-2.elb.amazonaws.com",
     });
     expect(cf.ensureNamedTunnel).not.toHaveBeenCalled();
@@ -85,10 +85,10 @@ describe("DeploymentOriginActivator", () => {
     }).activate(onpremPayload);
 
     expect(cf.setTunnelOrigin).toHaveBeenCalledWith({
-      tunnelId: "tunnel-4", hostname: "service-4.apps.example.com", serviceUrl: "http://127.0.0.1:32145",
+      tunnelId: "tunnel-4", hostname: "service-4.example.com", serviceUrl: "http://127.0.0.1:32145",
     });
     expect(cf.switchServiceOrigin).toHaveBeenCalledWith({
-      zoneId: "zone-1", serviceHostname: "service-4.apps.example.com", originHostname: "tunnel-4.cfargotunnel.com",
+      zoneId: "zone-1", serviceHostname: "service-4.example.com", originHostname: "tunnel-4.cfargotunnel.com",
     });
   });
 

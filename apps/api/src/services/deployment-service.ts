@@ -13,6 +13,7 @@ import type {
   CreateDeploymentResponse,
   Deployment,
   DeploymentStatus,
+  RedeployResponse,
   TargetVendor,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
@@ -223,6 +224,180 @@ export class DeploymentService {
         id,
       ]
     );
+  }
+
+  /**
+   * POST /deployments/:id/redeploy
+   * - 소스 deployment 의 source_version, ir, target_profile, target_environment_id 재사용
+   * - analyze/target 승인 skip → 바로 build job 큐잉
+   * - 소스가 진행 중이면 409, IR 없으면 400, env_lock 충돌 시 409
+   */
+  async redeploy(
+    fromDeploymentId: number,
+    options?: { targetEnvironmentId?: number },
+  ): Promise<RedeployResponse> {
+    // 1. 소스 deployment 조회
+    const srcRes = await this.pool.query<{
+      id: number;
+      status: string;
+      target_profile: string | null;
+      target_environment_id: number | null;
+      registry_environment_id: number | null;
+    }>(
+      `SELECT id, status, target_profile, target_environment_id, registry_environment_id
+       FROM deployments WHERE id = $1`,
+      [fromDeploymentId],
+    );
+    const src = srcRes.rows[0];
+    if (!src) {
+      throw new ApiError(404, "NOT_FOUND", `배포 ID ${fromDeploymentId}를 찾을 수 없습니다.`);
+    }
+
+    // 2. 소스가 아직 진행 중이면 409
+    const IN_PROGRESS_STATUSES = new Set([
+      "received",
+      "analyzing",
+      "awaiting_patch_approval",
+      "awaiting_target_confirmation",
+      "queued",
+      "building",
+      "planning",
+      "awaiting_plan_approval",
+      "provisioning",
+      "deploying",
+      "verifying",
+      "rollback",
+    ]);
+    if (IN_PROGRESS_STATUSES.has(src.status)) {
+      throw new ApiError(
+        409,
+        "CONFLICT",
+        "소스 배포가 아직 진행 중입니다. 완료 후 재배포할 수 있습니다.",
+      );
+    }
+
+    // 3. IR 최신 버전 조회 (없으면 400)
+    const irRes = await this.pool.query<{
+      id: number;
+      ir_json: Record<string, unknown>;
+      source: string;
+    }>(
+      `SELECT id, ir_json, source
+       FROM ir_versions
+       WHERE deployment_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [fromDeploymentId],
+    );
+    const ir = irRes.rows[0];
+    if (!ir) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "소스 배포에 IR이 없습니다. 분석이 완료되지 않은 배포는 재배포할 수 없습니다.",
+      );
+    }
+
+    // 4. source_version 조회
+    const svRes = await this.pool.query<{
+      id: number;
+      sha256: string;
+      storage_key: string;
+      size_bytes: number;
+    }>(
+      `SELECT id, sha256, storage_key, size_bytes
+       FROM source_versions
+       WHERE deployment_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [fromDeploymentId],
+    );
+    const sv = svRes.rows[0];
+
+    const targetEnvironmentId = options?.targetEnvironmentId ?? src.target_environment_id;
+    const targetProfile = src.target_profile;
+
+    // 5. env_lock 확인 (대상 환경이 다른 활성 배포로 잠겨있으면 409)
+    if (targetEnvironmentId != null) {
+      const lockRes = await this.pool.query<{ id: number }>(
+        `SELECT d.id
+         FROM deployments d
+         WHERE d.target_environment_id = $1
+           AND d.status = ANY($2::text[])
+           AND d.id != $3
+         LIMIT 1`,
+        [
+          targetEnvironmentId,
+          [
+            "queued",
+            "building",
+            "planning",
+            "awaiting_plan_approval",
+            "provisioning",
+            "deploying",
+            "verifying",
+          ],
+          fromDeploymentId,
+        ],
+      );
+      if (lockRes.rows.length > 0) {
+        throw new ApiError(
+          409,
+          "DEPLOYMENT_LOCKED",
+          "대상 환경이 다른 배포로 잠겨 있습니다. 잠시 후 다시 시도하세요.",
+        );
+      }
+    }
+
+    // 6. DB 트랜잭션: 새 deployment + source_version (재사용) + ir_version (cache 복사)
+    const client = await this.pool.connect();
+    let newDeploymentId: number;
+    try {
+      await client.query("BEGIN");
+
+      const depRes = await client.query<{ id: number }>(
+        `INSERT INTO deployments
+           (project_id, status, target_profile, target_environment_id, registry_environment_id)
+         SELECT project_id, 'queued', $2, $3, registry_environment_id
+         FROM deployments WHERE id = $1
+         RETURNING id`,
+        [fromDeploymentId, targetProfile, targetEnvironmentId],
+      );
+      newDeploymentId = depRes.rows[0]!.id;
+
+      // source_version 재사용 (동일 deployment_id 로 새 row 가 아닌, 같은 sha256 참조)
+      if (sv) {
+        await client.query(
+          `INSERT INTO source_versions (deployment_id, sha256, storage_key, size_bytes)
+           VALUES ($1, $2, $3, $4)`,
+          [newDeploymentId, sv.sha256, sv.storage_key, sv.size_bytes],
+        );
+      }
+
+      // IR 복사 (source = "analyzer_cache" 로 표시)
+      await client.query(
+        `INSERT INTO ir_versions (deployment_id, ir_json, source)
+         VALUES ($1, $2, 'analyzer_cache')`,
+        [newDeploymentId, JSON.stringify(ir.ir_json)],
+      );
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 7. build job 큐잉 (analyze skip)
+    await this.boss.send("build", {
+      deployment_id: newDeploymentId,
+      redeployed_from: fromDeploymentId,
+    });
+
+    return {
+      deploymentId: String(newDeploymentId),
+      status: "queued" as const,
+      eventsUrl: `/api/v1/deployments/${newDeploymentId}/events`,
+    };
   }
 
   private async resolveEnvironments(

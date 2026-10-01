@@ -1,9 +1,12 @@
 /**
  * packages/contracts/src/environments.ts — 배포 환경 (REC-01, AWS · 온프레미스)
- *   POST   /environments                → 201 Environment
- *   GET    /environments?projectId=<N>  → 200 Environment[] (이름순)
- *   GET    /environments/:id            → 200 Environment
+ *   POST   /environments                → 201 CreateEnvironmentResponse (agentRegistrationToken 1회 포함)
+ *   GET    /environments?projectId=<N>  → 200 Environment[] (이름순, agentRegistrationToken 없음)
+ *   GET    /environments/:id            → 200 Environment (agentRegistrationToken 없음)
  *   DELETE /environments/:id            → 204 (빈 바디, 진행 중 배포 있으면 409)
+ *
+ * agentRegistrationToken 은 On-Prem Agent 등록용 인증값이라 생성 응답에서만 1회
+ * 그대로 돌려주고, 목록/단건 조회 응답에서는 제거한다(#61).
  */
 
 import { z } from "zod";
@@ -28,6 +31,12 @@ export const OnpremConfigSchema = z.object({
 });
 export type OnpremConfig = z.infer<typeof OnpremConfigSchema>;
 
+/** 목록/단건 조회 응답용 — agentRegistrationToken 제거 */
+export const OnpremConfigPublicSchema = OnpremConfigSchema.omit({
+  agentRegistrationToken: true,
+});
+export type OnpremConfigPublic = z.infer<typeof OnpremConfigPublicSchema>;
+
 export const CreateEnvironmentBodySchema = z.object({
   projectId: z.number().int().positive(),
   name: z.string().min(1).max(128),
@@ -51,8 +60,8 @@ export const EnvironmentSchema = z
     isDefault: z.boolean(),
     /** 등록한 값 그대로 (type=aws 일 때). 없으면 필드 없음 */
     awsConfig: AwsConfigSchema.strict().optional(),
-    /** 등록한 값 그대로 (type=onprem 일 때, agentRegistrationToken 포함). 없으면 필드 없음 */
-    onpremConfig: OnpremConfigSchema.strict().optional(),
+    /** hostname 등 등록한 값 (type=onprem 일 때). agentRegistrationToken 은 없음(#61). 없으면 필드 없음 */
+    onpremConfig: OnpremConfigPublicSchema.strict().optional(),
     agentStatus: z.string().nullable(),
     lastSeenAt: IsoDateTimeSchema.nullable(),
     createdAt: IsoDateTimeSchema,
@@ -62,3 +71,13 @@ export type Environment = z.infer<typeof EnvironmentSchema>;
 
 export const EnvironmentListSchema = z.array(EnvironmentSchema);
 export type EnvironmentList = z.infer<typeof EnvironmentListSchema>;
+
+/**
+ * POST /environments 응답 전용. type=onprem 일 때 agentRegistrationToken을
+ * 이 생성 응답에서만 1회 그대로 돌려준다 — 이후 목록/단건 조회에서는
+ * EnvironmentSchema(onpremConfig 에 token 없음)를 사용한다.
+ */
+export const CreateEnvironmentResponseSchema = EnvironmentSchema.extend({
+  onpremConfig: OnpremConfigSchema.strict().optional(),
+});
+export type CreateEnvironmentResponse = z.infer<typeof CreateEnvironmentResponseSchema>;

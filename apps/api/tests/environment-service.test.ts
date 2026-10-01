@@ -147,6 +147,60 @@ describe("EnvironmentService.create (onprem)", () => {
     expect(dto.isDefault).toBe(true);
     expect(calls.some((sql) => sql.includes("SET is_default = FALSE"))).toBe(true);
   });
+
+  it("생성 응답에는 agentRegistrationToken이 그대로 포함된다(최초 1회 전달)", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("SELECT 1 FROM projects")) return { rows: [{}], rowCount: 1 };
+      if (sql.includes("INSERT INTO environments"))
+        return { rows: [{ id: 13, is_default: true, created_at: new Date() }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+
+    const dto = await svc.create({
+      projectId: 1,
+      name: "onprem-created",
+      type: "onprem",
+      onpremConfig: { agentRegistrationToken: "secret-token", hostname: "host" },
+    });
+
+    expect(dto.onpremConfig?.agentRegistrationToken).toBe("secret-token");
+  });
+});
+
+describe("EnvironmentService.list / get — agentRegistrationToken 노출 제거(#61)", () => {
+  const row = {
+    id: 10,
+    project_id: 1,
+    name: "onprem-mac",
+    type: "onprem" as const,
+    is_default: true,
+    aws_config: null,
+    onprem_config: { agentRegistrationToken: "secret-token", hostname: "mac.local" },
+    agent_status: null,
+    last_seen_at: null,
+    created_at: new Date("2026-09-30T09:00:00Z"),
+  };
+
+  it("list() 응답 onpremConfig에 agentRegistrationToken이 없다", async () => {
+    const pool = makePool(async () => ({ rows: [row], rowCount: 1 }));
+    const svc = new EnvironmentService(pool);
+
+    const [dto] = await svc.list({ projectId: 1 });
+
+    expect(dto?.onpremConfig).toEqual({ hostname: "mac.local" });
+    expect(dto?.onpremConfig).not.toHaveProperty("agentRegistrationToken");
+  });
+
+  it("get() 응답 onpremConfig에 agentRegistrationToken이 없다", async () => {
+    const pool = makePool(async () => ({ rows: [row], rowCount: 1 }));
+    const svc = new EnvironmentService(pool);
+
+    const dto = await svc.get(10);
+
+    expect(dto.onpremConfig).toEqual({ hostname: "mac.local" });
+    expect(dto.onpremConfig).not.toHaveProperty("agentRegistrationToken");
+  });
 });
 
 describe("EnvironmentService.delete", () => {

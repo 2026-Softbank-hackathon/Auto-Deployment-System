@@ -44,13 +44,28 @@ const ownedJob = {
 function makePool(
   handler: (sql: string, params: unknown[]) => { rows: unknown[]; rowCount?: number },
 ): Pool {
+  const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    const result = handler(sql.replace(/\s+/g, " ").trim(), params);
+    return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+  });
   return {
-    query: vi.fn(async (sql: string, params: unknown[] = []) => {
-      const result = handler(sql.replace(/\s+/g, " ").trim(), params);
-      return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
-    }),
+    query,
+    connect: vi.fn(async () => ({ query, release: vi.fn() })),
   } as unknown as Pool;
 }
+
+const failedResult = {
+  deploymentId: 73,
+  environmentId: "12",
+  jobId: "73",
+  status: "failed" as const,
+  imageUri: `${repositoryUri}@${digest}`,
+  runningDigest: digest,
+  errorCode: "health_check_failed",
+  errorMessage: "로컬 endpoint 헬스체크에 실패했습니다.",
+  startedAt: "2026-10-01T00:00:00.000Z",
+  finishedAt: "2026-10-01T00:00:08.000Z",
+};
 
 describe("AgentJobService 실행 경계", () => {
   it("heartbeat가 소유 Job의 lease를 갱신하고 취소 상태를 함께 반환한다", async () => {
@@ -152,6 +167,68 @@ describe("AgentJobService 실행 경계", () => {
       health: { path: "/health", expectedStatus: 200, timeoutMs: 3_000 },
       expectedDigest: digest,
     });
+  });
+
+  it("Agent 실패 결과와 Deployment 실패 및 환경 락 해제를 한 트랜잭션으로 반영한다", async () => {
+    const queries: string[] = [];
+    const pool = makePool((sql) => {
+      queries.push(sql);
+      if (sql.includes("FROM onprem_agent_jobs AS job")) return { rows: [ownedJob] };
+      if (sql.includes("UPDATE onprem_agent_jobs")) return { rows: [{ job_id: "73" }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    });
+    const service = new AgentJobService(pool);
+
+    await service.reportResult(7, 12, "73", failedResult);
+
+    const begin = queries.indexOf("BEGIN");
+    const updateJob = queries.findIndex((sql) => sql.includes("UPDATE onprem_agent_jobs"));
+    const updateDeployment = queries.findIndex((sql) => sql.includes("UPDATE deployments"));
+    const unlock = queries.findIndex((sql) => sql.includes("DELETE FROM env_locks"));
+    const commit = queries.indexOf("COMMIT");
+    expect(begin).toBeGreaterThanOrEqual(0);
+    expect(begin).toBeLessThan(updateJob);
+    expect(updateJob).toBeLessThan(updateDeployment);
+    expect(updateDeployment).toBeLessThan(unlock);
+    expect(unlock).toBeLessThan(commit);
+  });
+
+  it("동일한 실패 결과 재전송 시 남아 있는 환경 락을 멱등하게 정리한다", async () => {
+    const failedJob = {
+      ...ownedJob,
+      status: "failed",
+      result: failedResult,
+      deployment_status: "failed",
+    };
+    const pool = makePool((sql) => ({
+      rows: sql.includes("FROM onprem_agent_jobs AS job") ? [failedJob] : [],
+      rowCount: 1,
+    }));
+    const service = new AgentJobService(pool);
+
+    await service.reportResult(7, 12, "73", failedResult);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM env_locks"),
+      [73],
+    );
+  });
+
+  it("환경 락 해제에 실패하면 Agent 실패 결과 전체를 롤백한다", async () => {
+    const queries: string[] = [];
+    const pool = makePool((sql) => {
+      queries.push(sql);
+      if (sql.includes("FROM onprem_agent_jobs AS job")) return { rows: [ownedJob] };
+      if (sql.includes("UPDATE onprem_agent_jobs")) return { rows: [{ job_id: "73" }], rowCount: 1 };
+      if (sql.includes("DELETE FROM env_locks")) throw new Error("unlock failed");
+      return { rows: [], rowCount: 1 };
+    });
+    const service = new AgentJobService(pool);
+
+    await expect(service.reportResult(7, 12, "73", failedResult)).rejects.toThrow("unlock failed");
+
+    expect(queries).toContain("ROLLBACK");
+    expect(queries).not.toContain("COMMIT");
   });
 
   it("다른 Agent에게 할당된 Job의 Tunnel 정보를 반환하지 않는다", async () => {

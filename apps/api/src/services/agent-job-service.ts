@@ -276,6 +276,11 @@ export class AgentJobService {
         if (job.status === "ready_for_verify" && result.status === "ready_for_verify") {
           await this.enqueueVerify(payload, image, result);
         }
+        if (result.status === "failed") {
+          await this.pool.query(`DELETE FROM env_locks WHERE deployment_id = $1`, [
+            result.deploymentId,
+          ]);
+        }
         return;
       }
       throw new ApiError(409, "AGENT_RESULT_CONFLICT", "이미 제출된 Job 결과와 일치하지 않습니다.");
@@ -283,22 +288,7 @@ export class AgentJobService {
 
     if (result.status === "failed") {
       const cancelled = result.errorCode === "cancelled" || job.deployment_status === "cancelled";
-      await this.pool.query(
-        `UPDATE onprem_agent_jobs
-         SET status = $1, result = $2::jsonb, lease_expires_at = NULL,
-             error_code = $3, updated_at = NOW()
-         WHERE job_id = $4 AND lease_owner_id = $5
-           AND status IN ('claimed', 'running')`,
-        [cancelled ? "cancelled" : "failed", JSON.stringify(result), result.errorCode ?? "internal_error", jobId, agentId],
-      );
-      if (!cancelled) {
-        await this.pool.query(
-          `UPDATE deployments
-           SET status = 'failed', failed_at = NOW(), updated_at = NOW(), error = $1
-           WHERE id = $2 AND status = 'deploying'`,
-          [result.errorCode ?? "internal_error", result.deploymentId],
-        );
-      }
+      await this.recordFailedResult(agentId, jobId, result, cancelled);
       return;
     }
 
@@ -332,6 +322,49 @@ export class AgentJobService {
       [result.endpoint, result.deploymentId],
     );
     await this.enqueueVerify(payload, image, result);
+  }
+
+  private async recordFailedResult(
+    agentId: number,
+    jobId: string,
+    result: Extract<AgentExecutionResult, { status: "failed" }>,
+    cancelled: boolean,
+  ): Promise<void> {
+    const client = await this.pool.connect();
+    let committed = false;
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query(
+        `UPDATE onprem_agent_jobs
+         SET status = $1, result = $2::jsonb, lease_expires_at = NULL,
+             error_code = $3, updated_at = NOW()
+         WHERE job_id = $4 AND lease_owner_id = $5
+           AND status IN ('claimed', 'running')
+         RETURNING job_id`,
+        [cancelled ? "cancelled" : "failed", JSON.stringify(result), result.errorCode, jobId, agentId],
+      );
+      if ((updated.rowCount ?? 0) !== 1) {
+        throw new ApiError(409, "AGENT_RESULT_CONFLICT", "Job 결과를 반영할 수 없습니다.");
+      }
+      if (!cancelled) {
+        await client.query(
+          `UPDATE deployments
+           SET status = 'failed', failed_at = NOW(), updated_at = NOW(), error = $1
+           WHERE id = $2 AND status = 'deploying'`,
+          [result.errorCode, result.deploymentId],
+        );
+      }
+      await client.query(`DELETE FROM env_locks WHERE deployment_id = $1`, [
+        result.deploymentId,
+      ]);
+      await client.query("COMMIT");
+      committed = true;
+    } catch (error) {
+      if (!committed) await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   private async enqueueVerify(

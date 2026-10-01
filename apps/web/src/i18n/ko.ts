@@ -97,6 +97,11 @@ export const ko = {
     neverDeployed: '아직 배포하지 않았어요',
     deploy: '이 프로젝트로 배포',
   },
+  notify: {
+    title: { success: '배포가 완료됐어요', failed: '배포에 실패했어요', stopped: '배포가 중단됐어요' },
+    view: '확인하기',
+    close: '알림 닫기',
+  },
   setup: {
     title: '연결 설정',
     description: '처음 한 번만 설정하면, 다음부터는 ZIP 파일만 올리면 돼요.',

@@ -7,6 +7,7 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { SetupPage } from '../pages/SetupPage';
 import { SimpleDeployPage } from '../pages/SimpleDeployPage';
+import { DeploymentNotifier } from '../features/notifications/DeploymentNotifier';
 import { DeployProjectProvider } from '../features/deployment-start/useDeployProject';
 import { SoundProvider } from '../features/sound/SoundProvider';
 import { I18nProvider } from '../i18n/I18nProvider';
@@ -44,5 +45,6 @@ export function App() {
         {route.page === 'result' && <DeploymentResult deploymentId={route.deploymentId} onBack={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}`)} onNewDeployment={() => navigate('/deploy')} />}
       </main>
     </div>
+    <DeploymentNotifier route={route} onNavigate={navigate} />
   </div></DeployProjectProvider></SoundProvider></I18nProvider>;
 }

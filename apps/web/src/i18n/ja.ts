@@ -99,6 +99,11 @@ export const ja: Messages = {
     neverDeployed: 'まだデプロイしていません',
     deploy: 'このプロジェクトでデプロイ',
   },
+  notify: {
+    title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },
+    view: '確認する',
+    close: '通知を閉じる',
+  },
   setup: {
     title: '接続設定',
     description: '最初に一度設定すれば、次からはZIPファイルを入れるだけです。',

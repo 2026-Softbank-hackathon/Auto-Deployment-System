@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { decodeSecretMasterKey } from "../src/config.js";
+import { assertProductionSecurity, decodeSecretMasterKey, type Config } from "../src/config.js";
+
+function baseConfig(overrides: Partial<Config> = {}): Config {
+  return {
+    NODE_ENV: "development",
+    PORT: 3000,
+    HOST: "0.0.0.0",
+    STORAGE_ROOT_DIR: "/tmp/camellia-storage",
+    LOG_LEVEL: "info",
+    ...overrides,
+  };
+}
 
 describe("decodeSecretMasterKey", () => {
   it("base64 32바이트 키를 복호화용 Buffer로 변환한다", () => {
@@ -29,4 +40,26 @@ describe("decodeSecretMasterKey", () => {
       );
     },
   );
+});
+
+describe("assertProductionSecurity", () => {
+  const prodKey = Buffer.alloc(32, 1).toString("base64");
+
+  it("production 에서 API_KEY·SECRET_MASTER_KEY 를 요구한다", () => {
+    expect(() =>
+      assertProductionSecurity(
+        baseConfig({ NODE_ENV: "production", API_KEY: "k", SECRET_MASTER_KEY: prodKey }),
+      ),
+    ).not.toThrow();
+    expect(() => assertProductionSecurity(baseConfig({ NODE_ENV: "production" }))).toThrow(
+      /API_KEY/,
+    );
+    expect(() =>
+      assertProductionSecurity(baseConfig({ NODE_ENV: "production", API_KEY: "k" })),
+    ).toThrow(/SECRET_MASTER_KEY/);
+  });
+
+  it("development 에서는 no-op", () => {
+    expect(() => assertProductionSecurity(baseConfig())).not.toThrow();
+  });
 });

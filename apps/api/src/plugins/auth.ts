@@ -43,6 +43,15 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
       return;
     }
 
+    if (!apiKey && !isDev) {
+      throw new ApiError(
+        503,
+        "MISCONFIGURED",
+        "API_KEY가 설정되지 않았습니다.",
+        "NODE_ENV=production 에서 API_KEY 환경변수를 설정하세요."
+      );
+    }
+
     if (!headerKey) {
       throw new ApiError(
         401,

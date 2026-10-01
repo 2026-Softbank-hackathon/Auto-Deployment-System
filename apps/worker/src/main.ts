@@ -18,6 +18,10 @@ import {
   PostgresProjectSecretReader,
 } from "./secret-reader.js";
 import { DockerRegistrySession } from "./docker-registry-session.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { TerraformCli } from "./terraform-cli.js";
+import { loadTerraformBackendConfig } from "./terraform-config.js";
 
 const log = pino({ name: "worker" });
 
@@ -39,6 +43,10 @@ async function main(): Promise<void> {
   );
   const buildHandler = new BuildHandler();
   const registrySession = new DockerRegistrySession();
+  const terraformCli = new TerraformCli({
+    executable: process.env["TERRAFORM_BINARY"]?.trim() || "terraform",
+  });
+  const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
   const awsRegistryFactory = (input: {
     region: string;
     credentials: { accessKeyId: string; secretAccessKey: string };
@@ -54,6 +62,9 @@ async function main(): Promise<void> {
     buildHandler,
     registrySession,
     awsRegistryFactory,
+    terraformCli,
+    terraformBackend: loadTerraformBackendConfig(),
+    terraformModuleRoot: path.join(repositoryRoot, "infra/terraform/profiles"),
   };
 
   boss.on("error", (err: unknown) => {

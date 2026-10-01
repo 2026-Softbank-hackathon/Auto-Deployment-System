@@ -109,6 +109,12 @@ variable "secret_references" {
   default     = {}
 }
 
+variable "environment_variables" {
+  type        = map(string)
+  description = "Non-sensitive project environment values keyed by environment variable name."
+  default     = {}
+}
+
 variable "vpc_cidr" {
   type        = string
   description = "CIDR used for the P0 two-AZ public VPC."

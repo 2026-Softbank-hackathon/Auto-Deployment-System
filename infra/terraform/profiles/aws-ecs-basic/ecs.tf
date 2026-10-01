@@ -65,6 +65,12 @@ resource "aws_ecs_task_definition" "app" {
       containerPort = var.container_port
       protocol      = "tcp"
     }]
+    environment = [
+      for name, value in var.environment_variables : {
+        name  = name
+        value = value
+      }
+    ]
     secrets = [
       for name, value_from in var.secret_references : {
         name      = name

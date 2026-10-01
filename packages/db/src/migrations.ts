@@ -5,7 +5,11 @@
 
 export const MIGRATION_FILES = [
   "001_initial.sql",
+  "002_diagnosis.sql",
   "002_health_check_attempts.sql",
   "003_verify_job_idempotency.sql",
+  "004_secrets_environments.sql",
+  "005_env_vars.sql",
+  "006_deployment_environments.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

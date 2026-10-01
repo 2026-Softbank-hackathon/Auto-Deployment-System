@@ -53,6 +53,8 @@ describe("응답 스키마", () => {
       projectId: "1",
       status: "analyzing",
       targetProfile: "aws-ecs-basic",
+      targetEnvironmentId: "10",
+      registryEnvironmentId: "10",
       publicUrl: null,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,

@@ -18,6 +18,7 @@ type EnvRow = {
   project_id: number;
   name: string;
   type: "aws" | "onprem";
+  is_default: boolean;
   aws_config: AwsConfig | null;
   onprem_config: OnpremConfig | null;
   agent_status: string | null;
@@ -46,6 +47,7 @@ export class EnvironmentService {
     projectId: number;
     name: string;
     type: "aws" | "onprem";
+    isDefault?: boolean;
     awsConfig?: AwsConfig;
     onpremConfig?: OnpremConfig;
   }): Promise<EnvironmentDto> {
@@ -96,24 +98,55 @@ export class EnvironmentService {
       }
     }
 
+    const client = await this.pool.connect();
     try {
-      const res = await this.pool.query<{ id: number; created_at: Date }>(
-        `INSERT INTO environments (project_id, name, type, aws_config, onprem_config)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, created_at`,
+      await client.query("BEGIN");
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+        `${input.projectId}:${input.type}`,
+      ]);
+      const currentDefault = await client.query<{ id: number }>(
+        `SELECT id FROM environments
+         WHERE project_id = $1 AND type = $2 AND is_default = TRUE
+         LIMIT 1`,
+        [input.projectId, input.type],
+      );
+      const hasDefault = currentDefault.rows.length > 0;
+      const isDefault = input.isDefault === true || !hasDefault;
+
+      if (isDefault && hasDefault) {
+        await client.query(
+          `UPDATE environments
+           SET is_default = FALSE
+           WHERE project_id = $1 AND type = $2 AND is_default = TRUE`,
+          [input.projectId, input.type],
+        );
+      }
+
+      const res = await client.query<{
+        id: number;
+        is_default: boolean;
+        created_at: Date;
+      }>(
+        `INSERT INTO environments
+           (project_id, name, type, is_default, aws_config, onprem_config)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, is_default, created_at`,
         [
           input.projectId,
           input.name,
           input.type,
+          isDefault,
           input.awsConfig ? JSON.stringify(input.awsConfig) : null,
           input.onpremConfig ? JSON.stringify(input.onpremConfig) : null,
         ],
       );
+      await client.query("COMMIT");
       return {
         id: res.rows[0]!.id,
         projectId: input.projectId,
         name: input.name,
         type: input.type,
+        isDefault: res.rows[0]!.is_default,
         awsConfig: input.awsConfig,
         onpremConfig: input.onpremConfig,
         agentStatus: null,
@@ -121,6 +154,7 @@ export class EnvironmentService {
         createdAt: res.rows[0]!.created_at.toISOString(),
       };
     } catch (e) {
+      await client.query("ROLLBACK");
       const msg = e instanceof Error ? e.message : String(e);
       if (/unique|duplicate/i.test(msg)) {
         throw new ApiError(
@@ -130,12 +164,14 @@ export class EnvironmentService {
         );
       }
       throw e;
+    } finally {
+      client.release();
     }
   }
 
   async list(input: { projectId: number }): Promise<EnvironmentDto[]> {
     const res = await this.pool.query<EnvRow>(
-      `SELECT id, project_id, name, type, aws_config, onprem_config, agent_status, last_seen_at, created_at
+      `SELECT id, project_id, name, type, is_default, aws_config, onprem_config, agent_status, last_seen_at, created_at
        FROM environments WHERE project_id = $1 ORDER BY name`,
       [input.projectId],
     );
@@ -144,7 +180,7 @@ export class EnvironmentService {
 
   async get(id: number): Promise<EnvironmentDto> {
     const res = await this.pool.query<EnvRow>(
-      `SELECT id, project_id, name, type, aws_config, onprem_config, agent_status, last_seen_at, created_at
+      `SELECT id, project_id, name, type, is_default, aws_config, onprem_config, agent_status, last_seen_at, created_at
        FROM environments WHERE id = $1`,
       [id],
     );
@@ -154,10 +190,9 @@ export class EnvironmentService {
   }
 
   async delete(id: number): Promise<void> {
-    // 진행 중 배포가 있는 project 는 삭제 거부 (환경 자체 참조 컬럼은 아직 deployments 에 없으므로 project 단위 보수적 판단).
     const active = await this.pool.query(
       `SELECT 1 FROM deployments
-       WHERE project_id = (SELECT project_id FROM environments WHERE id = $1)
+       WHERE target_environment_id = $1
          AND status = ANY($2::text[])
        LIMIT 1`,
       [id, ACTIVE_STATUSES],
@@ -177,6 +212,7 @@ export class EnvironmentService {
       projectId: row.project_id,
       name: row.name,
       type: row.type,
+      isDefault: row.is_default,
       awsConfig: row.aws_config ?? undefined,
       onpremConfig: row.onprem_config ?? undefined,
       agentStatus: row.agent_status ?? null,

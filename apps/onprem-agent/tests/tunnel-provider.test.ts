@@ -61,14 +61,14 @@ function createSessionProvider(): TunnelSessionProvider & {
     jobId: string;
     deploymentId: number;
     environmentId: string;
-    localUrl: string;
+    localPort: number;
   }>;
 } {
   const inputs: Array<{
     jobId: string;
     deploymentId: number;
     environmentId: string;
-    localUrl: string;
+    localPort: number;
   }> = [];
   return {
     inputs,
@@ -84,7 +84,7 @@ function createSessionProvider(): TunnelSessionProvider & {
 }
 
 describe("CloudflaredTunnelProvider", () => {
-  it("동적 localUrl을 서버 경계에 보고한 뒤 Token을 환경변수로만 전달한다", async () => {
+  it("동적 localPort를 서버 경계에 보고한 뒤 Token을 환경변수로만 전달한다", async () => {
     const sessions = createSessionProvider();
     const processes = new FakeProcessRunner();
     const readiness = new FakeReadinessChecker();
@@ -106,7 +106,7 @@ describe("CloudflaredTunnelProvider", () => {
         jobId: "job-001",
         deploymentId: 42,
         environmentId: "env-onprem-1",
-        localUrl: "http://127.0.0.1:49152",
+        localPort: 49_152,
       }),
     ).resolves.toEqual({
       tunnelId: "tunnel-42",
@@ -118,7 +118,7 @@ describe("CloudflaredTunnelProvider", () => {
         jobId: "job-001",
         deploymentId: 42,
         environmentId: "env-onprem-1",
-        localUrl: "http://127.0.0.1:49152",
+        localPort: 49_152,
       },
     ]);
     expect(processes.requests).toHaveLength(1);
@@ -160,7 +160,7 @@ describe("CloudflaredTunnelProvider", () => {
       jobId: "job-001",
       deploymentId: 42,
       environmentId: "env-onprem-1",
-      localUrl: "http://127.0.0.1:49152",
+      localPort: 49_152,
     };
 
     await provider.start(input);
@@ -188,13 +188,13 @@ describe("CloudflaredTunnelProvider", () => {
         jobId: "job-001",
         deploymentId: 42,
         environmentId: "env-onprem-1",
-        localUrl: "http://127.0.0.1:49152",
+        localPort: 49_152,
       }),
     ).rejects.toThrow("Tunnel 연결 준비에 실패했습니다.");
     expect(processes.processes[0]?.stopCount).toBe(1);
   });
 
-  it("loopback이 아닌 localUrl은 서버에 보고하지 않는다", async () => {
+  it("유효하지 않은 localPort는 서버에 보고하지 않는다", async () => {
     const sessions = createSessionProvider();
     const processes = new FakeProcessRunner();
     const provider = new CloudflaredTunnelProvider({
@@ -209,7 +209,7 @@ describe("CloudflaredTunnelProvider", () => {
         jobId: "job-001",
         deploymentId: 42,
         environmentId: "env-onprem-1",
-        localUrl: "http://192.168.0.10:49152",
+        localPort: 0,
       }),
     ).rejects.toMatchObject({ code: "tunnel_failed" });
     expect(sessions.inputs).toEqual([]);
@@ -234,7 +234,7 @@ describe("CloudflaredTunnelProvider", () => {
         jobId: "job-001",
         deploymentId: 42,
         environmentId: "env-onprem-1",
-        localUrl: "http://127.0.0.1:49152",
+        localPort: 49_152,
       }),
     ).rejects.toMatchObject({ code: "tunnel_failed" });
     expect(processes.requests).toEqual([]);
@@ -253,13 +253,13 @@ describe("CloudflaredTunnelProvider", () => {
       jobId: "job-001",
       deploymentId: 42,
       environmentId: "env-onprem-1",
-      localUrl: "http://127.0.0.1:49152",
+      localPort: 49_152,
     });
     await provider.start({
       jobId: "job-002",
       deploymentId: 43,
       environmentId: "env-onprem-1",
-      localUrl: "http://127.0.0.1:49153",
+      localPort: 49_153,
     });
 
     await provider.stop(42);

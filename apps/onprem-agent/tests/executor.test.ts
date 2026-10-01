@@ -61,7 +61,7 @@ describe("On-Prem job 실행", () => {
         jobId: "job-001",
         deploymentId: 42,
         environmentId: "env-onprem-1",
-        localUrl: "http://127.0.0.1:49152",
+        localPort: 49_152,
       },
     ]);
   });

@@ -11,7 +11,7 @@
 - 중복 job, 완료 결과, 실행 중 같은 digest, 새 digest 교체, 실패 재시도, 취소 처리
 - 동적 `localPort` 보고 뒤 받은 Named Tunnel session으로 `cloudflared` 실행
 - Tunnel Token을 `TUNNEL_TOKEN` 환경변수로만 전달하고 프로세스 준비·교체·정리
-- Intel Mac 사전검사와 macOS `LaunchAgent` 설치 기반
+- Intel Mac과 Apple Silicon 사전검사, macOS `LaunchAgent` 설치 기반
 - `TunnelProvider` 인터페이스와 테스트 전용 `FakeTunnelProvider`
 - 등록·Heartbeat HTTP Client와 권한 제한 장기 Agent 인증정보 파일
 - Job claim·ECR credential·Tunnel 준비·결과 제출 HTTP Client
@@ -54,9 +54,9 @@ Compose 파일에는 환경변수 이름만 기록하고 값은 `docker compose`
 
 원격 관리 Named Tunnel의 Token은 `cloudflared` 명령 인자나 파일에 기록하지 않고 자식 프로세스의 `TUNNEL_TOKEN` 환경변수로만 전달합니다. 등록 토큰과 AWS 자격증명을 포함한 Agent 프로세스의 전체 환경은 상속하지 않습니다. Agent는 loopback metrics `/ready`가 성공해야 Tunnel을 활성 상태로 간주하며, 취소·실패·교체·Agent 종료 시 자신이 시작한 프로세스만 종료합니다.
 
-## Intel Mac 설치 기반
+## macOS Release 설치
 
-P0 대상은 Intel Mac(`x86_64`)입니다. 특정 Docker 제품에 결합하지 않고 로그인 사용자 세션에서 다음 명령이 동작해야 합니다.
+Agent 설치기는 Intel Mac(`x86_64`)과 Apple Silicon(`arm64`)을 지원합니다. 특정 Docker 제품에 결합하지 않고 로그인 사용자 세션에서 다음 명령이 동작해야 합니다.
 
 ```bash
 docker info
@@ -64,7 +64,15 @@ docker compose version
 cloudflared --version
 ```
 
-Release bundle 또는 로컬 build 결과에 `dist/main.js`와 `dist/launchd-cli.js`가 있는 상태에서 설치 자산을 실행합니다.
+버전을 명시한 다운로드 설치기는 현재 Mac의 아키텍처에 맞는 Release archive와 `.sha256` 파일을 내려받고, 버전·아키텍처·checksum을 검증한 뒤 설치합니다.
+
+```bash
+curl -fsSL \
+  https://github.com/2026-Softbank-hackerton/Auto-Deployment-System/releases/download/onprem-agent-v0.1.0/install-agent.sh \
+  | sh -s -- v0.1.0
+```
+
+로컬 build 결과를 직접 설치할 때는 `dist/main.js`와 `dist/launchd-cli.js`를 만든 뒤 bundle 내부 설치기를 실행합니다.
 
 ```bash
 pnpm --filter @camellia/onprem-agent build
@@ -72,6 +80,17 @@ apps/onprem-agent/install/macos/install.sh
 ```
 
 설치 스크립트는 Agent 파일과 plist를 준비하되 1회용 등록 토큰 입력을 위해 서비스를 자동 시작하지 않습니다. 최초 등록을 마친 뒤 설치된 `camellia-onprem-agent-service start`로 로그인 사용자의 `LaunchAgent`를 활성화합니다. `service.sh`는 `start`, `stop`, `restart`, `status`를 제공하고 `uninstall.sh`는 Agent와 plist를 macOS 휴지통으로 이동하며 로그는 보존합니다.
+
+현재 프로젝트의 애플리케이션 build 계약은 `linux/amd64` 단일 digest입니다. Apple Silicon의 Agent도 같은 digest를 유지하기 위해 Compose에 `platform: linux/amd64`를 명시하며, Docker Desktop의 amd64 에뮬레이션을 사용합니다. Agent 등록·Heartbeat·Job claim·ECR pull·Tunnel·Verify 흐름은 두 Mac 아키텍처에서 동일합니다.
+
+## Agent Release 생성
+
+`package.json` 버전과 일치하는 `onprem-agent-vMAJOR.MINOR.PATCH` tag를 push하면 GitHub Actions가 Agent 테스트·타입체크·린트·build를 수행하고 다음 자산을 Release에 게시합니다.
+
+- `camellia-onprem-agent-vMAJOR.MINOR.PATCH-macos-x64.tar.gz`
+- `camellia-onprem-agent-vMAJOR.MINOR.PATCH-macos-arm64.tar.gz`
+- archive별 `.sha256`
+- `install-agent.sh`
 
 ## 검증
 

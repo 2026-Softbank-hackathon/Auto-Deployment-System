@@ -12,6 +12,7 @@ describe("Docker Compose 렌더링", () => {
     const compose = renderComposeDocument(job, imageUri);
 
     expect(compose).toContain(`image: ${JSON.stringify(imageUri)}`);
+    expect(compose).toContain('platform: "linux/amd64"');
     expect(compose).toContain(`${JSON.stringify("127.0.0.1::3000")}`);
     expect(compose).toContain(JSON.stringify("APP_MESSAGE"));
     expect(compose).toContain("/health");

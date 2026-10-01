@@ -57,6 +57,7 @@ export function renderComposeDocument(
     "services:",
     "  app:",
     `    image: ${quote(imageUri)}`,
+    '    platform: "linux/amd64"',
     '    restart: "unless-stopped"',
   ];
 

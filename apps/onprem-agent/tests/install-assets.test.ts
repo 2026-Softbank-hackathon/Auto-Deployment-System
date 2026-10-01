@@ -1,15 +1,39 @@
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { promisify } from "node:util";
+import { afterEach, describe, expect, it } from "vitest";
 
 const installRoot = join(process.cwd(), "install", "macos");
+const repositoryRoot = join(process.cwd(), "..", "..");
+const execFileAsync = promisify(execFile);
+const temporaryDirectories: string[] = [];
 
-describe("Intel Mac 설치 자산", () => {
-  it("설치 전에 macOS·x86_64·Docker·Compose를 검사한다", async () => {
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories.splice(0).map((path) =>
+      rm(path, { recursive: true, force: true }),
+    ),
+  );
+});
+
+describe("macOS 설치 자산", () => {
+  it("설치 전에 macOS·x86_64/arm64·Docker·Compose를 검사한다", async () => {
     const script = await readFile(join(installRoot, "install.sh"), "utf8");
 
     expect(script).toContain('"$(uname -s)" != "Darwin"');
-    expect(script).toContain('"$(uname -m)" != "x86_64"');
+    expect(script).toContain("x86_64)");
+    expect(script).toContain("arm64)");
+    expect(script).toContain('EXPECTED_ARCH=$(cat "$SOURCE_ROOT/ARCHITECTURE")');
     expect(script).toContain("process.versions.node");
     expect(script).toContain("docker info");
     expect(script).toContain("docker compose version");
@@ -22,6 +46,7 @@ describe("Intel Mac 설치 자산", () => {
       readFile(join(installRoot, "service.sh"), "utf8"),
       readFile(join(installRoot, "uninstall.sh"), "utf8"),
       readFile(join(installRoot, "camellia-onprem-agent"), "utf8"),
+      readFile(join(installRoot, "download-install.sh"), "utf8"),
     ]);
     const combined = files.join("\n");
 
@@ -61,4 +86,134 @@ describe("Intel Mac 설치 자산", () => {
     expect(script).not.toContain("rm -rf");
     expect(script).not.toContain("CAMELLIA_AGENT_INSTALL_ROOT");
   });
+
+  it.each([
+    ["x86_64", "x64"],
+    ["arm64", "arm64"],
+  ])(
+    "%s 호스트에서 해당 아키텍처의 버전 고정 archive를 설치한다",
+    async (machineArchitecture, releaseArchitecture) => {
+      const fixture = await createReleaseFixture(releaseArchitecture);
+      const resultPath = join(fixture.root, "installed-architecture.txt");
+
+      await execFileAsync("sh", [join(installRoot, "download-install.sh"), "v0.1.0"], {
+        env: {
+          ...process.env,
+          PATH: `${fixture.binPath}:${process.env.PATH ?? ""}`,
+          FAKE_RELEASE_DIR: fixture.releasePath,
+          TEST_UNAME_M: machineArchitecture,
+          CAMELLIA_TEST_RESULT: resultPath,
+        },
+      });
+
+      await expect(readFile(resultPath, "utf8")).resolves.toBe(
+        `${releaseArchitecture}\n`,
+      );
+    },
+  );
+
+  it("checksum이 다르면 archive를 실행하지 않는다", async () => {
+    const fixture = await createReleaseFixture("arm64", "0".repeat(64));
+    const resultPath = join(fixture.root, "installed-architecture.txt");
+
+    await expect(
+      execFileAsync("sh", [join(installRoot, "download-install.sh"), "v0.1.0"], {
+        env: {
+          ...process.env,
+          PATH: `${fixture.binPath}:${process.env.PATH ?? ""}`,
+          FAKE_RELEASE_DIR: fixture.releasePath,
+          TEST_UNAME_M: "arm64",
+          CAMELLIA_TEST_RESULT: resultPath,
+        },
+      }),
+    ).rejects.toMatchObject({ stderr: expect.stringContaining("checksum") });
+  });
+
+  it("유효하지 않은 버전과 지원하지 않는 아키텍처를 거부한다", async () => {
+    const fixture = await createReleaseFixture("arm64");
+
+    await expect(
+      execFileAsync("sh", [join(installRoot, "download-install.sh"), "latest"], {
+        env: {
+          ...process.env,
+          PATH: `${fixture.binPath}:${process.env.PATH ?? ""}`,
+          TEST_UNAME_M: "arm64",
+        },
+      }),
+    ).rejects.toMatchObject({ stderr: expect.stringContaining("버전") });
+
+    await expect(
+      execFileAsync("sh", [join(installRoot, "download-install.sh"), "v0.1.0"], {
+        env: {
+          ...process.env,
+          PATH: `${fixture.binPath}:${process.env.PATH ?? ""}`,
+          TEST_UNAME_M: "riscv64",
+        },
+      }),
+    ).rejects.toMatchObject({ stderr: expect.stringContaining("지원하지 않는") });
+  });
+
+  it("Release workflow가 검증 후 두 아키텍처 자산을 게시한다", async () => {
+    const workflow = await readFile(
+      join(repositoryRoot, ".github", "workflows", "agent-release.yml"),
+      "utf8",
+    );
+    const packager = await readFile(
+      join(process.cwd(), "scripts", "package-release.sh"),
+      "utf8",
+    );
+
+    expect(workflow).toContain('"onprem-agent-v*"');
+    expect(workflow).toContain("contents: write");
+    expect(workflow).toContain("pnpm --filter @camellia/onprem-agent test");
+    expect(workflow).toContain("pnpm --filter @camellia/onprem-agent typecheck");
+    expect(workflow).toContain("pnpm --filter @camellia/onprem-agent lint");
+    expect(workflow).toContain("package-release.sh");
+    expect(workflow).toContain("gh release create");
+    expect(packager).toContain("macos-x64.tar.gz");
+    expect(packager).toContain("macos-arm64.tar.gz");
+    expect(packager).toContain("shasum -a 256");
+  });
 });
+
+async function createReleaseFixture(
+  architecture: "x64" | "arm64",
+  checksumOverride?: string,
+) {
+  const root = await mkdtemp(join(tmpdir(), "camellia-agent-release-"));
+  temporaryDirectories.push(root);
+  const binPath = join(root, "bin");
+  const releasePath = join(root, "release");
+  const bundlePath = join(root, "bundle", "camellia-onprem-agent");
+  const installerPath = join(bundlePath, "install", "macos", "install.sh");
+  const assetName = `camellia-onprem-agent-v0.1.0-macos-${architecture}.tar.gz`;
+  const archivePath = join(releasePath, assetName);
+
+  await mkdir(binPath, { recursive: true });
+  await mkdir(releasePath, { recursive: true });
+  await mkdir(join(bundlePath, "install", "macos"), { recursive: true });
+  await writeFile(join(bundlePath, "VERSION"), "v0.1.0\n");
+  await writeFile(join(bundlePath, "ARCHITECTURE"), `${architecture}\n`);
+  await writeFile(
+    installerPath,
+    `#!/bin/sh\nset -eu\nSCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nSOURCE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)\ncat "$SOURCE_ROOT/ARCHITECTURE" > "$CAMELLIA_TEST_RESULT"\n`,
+  );
+  await chmod(installerPath, 0o755);
+  await execFileAsync("tar", ["-czf", archivePath, "-C", join(root, "bundle"), "camellia-onprem-agent"]);
+  const archive = await readFile(archivePath);
+  const checksum = checksumOverride ?? createHash("sha256").update(archive).digest("hex");
+  await writeFile(`${archivePath}.sha256`, `${checksum}  ${assetName}\n`);
+
+  await writeFile(
+    join(binPath, "uname"),
+    '#!/bin/sh\ncase "$1" in\n  -s) echo Darwin ;;\n  -m) echo "$TEST_UNAME_M" ;;\n  *) exec /usr/bin/uname "$@" ;;\nesac\n',
+  );
+  await chmod(join(binPath, "uname"), 0o755);
+  await writeFile(
+    join(binPath, "curl"),
+    '#!/bin/sh\nset -eu\nout=""\nurl=""\nwhile [ "$#" -gt 0 ]; do\n  case "$1" in\n    -o) out=$2; shift 2 ;;\n    http*) url=$1; shift ;;\n    *) shift ;;\n  esac\ndone\ncp "$FAKE_RELEASE_DIR/${url##*/}" "$out"\n',
+  );
+  await chmod(join(binPath, "curl"), 0o755);
+
+  return { root, binPath, releasePath };
+}

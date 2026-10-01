@@ -1,0 +1,63 @@
+name: Release On-Prem Agent
+
+on:
+  push:
+    tags:
+      - "onprem-agent-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test Agent
+        run: pnpm --filter @camellia/onprem-agent test
+
+      - name: Typecheck Agent
+        run: pnpm --filter @camellia/onprem-agent typecheck
+
+      - name: Lint Agent
+        run: pnpm --filter @camellia/onprem-agent lint
+
+      - name: Build Agent
+        run: pnpm --filter @camellia/onprem-agent build
+
+      - name: Validate tag and package release assets
+        id: package
+        run: |
+          if ! printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^onprem-agent-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "지원하지 않는 Agent Release tag입니다: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          version=${GITHUB_REF_NAME#onprem-agent-}
+          output="$RUNNER_TEMP/onprem-agent-release"
+          apps/onprem-agent/scripts/package-release.sh "$version" "$output"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "output=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+          OUTPUT: ${{ steps.package.outputs.output }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$OUTPUT"/* \
+            --verify-tag \
+            --title "Camellia On-Prem Agent $VERSION" \
+            --generate-notes

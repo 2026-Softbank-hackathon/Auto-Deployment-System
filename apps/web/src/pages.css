@@ -297,3 +297,21 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .diagnosis p.diagnosis__step, .diagnosis p.diagnosis__note { font-size: 14px; color: var(--ink-soft); }
 .diagnosis__patches { display: grid; gap: 8px; }
 .diagnosis pre { overflow-x: auto; }
+
+/* 배포 준비 상태 · AWS 키 등록 */
+.deploy-readiness { display: grid; gap: 10px; margin: 0; font-size: 14px; color: var(--ink-soft); }
+.deploy-readiness p { margin: 0; }
+.deploy-readiness__ok { color: var(--moss-text); font-weight: 700; }
+.deploy-readiness__need { display: grid; gap: 10px; }
+.deploy-readiness__need p { color: var(--ink); }
+.aws-key-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; align-items: end; }
+.aws-key-form__field { display: grid; gap: 6px; min-width: 0; }
+.aws-key-form__field label { font-size: 13px; font-weight: 700; color: var(--ink); }
+.aws-key-form__field input, .aws-key-form__field select {
+  height: 44px; padding: 0 12px; min-width: 0; font: inherit; font-family: var(--font-mono); font-size: 14px; color: var(--ink);
+  background: var(--surface); border: var(--border); border-radius: var(--radius-input);
+}
+.aws-key-form__field input:focus-visible, .aws-key-form__field select:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.aws-key-form__note, .aws-key-form > .notice { grid-column: 1 / -1; }
+.aws-key-form__note { font-size: 13px; color: var(--ink-soft); }
+.aws-key-form > button { justify-self: start; }

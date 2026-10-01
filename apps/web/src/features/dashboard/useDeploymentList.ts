@@ -4,12 +4,12 @@ import { deploymentStatusView } from '../deployment-status/status-view';
 
 /**
  * 전역 배포 목록 API가 없어서 GET /projects → 최근 프로젝트별 GET /projects/:id/deployments 로 모은다.
- * 원클릭 흐름은 배포마다 프로젝트를 새로 만들기 때문에 "최근 프로젝트"가 곧 "최근 배포"다.
+ * 프로젝트는 한 애플리케이션의 배포 이력을 묶는 단위라 한 프로젝트에 배포가 여러 건 쌓인다 (프로젝트당 최근 20건).
  */
 const PROJECT_PAGE_SIZE = 100;
 const MAX_PROJECT_PAGES = 5;
 const RECENT_PROJECT_LIMIT = 20;
-const DEPLOYMENTS_PER_PROJECT = 5;
+const DEPLOYMENTS_PER_PROJECT = 20;
 const ACTIVE_REFRESH_MS = 10_000;
 
 export interface DeploymentListItem extends ProjectDeploymentSummary { projectName: string }

@@ -221,7 +221,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment 
           {elapsedText && <span className="run-head__elapsed" aria-label={`${t.run.elapsedLabel} ${elapsedText}`}>{elapsedText}</span>}
         </div>
         <p className="run-head__meta">
-          {view.outcome === 'active' && <span>{currentStepLabel(currentStatus, t)}</span>}
+          {view.outcome === 'active' && approvalError === null && <span>{currentStepLabel(currentStatus, t)}</span>}
           <span className="run-head__id">{projectName ? `${displayProjectName(projectName)} · ` : ''}{t.dashboard.deploymentNo(deploymentId)}</span>
         </p>
       </div>

@@ -35,25 +35,23 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       },
     },
   }, async (request, reply) => {
-    const data = await request.file();
-    if (!data) {
+    let fileBuffer: Buffer | undefined;
+    let rawProjectId: string | undefined;
+    let rawTarget: string | undefined;
+    for await (const part of request.parts()) {
+      if (part.type === "file") {
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) chunks.push(chunk as Buffer);
+        fileBuffer = Buffer.concat(chunks);
+      } else if (part.fieldname === "project_id") {
+        rawProjectId = rawProjectId === undefined && typeof part.value === "string" ? part.value : "";
+      } else if (part.fieldname === "target") {
+        rawTarget = rawTarget === undefined && typeof part.value === "string" ? part.value : "";
+      }
+    }
+    if (!fileBuffer) {
       throw new ApiError(400, "VALIDATION_ERROR", "source 파일이 없습니다.", "multipart/form-data로 source 필드(zip 파일)를 포함하세요.");
     }
-
-    // Read all parts first (file + fields mixed in stream)
-    // @fastify/multipart 이면 data.fields 로 non-file 필드 접근 가능
-    const fields = data.fields as Record<string, { value: string } | { value: string }[]>;
-
-    const rawProjectId = (fields["project_id"] as { value: string } | undefined)?.value;
-    const rawTarget = (fields["target"] as { value: string } | undefined)?.value;
-
-    // Consume file buffer
-    const chunks: Buffer[] = [];
-    for await (const chunk of data.file) {
-      chunks.push(chunk as Buffer);
-    }
-    const fileBuffer = Buffer.concat(chunks);
-
     if (fileBuffer.length === 0) {
       throw new ApiError(400, "VALIDATION_ERROR", "업로드된 파일이 비어 있습니다.");
     }

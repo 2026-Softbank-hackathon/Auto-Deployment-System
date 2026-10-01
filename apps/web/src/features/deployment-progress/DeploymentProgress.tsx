@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -11,7 +11,8 @@ import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/f
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
-import { EnvInputPanel } from './EnvInputPanel';
+import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
+import { clearReview, reviewRequested } from './review-flag';
 import { failureKind, fixableByAwsKey } from './failure-reason';
 import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
@@ -32,6 +33,18 @@ const SUCCESS_LANDING_MS = 1400;
 function text(value: unknown): string | null { return typeof value === 'string' && value.trim() ? value : null; }
 /** 화면 상태는 배포 status만 기준으로 한다. currentStep.name은 단계 로그 이름(analyze·verify 등)이라 status와 값 체계가 다르다. */
 function deploymentStatus(status: DeploymentStatusResponse | null): string | null { return text(status?.status); }
+/** IR에서 포트가 필요한 서비스(http · worker)와 감지된 포트를 꺼낸다. */
+function detectedPorts(ir: unknown): DetectedPort[] {
+  const services = ir && typeof ir === 'object' ? (ir as { services?: unknown }).services : null;
+  if (!services || typeof services !== 'object') return [];
+  return Object.entries(services as Record<string, unknown>).flatMap(([service, value]): DetectedPort[] => {
+    if (!value || typeof value !== 'object') return [];
+    const { type, port } = value as { type?: unknown; port?: unknown };
+    if (type !== 'http' && type !== 'worker' && typeof port !== 'number') return [];
+    return [{ service, port: typeof port === 'number' ? port : null }];
+  });
+}
+
 function currentStepLabel(status: string | null, t: Messages): string {
   return status ? (t.progress.steps[status] ?? t.progress.stepUpdating) : t.progress.stepLoading;
 }
@@ -151,20 +164,29 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
     }
     await refresh();
   }, [deploymentId, refresh]);
-  // 대상 승인 전에 서버에 "등록해야만 배포되는 환경변수"가 있는지 묻는다. 있으면 자동 승인을 멈추고 그 자리에서 입력받는다 (#142, #150).
-  // 없거나 확인하지 못하면 지금까지처럼 바로 승인한다 (원클릭 유지).
-  const [envNeeded, setEnvNeeded] = useState<string[] | null>(null);
+  // 대상 승인 전에 멈춰서 사용자에게 받을 것이 있는지 본다 (#142, #144, #150).
+  //  - 등록해야만 배포되는 환경변수가 있을 때 (서버의 missingEnvNames)
+  //  - 분석이 포트를 찾지 못했을 때
+  //  - 사용자가 간단 배포에서 "배포 전에 포트 확인하기"를 켰을 때
+  // 어느 것도 아니면 지금까지처럼 바로 승인한다 (원클릭 유지). 확인하지 못해도 멈추지 않는다.
+  const [review, setReview] = useState<PreDeployReview | null>(null);
   const autoApproved = useRef(new Set<ApprovalGate>());
   useEffect(() => {
     if (!pendingGate || autoApproved.current.has(pendingGate)) return;
     autoApproved.current.add(pendingGate);
     if (pendingGate !== 'target') { void approveGate(pendingGate); return; }
     // 이 확인은 배포당 한 번만 시작한다(위의 autoApproved). 효과가 다시 실행돼도 취소하지 않아야 승인이 빠지지 않는다.
-    void getDeploymentAnalysisReport(deploymentId).then((report) => report.missingEnvNames ?? [], () => [] as string[]).then((names) => {
-      if (names.length > 0) setEnvNeeded(names); else void approveGate('target');
+    void Promise.all([
+      getDeploymentAnalysisReport(deploymentId).then((report) => report.missingEnvNames ?? [], () => [] as string[]),
+      getDeploymentIr(deploymentId).then((ir) => ({ ports: detectedPorts(ir.ir), version: typeof ir.version === 'number' ? ir.version : null }), () => ({ ports: [] as DetectedPort[], version: null })),
+    ]).then(([envNames, ir]) => {
+      const portMissing = ir.ports.some((item) => item.port === null);
+      const showPorts = ir.version !== null && (portMissing || reviewRequested(deploymentId));
+      if (envNames.length === 0 && !showPorts) { void approveGate('target'); return; }
+      setReview({ envNames, ports: showPorts ? ir.ports : [], irVersion: ir.version });
     });
   }, [pendingGate, approveGate, deploymentId]);
-  const waitingForEnv = envNeeded !== null && pendingGate === 'target';
+  const waitingForEnv = review !== null && pendingGate === 'target';
 
   const statusView = deploymentStatusView(currentStatus ?? 'received');
   // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
@@ -238,7 +260,7 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
           {elapsedText && <span className="run-head__elapsed" aria-label={`${t.run.elapsedLabel} ${elapsedText}`}>{elapsedText}</span>}
         </div>
         <p className="run-head__meta">
-          {view.outcome === 'active' && approvalError === null && <span>{waitingForEnv ? t.run.envInput.waiting : currentStepLabel(currentStatus, t)}</span>}
+          {view.outcome === 'active' && approvalError === null && <span>{waitingForEnv ? t.run.review.waiting : currentStepLabel(currentStatus, t)}</span>}
           <span className="run-head__id">{projectName ? `${displayProjectName(projectName)} · ` : ''}{t.dashboard.deploymentNo(deploymentId)}</span>
         </p>
       </div>
@@ -247,7 +269,8 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
 
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
-      {waitingForEnv && projectId && envNeeded && <EnvInputPanel projectId={projectId} names={envNeeded} onSaved={() => { setEnvNeeded(null); void approveGate('target'); }} />}
+      {waitingForEnv && projectId && review && <PreDeployPanel deploymentId={deploymentId} projectId={projectId} review={review}
+        onDone={() => { setReview(null); clearReview(deploymentId); void approveGate('target'); }} />}
 
       {approvalError !== null && <div className="notice error run-failure" role="alert">
         <strong>{t.run.approveFailed}</strong>

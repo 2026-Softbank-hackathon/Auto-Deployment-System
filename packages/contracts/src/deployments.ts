@@ -246,7 +246,7 @@ export type Diagnosis = z.infer<typeof DiagnosisSchema>;
 
 /**
  * 이전에 올린 소스(IR 포함)를 재사용해 바로 빌드부터 재배포한다.
- * `targetEnvironmentId` 를 주면 해당 환경으로 override (이슈 #140 과 공유).
+ * `targetEnvironmentId` 를 주면 해당 환경으로 override.
  */
 export const RedeployBodySchema = z.object({
   /** 재배포할 환경 ID override. 없으면 소스 deployment 의 환경 그대로. */
@@ -263,6 +263,25 @@ export const RedeployResponseSchema = z
   })
   .strict();
 export type RedeployResponse = z.infer<typeof RedeployResponseSchema>;
+
+// ── POST /deployments/:id/redeploy-to-target ─────────────────────────────────
+
+export const RedeployToTargetBodySchema = z.object({
+  /** 전환할 대상 벤더. 소스 배포와 달라야 한다. */
+  target: z.enum(["aws", "onprem"] as const),
+  /** 지정 시 해당 환경 ID 사용, 미지정 시 vendor+project 기준 default 환경 자동 매핑 */
+  targetEnvironmentId: z.string().regex(/^\d+$/).optional(),
+});
+export type RedeployToTargetBody = z.input<typeof RedeployToTargetBodySchema>;
+
+export const RedeployToTargetResponseSchema = z
+  .object({
+    deploymentId: IdStringSchema,
+    status: z.literal("queued"),
+    eventsUrl: z.string(),
+  })
+  .strict();
+export type RedeployToTargetResponse = z.infer<typeof RedeployToTargetResponseSchema>;
 
 // ── GET /deployments/:id/ai-usage ─────────────────────────────────────────────
 

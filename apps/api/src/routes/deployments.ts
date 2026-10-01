@@ -5,10 +5,15 @@
 
 import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
-import { TARGET_VENDORS, type TargetVendor, RedeployBodySchema } from "@camellia/contracts";
+import {
+  TARGET_VENDORS,
+  type TargetVendor,
+  RedeployBodySchema,
+  RedeployToTargetBodySchema,
+} from "@camellia/contracts";
 import { DeploymentService } from "../services/deployment-service.js";
 import { resolveProfile } from "../services/profile-resolver.js";
-import { idParams } from "../plugins/swagger.js";
+import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const VALID_VENDORS = new Set<string>(TARGET_VENDORS);
 
@@ -103,11 +108,11 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
     return svc.get(id);
   });
 
-  // POST /deployments/:id/redeploy
+  // POST /deployments/:id/redeploy — 이전 소스 · IR 그대로 재배포
   fastify.post<{ Params: { id: string }; Body: unknown }>("/:id/redeploy", {
     schema: {
       tags: ["deployments"],
-      summary: "이전 소스 · IR 그대로 재배포 (분석 · target 승인 skip)",
+      summary: "이전 소스 · IR 그대로 재배포 (분석 · target 승인 skip, 202)",
       params: idParams,
       body: {
         type: "object",
@@ -132,6 +137,33 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       : undefined;
 
     const result = await svc.redeploy(id, { targetEnvironmentId });
+    return reply.status(202).send(result);
+  });
+
+  // POST /deployments/:id/redeploy-to-target — 다른 환경으로 바로 배포
+  fastify.post<{ Params: { id: string } }>("/:id/redeploy-to-target", {
+    schema: {
+      tags: ["deployments"],
+      summary: "다른 환경으로 바로 배포 (온프레미스 ↔ 클라우드 전환, 202)",
+      params: idParams,
+      body: toJsonSchema(RedeployToTargetBodySchema),
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new ApiError(400, "VALIDATION_ERROR", "배포 ID는 양수 정수여야 합니다.");
+    }
+
+    const body = RedeployToTargetBodySchema.parse(request.body);
+    const environmentId = body.targetEnvironmentId !== undefined
+      ? Number(body.targetEnvironmentId)
+      : undefined;
+
+    const result = await svc.redeployToTarget(id, {
+      target: body.target as TargetVendor,
+      environmentId,
+    });
+
     return reply.status(202).send(result);
   });
 };

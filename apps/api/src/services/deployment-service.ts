@@ -14,6 +14,7 @@ import type {
   Deployment,
   DeploymentStatus,
   RedeployResponse,
+  RedeployToTargetResponse,
   TargetVendor,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
@@ -199,6 +200,234 @@ export class DeploymentService {
     const approval = approvalRes.rows[0] ?? null;
 
     return deploymentToDto(row, step, approval, this.platformDomain);
+  }
+
+  async redeployToTarget(
+    fromDeploymentId: number,
+    opts: { target: TargetVendor; environmentId?: number },
+  ): Promise<RedeployToTargetResponse> {
+    const { target, environmentId } = opts;
+
+    // 1. 소스 deployment 조회
+    const sourceRes = await this.pool.query<{
+      id: number;
+      project_id: number;
+      status: string;
+      target_profile: string | null;
+    }>(
+      `SELECT id, project_id, status, target_profile FROM deployments WHERE id = $1`,
+      [fromDeploymentId],
+    );
+    const source = sourceRes.rows[0];
+    if (!source) {
+      throw new ApiError(404, "NOT_FOUND", `배포 ID ${fromDeploymentId}를 찾을 수 없습니다.`);
+    }
+
+    // 2. 소스가 완료 상태인지 확인
+    const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled"]);
+    if (!TERMINAL_STATUSES.has(source.status)) {
+      throw new ApiError(
+        409,
+        "CONFLICT",
+        `소스 배포(ID: ${fromDeploymentId})가 아직 진행 중입니다. 상태: ${source.status}`,
+        "배포가 완료(succeeded/failed/cancelled)된 뒤 다시 시도하세요.",
+      );
+    }
+
+    // 3. 소스와 동일 target이면 거절 (#138 redeploy 가 처리)
+    const currentVendor = source.target_profile?.startsWith("aws") ? "aws" : "onprem";
+    if (currentVendor === target) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        `소스 배포와 동일한 target(${target})입니다.`,
+        "다른 환경으로의 전환에만 사용하세요. 동일 환경 재배포는 POST /:id/redeploy 를 사용하세요.",
+      );
+    }
+
+    // 4. 소스 source_version 조회
+    const svRes = await this.pool.query<{
+      id: number;
+      sha256: string;
+      storage_key: string;
+      size_bytes: string;
+    }>(
+      `SELECT id, sha256, storage_key, size_bytes FROM source_versions WHERE deployment_id = $1 ORDER BY id DESC LIMIT 1`,
+      [fromDeploymentId],
+    );
+    const sv = svRes.rows[0];
+    if (!sv) {
+      throw new ApiError(
+        409,
+        "CONFLICT",
+        `소스 배포(ID: ${fromDeploymentId})에 연결된 source_version이 없습니다.`,
+      );
+    }
+
+    // 5. 소스 IR 최신 버전 조회
+    const irRes = await this.pool.query<{ id: number; ir_json: Record<string, unknown> }>(
+      `SELECT id, ir_json FROM ir_versions WHERE deployment_id = $1 ORDER BY id DESC LIMIT 1`,
+      [fromDeploymentId],
+    );
+    const ir = irRes.rows[0];
+    if (!ir) {
+      throw new ApiError(
+        409,
+        "CONFLICT",
+        `소스 배포(ID: ${fromDeploymentId})에 IR이 없습니다.`,
+        "분석이 완료된 배포에서만 환경 전환이 가능합니다.",
+      );
+    }
+
+    // 6. target 환경 해석
+    const { targetEnvironmentId, registryEnvironmentId } =
+      await this.resolveEnvironmentsForRedeploy(source.project_id, target, environmentId);
+
+    // 7. target profile 매핑
+    const { resolveProfile } = await import("./profile-resolver.js");
+    const targetProfile = resolveProfile(target);
+
+    // 8. DB 트랜잭션: 새 deployment + source_version 참조 + ir 복사
+    const client = await this.pool.connect();
+    let newDeploymentId: number;
+    try {
+      await client.query("BEGIN");
+
+      // 새 deployment row (queued 상태로 직접 삽입 — analyze·target 승인 skip)
+      const depRes = await client.query<{ id: number }>(
+        `INSERT INTO deployments
+           (project_id, status, target_profile, target_environment_id, registry_environment_id)
+         VALUES ($1, 'queued', $2, $3, $4)
+         RETURNING id`,
+        [source.project_id, targetProfile, targetEnvironmentId, registryEnvironmentId],
+      );
+      newDeploymentId = depRes.rows[0]!.id;
+
+      // source_version 재사용 (새 row 생성 — 동일 sha256·storage_key)
+      await client.query(
+        `INSERT INTO source_versions (deployment_id, sha256, storage_key, size_bytes)
+         VALUES ($1, $2, $3, $4)`,
+        [newDeploymentId, sv.sha256, sv.storage_key, sv.size_bytes],
+      );
+
+      // IR 복사 (새 deployment 용 row, source = 'redeploy_target')
+      await client.query(
+        `INSERT INTO ir_versions (deployment_id, ir_json, source)
+         VALUES ($1, $2, 'redeploy_target')`,
+        [newDeploymentId, JSON.stringify(ir.ir_json)],
+      );
+
+      // env_lock 획득
+      const envKey = `environment:${targetEnvironmentId}`;
+      const leaseExpires = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2시간
+      try {
+        await client.query(
+          `INSERT INTO env_locks (env_key, deployment_id, lease_expires_at)
+           VALUES ($1, $2, $3)`,
+          [envKey, newDeploymentId, leaseExpires],
+        );
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          (err as NodeJS.ErrnoException & { code?: string }).code === "23505"
+        ) {
+          throw new ApiError(
+            409,
+            "DEPLOYMENT_LOCKED",
+            `${envKey} 환경에 이미 진행 중인 배포가 있습니다.`,
+            "현재 진행 중인 배포가 완료된 뒤 다시 시도하세요.",
+          );
+        }
+        throw err;
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 9. build job 큐잉 (analyze skip)
+    await this.boss.send("build", { deployment_id: newDeploymentId });
+
+    return {
+      deploymentId: String(newDeploymentId),
+      status: "queued" as const,
+      eventsUrl: `/api/v1/deployments/${newDeploymentId}/events`,
+    };
+  }
+
+  private async resolveEnvironmentsForRedeploy(
+    projectId: number,
+    targetVendor: TargetVendor,
+    explicitEnvironmentId?: number,
+  ): Promise<{ targetEnvironmentId: number; registryEnvironmentId: number }> {
+    const findDefault = async (type: "aws" | "onprem") => {
+      const result = await this.pool.query<{ id: number }>(
+        `SELECT id FROM environments
+         WHERE project_id = $1 AND type = $2 AND is_default = TRUE
+         LIMIT 1`,
+        [projectId, type],
+      );
+      return result.rows[0]?.id ?? null;
+    };
+
+    let targetEnvironmentId: number;
+
+    if (explicitEnvironmentId !== undefined) {
+      // 명시된 환경 ID 검증
+      const envRes = await this.pool.query<{ id: number; type: string }>(
+        `SELECT id, type FROM environments WHERE id = $1 AND project_id = $2`,
+        [explicitEnvironmentId, projectId],
+      );
+      const env = envRes.rows[0];
+      if (!env) {
+        throw new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          `환경 ID ${explicitEnvironmentId}를 찾을 수 없거나 이 프로젝트에 속하지 않습니다.`,
+        );
+      }
+      if (env.type !== targetVendor) {
+        throw new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          `환경 ID ${explicitEnvironmentId}의 타입(${env.type})이 요청한 target(${targetVendor})과 다릅니다.`,
+        );
+      }
+      targetEnvironmentId = explicitEnvironmentId;
+    } else {
+      const defaultId = await findDefault(targetVendor);
+      if (defaultId === null) {
+        throw new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          `${targetVendor} 기본 배포 환경이 등록되어 있지 않습니다.`,
+          `POST /environments 로 ${targetVendor} 환경을 먼저 등록하세요.`,
+        );
+      }
+      targetEnvironmentId = defaultId;
+    }
+
+    if (targetVendor === "aws") {
+      await this.validateRegistryCredentials(projectId, targetEnvironmentId);
+      return { targetEnvironmentId, registryEnvironmentId: targetEnvironmentId };
+    }
+
+    // onprem: registry는 aws default
+    const registryEnvironmentId = await findDefault("aws");
+    if (registryEnvironmentId === null) {
+      throw new ApiError(
+        409,
+        "AWS_REGISTRY_ENVIRONMENT_REQUIRED",
+        "On-Prem 배포 이미지를 저장할 기본 AWS 환경이 등록되어 있지 않습니다.",
+        "사용자 AWS 계정의 Private ECR을 사용하므로 AWS 환경을 먼저 등록하세요.",
+      );
+    }
+    await this.validateRegistryCredentials(projectId, registryEnvironmentId);
+    return { targetEnvironmentId, registryEnvironmentId };
   }
 
   async updateStatus(id: number, status: string, extra?: { error?: string; public_url?: string }) {

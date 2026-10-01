@@ -1,5 +1,4 @@
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
-import { DeploymentApiError } from '../api/deployment-api';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { followAppLink, type Navigate } from '../app/navigation';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { Keycap } from '../components/ui/Keycap';
@@ -10,9 +9,8 @@ import { AwsKeyForm } from '../features/deployment-start/AwsKeyForm';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { OnpremCard } from '../features/setup/OnpremCard';
+import { ProjectNameForm } from '../features/projects/ProjectNameForm';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
-
-const NAME_MAX = 100;
 
 function Card({ id, title, tone, status, children }: { id?: string; title: string; tone: MarbleTone; status: string; children: ReactNode }) {
   const titleId = useId();
@@ -25,46 +23,15 @@ function Card({ id, title, tone, status, children }: { id?: string; title: strin
   </section>;
 }
 
-function AppNameForm({ onCreate, onCancel }: { onCreate: (name: string) => Promise<void>; onCancel?: () => void }) {
-  const { t } = useI18n();
-  const nameId = useId();
-  const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed || saving) return;
-    setSaving(true);
-    setError(null);
-    try { await onCreate(trimmed); } catch (requestError) { setError(requestError); } finally { setSaving(false); }
-  }
-
-  return <>
-    <form className="setup-form" onSubmit={(event) => void submit(event)} autoComplete="off">
-      <div className="aws-key-form__field">
-        <label htmlFor={nameId}>{t.setup.app.nameLabel}</label>
-        <input id={nameId} value={name} onChange={(event) => setName(event.target.value)} maxLength={NAME_MAX} required autoComplete="off" spellCheck={false} disabled={saving} />
-      </div>
-      <Keycap type="submit" variant="secondary" disabled={saving || !name.trim()}>{saving ? t.deploy.aws.saving : t.setup.app.save}</Keycap>
-      {onCancel && <Keycap variant="ghost" disabled={saving} onClick={onCancel}>{t.deploy.aws.cancel}</Keycap>}
-    </form>
-    {error !== null && <div className="notice error" role="alert">
-      {error instanceof DeploymentApiError && error.status === 409 ? t.setup.app.nameTaken : errorMessage(error, t, t.setup.app.nameError)}
-    </div>}
-  </>;
-}
-
 /**
- * 연결 설정: 지금 고른 앱의 AWS 키 · 온프레미스 서버를 등록하고 바꾸고, 새 앱을 추가한다.
+ * 연결 설정: 지금 고른 프로젝트의 AWS 키 · 온프레미스 서버 · 환경변수를 등록하고 바꾼다.
+ * 프로젝트 목록과 새 프로젝트 추가는 내 프로젝트(/projects)에서 한다.
  * 처음 한 번만 하면 되고, 그다음부터 간단 배포에서는 ZIP만 올리면 된다.
  */
 export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
   const { state, refresh, createDeployProject, registerAws, registerOnprem } = useDeployProject();
   const [changingKey, setChangingKey] = useState(false);
-  const [addingApp, setAddingApp] = useState(false);
   const status = setupStatus(state);
   // 화면에 들어올 때 연결 상태를 다시 읽는다.
   useEffect(() => { void refresh(); }, [refresh]);
@@ -91,17 +58,13 @@ export function SetupPage({ onNavigate }: { onNavigate: Navigate }) {
     </div>
 
     <Card title={t.setup.app.title} tone={project ? 'success' : 'waiting'} status={project ? t.setup.status.done : t.setup.status.needed}>
-      {/* 여기는 지금 고른 앱의 연결을 관리하는 곳이다. 앱을 바꾸는 것은 간단 배포 화면에서만 한다. */}
-      {project && <p className="setup-card__value">{displayProjectName(project.name)}</p>}
-      {project && !addingApp && <>
-        <p>{t.setup.app.doneCopy}</p>
-        <div><Keycap variant="secondary" onClick={() => setAddingApp(true)}>{t.setup.app.add}</Keycap></div>
-      </>}
-      {(!project || addingApp) && <>
-        <p>{project ? t.setup.app.addCopy : t.setup.app.copy}</p>
-        <AppNameForm onCancel={addingApp ? () => setAddingApp(false) : undefined}
-          onCreate={async (name) => { await createDeployProject(name); setAddingApp(false); setChangingKey(false); }} />
-      </>}
+      {project
+        ? <>
+          <p className="setup-card__value">{displayProjectName(project.name)}</p>
+          <p>{t.setup.app.doneCopy}</p>
+          <div><a className="setup-summary__link" href="/projects" onClick={(event) => followAppLink(event, onNavigate)}>{t.nav.projects}</a></div>
+        </>
+        : <><p>{t.setup.app.copy}</p><ProjectNameForm onCreate={createDeployProject} /></>}
     </Card>
 
     <Card title={t.setup.aws.title} tone={awsTone} status={awsStatus}>

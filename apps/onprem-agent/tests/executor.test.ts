@@ -42,10 +42,11 @@ class FakeRuntimeManager implements RuntimeManager {
 
 describe("On-Prem job 실행", () => {
   it("Fake Tunnel endpoint까지 확보한 뒤 ready_for_verify를 반환한다", async () => {
+    const tunnel = new FakeTunnelProvider("https://fake.example.test");
     const executor = new DockerOnpremJobExecutor({
       imageManager: new FakeImageManager(),
       runtimeManager: new FakeRuntimeManager(),
-      tunnelProvider: new FakeTunnelProvider("https://fake.example.test"),
+      tunnelProvider: tunnel,
       now: () => new Date("2026-10-01T00:00:00.000Z"),
     });
 
@@ -55,6 +56,14 @@ describe("On-Prem job 실행", () => {
       localUrl: "http://127.0.0.1:49152",
       runningDigest: createJob().image.digest,
     });
+    expect(tunnel.starts).toEqual([
+      {
+        jobId: "job-001",
+        deploymentId: 42,
+        environmentId: "env-onprem-1",
+        localUrl: "http://127.0.0.1:49152",
+      },
+    ]);
   });
 
   it("Tunnel provider가 없으면 리소스를 정리하고 실패한다", async () => {
@@ -153,6 +162,37 @@ describe("On-Prem job 실행", () => {
     expect(cleanups).toBe(1);
   });
 
+  it("같은 digest라도 Tunnel이 중단됐으면 정리 후 다시 실행한다", async () => {
+    const runtime = new FakeRuntimeManager();
+    let tunnelRunning = true;
+    let tunnelStarts = 0;
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new FakeImageManager(),
+      runtimeManager: runtime,
+      tunnelProvider: {
+        async start() {
+          tunnelStarts += 1;
+          tunnelRunning = true;
+          return { endpoint: "https://fake.example.test" };
+        },
+        async stop() {
+          tunnelRunning = false;
+        },
+        async isRunning() {
+          return tunnelRunning;
+        },
+      },
+    });
+
+    await executor.execute(createJob());
+    tunnelRunning = false;
+    await executor.execute(createJob({ jobId: "job-002" }));
+
+    expect(runtime.starts).toBe(2);
+    expect(tunnelStarts).toBe(2);
+    expect(runtime.cleanups).toEqual([createJob().image.digest]);
+  });
+
   it("다른 digest 성공 후에만 이전 버전 리소스를 정리한다", async () => {
     const runtime = new FakeRuntimeManager();
     const executor = new DockerOnpremJobExecutor({
@@ -228,6 +268,26 @@ describe("On-Prem job 실행", () => {
     expect(tunnel.stops).toEqual([createJob().deploymentId]);
   });
 
+  it("Tunnel 준비 요청 중 취소 오류를 tunnel_failed로 덮어쓰지 않는다", async () => {
+    const runtime = new FakeRuntimeManager();
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new FakeImageManager(),
+      runtimeManager: runtime,
+      tunnelProvider: {
+        async start() {
+          throw new AgentError("cancelled", "작업이 취소되었습니다.");
+        },
+        async stop() {},
+      },
+    });
+
+    await expect(executor.execute(createJob())).resolves.toMatchObject({
+      status: "failed",
+      errorCode: "cancelled",
+    });
+    expect(runtime.cleanups).toEqual([createJob().image.digest]);
+  });
+
   it("실패한 job은 더 높은 attempt에서 다시 실행한다", async () => {
     let starts = 0;
     const executor = new DockerOnpremJobExecutor({
@@ -255,5 +315,22 @@ describe("On-Prem job 실행", () => {
     expect(first).toMatchObject({ status: "failed", errorCode: "compose_failed" });
     expect(second).toMatchObject({ status: "ready_for_verify" });
     expect(starts).toBe(2);
+  });
+
+  it("종료 시 활성 Tunnel과 해당 Compose 리소스를 정리한다", async () => {
+    const runtime = new FakeRuntimeManager();
+    const tunnel = new FakeTunnelProvider("https://fake.example.test");
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new FakeImageManager(),
+      runtimeManager: runtime,
+      tunnelProvider: tunnel,
+    });
+
+    await executor.execute(createJob());
+    await executor.shutdown();
+    await executor.shutdown();
+
+    expect(tunnel.stops).toEqual([createJob().deploymentId]);
+    expect(runtime.cleanups).toEqual([createJob().image.digest]);
   });
 });

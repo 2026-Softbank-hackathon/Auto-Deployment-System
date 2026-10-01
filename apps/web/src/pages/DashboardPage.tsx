@@ -3,6 +3,7 @@ import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { Keycap } from '../components/ui/Keycap';
 import { Koro } from '../components/ui/Koro';
 import { StatusTape } from '../components/ui/StatusTape';
+import { RedeployButton } from '../features/deployment-progress/RedeployButton';
 import { DeploymentRow } from '../features/dashboard/DeploymentRow';
 import { useDeploymentList, type DeploymentListItem } from '../features/dashboard/useDeploymentList';
 import { isStalled } from '../features/dashboard/format';
@@ -77,7 +78,9 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
       <Counts items={state.items} now={state.loadedAt} />
       {state.partialFailures > 0 && <p className="dashboard-status">{t.dashboard.partialFailures(state.partialFailures)}</p>}
       <section className="deployment-list" aria-label={t.dashboard.listLabel}>
-        {state.items.map((deployment) => <DeploymentRow key={deployment.id} deployment={deployment} now={state.loadedAt} onNavigate={onNavigate} />)}
+        {state.items.map((deployment) => <DeploymentRow key={deployment.id} deployment={deployment} now={state.loadedAt} onNavigate={onNavigate}
+          extraAction={['failed', 'stopped'].includes(deploymentStatusView(deployment.status).outcome)
+            ? <RedeployButton compact variant="ghost" deploymentId={deployment.id} onStarted={(id) => onNavigate(`/deployments/${encodeURIComponent(id)}`)} /> : undefined} />)}
       </section>
     </>}
   </>;

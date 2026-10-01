@@ -24,7 +24,11 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = async (
+const authPlugin: FastifyPluginAsync<{
+  apiKey?: string;
+  nodeEnv?: string;
+  agentJobClaimEnabled?: boolean;
+}> = async (
   fastify,
   opts
 ) => {
@@ -49,6 +53,15 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
 
     // API-01: 세션 발급은 본문 apiKey 로만 인증
     if (request.method === "POST" && path === "/api/v1/auth/session") {
+      return;
+    }
+
+    // Agent 전용 키 검증은 Job claim 라우트가 처리한다.
+    if (
+      opts.agentJobClaimEnabled &&
+      request.method === "POST" &&
+      path === "/api/v1/agents/jobs/claim"
+    ) {
       return;
     }
 

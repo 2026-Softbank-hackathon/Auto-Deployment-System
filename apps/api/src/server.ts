@@ -46,6 +46,8 @@ import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
 import authRoutes from "./routes/auth.js";
 import { SessionService } from "./services/session-service.js";
+import { AgentJobService } from "./services/agent-job-service.js";
+import agentJobsRoutes, { type AgentIdentity } from "./routes/agent-jobs.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -65,6 +67,12 @@ export interface BuildServerOptions {
   sessionTtlSec?: number;
   /** 플랫폼 도메인 (고정 서비스 URL 발급용). 예: `camellia.app`. 미세팅 시 publicUrl=null */
   platformDomain?: string;
+  /** Agent bearer key 검증 함수. Agent 등록 API와 같은 인증기를 주입한다. */
+  agentAuthenticator?: (token: string) => Promise<AgentIdentity | null>;
+  /** Agent job long-poll 제한 시간 (테스트용 override 포함). 기본 20초 */
+  agentJobPollTimeoutMs?: number;
+  /** Agent job poll 간격 (테스트용 override 포함). 기본 500ms */
+  agentJobPollIntervalMs?: number;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -85,7 +93,11 @@ export async function buildServer(opts: BuildServerOptions) {
   // ── plugins ────────────────────────────────────────────────────────────────
   await fastify.register(requestIdPlugin);
   await fastify.register(errorHandlerPlugin);
-  await fastify.register(authPlugin, { apiKey: opts.apiKey, nodeEnv: opts.nodeEnv });
+  await fastify.register(authPlugin, {
+    apiKey: opts.apiKey,
+    nodeEnv: opts.nodeEnv,
+    agentJobClaimEnabled: opts.agentAuthenticator !== undefined,
+  });
   await fastify.register(multipartPlugin);
   await fastify.register(sseBrokerPlugin);
   await fastify.register(swaggerPlugin);
@@ -107,6 +119,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const secretService = new SecretService(opts.pool, secretMasterKey);
   const environmentService = new EnvironmentService(opts.pool);
   const envVarService = new EnvVarService(opts.pool);
+  const agentJobService = new AgentJobService(opts.pool);
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
@@ -239,6 +252,16 @@ export async function buildServer(opts: BuildServerOptions) {
       prefix: "/environments",
       environmentService,
     });
+
+    if (opts.agentAuthenticator) {
+      v1.register(agentJobsRoutes, {
+        prefix: "/agents",
+        agentJobService,
+        authenticate: opts.agentAuthenticator,
+        pollTimeoutMs: opts.agentJobPollTimeoutMs,
+        pollIntervalMs: opts.agentJobPollIntervalMs,
+      });
+    }
   }, { prefix: "/api/v1" });
 
   return fastify;

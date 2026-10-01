@@ -86,7 +86,7 @@ export async function handleProvision(
       }
       const region = ecrRegionFromRepository(context.repository_uri);
       await createOrGetOnpremAgentJob(deps, {
-        jobId: `onprem-deployment-${deploymentId}`,
+        jobId: String(deploymentId),
         attempt: 1,
         deploymentId,
         environmentId: String(environmentId),

@@ -458,6 +458,10 @@ describe("POST /api/v1/deployments/:id/approvals", () => {
     expect(body.decision).toBe("approve");
     expect(body.newStatus).toBe("queued");
     expect(body.lockAcquired).toBe(true);
+    expect(mockBoss.sentJobs).toContainEqual({
+      name: "build",
+      data: { deployment_id: 42 },
+    });
   });
 
   it("returns 400 for invalid gate value", async () => {

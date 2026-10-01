@@ -61,6 +61,20 @@ export const SourceVersionSchema = z.object({
 });
 export type SourceVersion = z.infer<typeof SourceVersionSchema>;
 
+export const BuildArtifactSchema = z.object({
+  id: z.number().int().positive(),
+  deployment_id: z.number().int().positive(),
+  repository_uri: z.string().min(1),
+  image_tag: z.string().min(1),
+  image_digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  immutable_ref: z.string().min(1),
+  platform: z.string().min(1),
+  strategy: z.enum(["dockerfile", "railpack"]),
+  created_at: z.date(),
+  updated_at: z.date(),
+});
+export type BuildArtifact = z.infer<typeof BuildArtifactSchema>;
+
 // ── analysis_reports ──────────────────────────────────────────────────────────
 
 export const AnalysisReportSchema = z.object({

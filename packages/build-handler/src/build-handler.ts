@@ -64,10 +64,16 @@ export class BuildHandler {
         dockerfilePath,
         taggedRef,
         platform,
+        commandEnvironment: request.commandEnvironment,
       });
       strategy = "dockerfile";
     } else if (request.plan.buildpack === "railpack") {
-      digest = await this.buildRailpack({ contextPath, taggedRef, platform });
+      digest = await this.buildRailpack({
+        contextPath,
+        taggedRef,
+        platform,
+        commandEnvironment: request.commandEnvironment,
+      });
       strategy = "railpack";
     } else {
       throw new BuildError(
@@ -95,6 +101,7 @@ export class BuildHandler {
     dockerfilePath: string;
     taggedRef: string;
     platform: string;
+    commandEnvironment?: NodeJS.ProcessEnv;
   }): Promise<string> {
     const temporaryDirectory = await fs.mkdtemp(
       path.join(this.temporaryRoot, "camellia-build-"),
@@ -119,6 +126,7 @@ export class BuildHandler {
           input.contextPath,
         ],
         cwd: input.contextPath,
+        env: input.commandEnvironment,
       });
 
       let metadata: Record<string, unknown>;
@@ -151,6 +159,7 @@ export class BuildHandler {
     contextPath: string;
     taggedRef: string;
     platform: string;
+    commandEnvironment?: NodeJS.ProcessEnv;
   }): Promise<string> {
     await this.runBuildCommand({
       command: "railpack",
@@ -163,12 +172,14 @@ export class BuildHandler {
         input.contextPath,
       ],
       cwd: input.contextPath,
+      env: input.commandEnvironment,
     });
 
     const pushed = await this.runBuildCommand({
       command: "docker",
       args: ["push", input.taggedRef],
       cwd: input.contextPath,
+      env: input.commandEnvironment,
     });
     const digest = extractPushDigest(`${pushed.stdout}\n${pushed.stderr}`);
     if (!digest) {
@@ -238,12 +249,8 @@ async function canonicalizeInsideWorkspace(
 }
 
 async function requireDirectory(directoryPath: string): Promise<void> {
-  try {
-    const stats = await fs.stat(directoryPath);
-    if (stats.isDirectory()) return;
-  } catch {
-    // Normalized below.
-  }
+  const stats = await fs.stat(directoryPath).catch(() => null);
+  if (stats?.isDirectory()) return;
   throw new BuildError(
     "BUILD_CONTEXT_NOT_FOUND",
     "빌드 context 디렉터리를 찾을 수 없습니다.",
@@ -254,12 +261,8 @@ async function requireFile(
   filePath: string,
   code: "DOCKERFILE_NOT_FOUND",
 ): Promise<void> {
-  try {
-    const stats = await fs.stat(filePath);
-    if (stats.isFile()) return;
-  } catch {
-    // Normalized below.
-  }
+  const stats = await fs.stat(filePath).catch(() => null);
+  if (stats?.isFile()) return;
   throw new BuildError(code, "Dockerfile을 찾을 수 없습니다.");
 }
 

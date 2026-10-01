@@ -115,6 +115,31 @@ describe("BuildHandler", () => {
     ]);
   });
 
+  it("passes an isolated Docker command environment to every build command", async () => {
+    const runner = new FakeRunner(async (request) => {
+      if (request.command === "docker") {
+        return { stdout: `digest: ${DIGEST}`, stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    });
+    const commandEnvironment = {
+      PATH: process.env["PATH"],
+      DOCKER_CONFIG: "/tmp/camellia-docker-config",
+    };
+
+    await new BuildHandler({ runner }).build({
+      workspacePath,
+      plan: { context: ".", buildpack: "railpack" },
+      image: { repository: "registry.example.com/camellia/demo", tag: "v3" },
+      commandEnvironment,
+    });
+
+    expect(runner.calls).toHaveLength(2);
+    expect(runner.calls.every((call) => call.env === commandEnvironment)).toBe(
+      true,
+    );
+  });
+
   it("rejects a context path outside the workspace", async () => {
     const runner = new FakeRunner();
     await expect(

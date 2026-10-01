@@ -107,7 +107,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # railpack(Dockerfile 없는 앱) → 같은 스택의 buildkitd
       BUILDKIT_HOST: tcp://buildkit:1234
+      # AI 분석 보완 · 실패 진단 (D-56). 전부 선택 값 — .env(SSM)에 있을 때만 넘어간다.
+      # AI_PROVIDER 미설정이면 ANTHROPIC_API_KEY 가 있을 때 Claude API, 없으면 AI 비활성
+      AI_PROVIDER:
       ANTHROPIC_API_KEY:
+      AI_MODEL_ANALYZE:
+      AI_MODEL_DIAGNOSE:
       TERRAFORM_STATE_BUCKET:
       TERRAFORM_STATE_REGION:
       TERRAFORM_STATE_KMS_KEY_ID:

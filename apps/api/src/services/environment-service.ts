@@ -7,11 +7,18 @@
  */
 
 import type { Pool } from "@camellia/db";
-import type { AwsConfig, Environment, OnpremConfig } from "@camellia/contracts";
+import type {
+  AwsConfig,
+  CreateEnvironmentResponse,
+  Environment,
+  OnpremConfig,
+} from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export type { AwsConfig, OnpremConfig };
 export type EnvironmentDto = Environment;
+/** POST /environments 응답 전용 DTO — onpremConfig 에 agentRegistrationToken 을 1회 포함(#61) */
+export type CreateEnvironmentDto = CreateEnvironmentResponse;
 
 type EnvRow = {
   id: number;
@@ -50,7 +57,7 @@ export class EnvironmentService {
     isDefault?: boolean;
     awsConfig?: AwsConfig;
     onpremConfig?: OnpremConfig;
-  }): Promise<EnvironmentDto> {
+  }): Promise<CreateEnvironmentDto> {
     const proj = await this.pool.query(`SELECT 1 FROM projects WHERE id = $1`, [input.projectId]);
     if (proj.rowCount === 0) {
       throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${input.projectId}를 찾을 수 없습니다.`);
@@ -206,6 +213,7 @@ export class EnvironmentService {
     }
   }
 
+  /** 목록/단건 조회 응답. onpremConfig 에서 agentRegistrationToken 은 제거한다(#61) */
   private toDto(row: EnvRow): EnvironmentDto {
     return {
       id: row.id,
@@ -214,7 +222,9 @@ export class EnvironmentService {
       type: row.type,
       isDefault: row.is_default,
       awsConfig: row.aws_config ?? undefined,
-      onpremConfig: row.onprem_config ?? undefined,
+      onpremConfig: row.onprem_config
+        ? { hostname: row.onprem_config.hostname }
+        : undefined,
       agentStatus: row.agent_status ?? null,
       lastSeenAt: row.last_seen_at ? row.last_seen_at.toISOString() : null,
       createdAt: row.created_at.toISOString(),

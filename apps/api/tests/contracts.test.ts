@@ -19,6 +19,7 @@ import {
   AiUsageSchema,
   AnalysisReportSchema,
   CreateDeploymentResponseSchema,
+  CreateEnvironmentResponseSchema,
   DeploymentEventSchema,
   DeploymentHealthSchema,
   DeploymentSchema,
@@ -460,15 +461,20 @@ describe("environments 응답 계약", () => {
       onpremConfig: { agentRegistrationToken: "tok", hostname: "mac.local" },
     });
     expect(created.statusCode).toBe(201);
-    expectContract(EnvironmentSchema, created.json());
+    // 생성 응답에서만 agentRegistrationToken 을 1회 그대로 돌려준다(#61)
+    expectContract(CreateEnvironmentResponseSchema, created.json());
+    expect(created.json().onpremConfig.agentRegistrationToken).toBe("tok");
 
     const list = await call("GET", "/api/v1/environments?projectId=1");
     expect(list.statusCode).toBe(200);
     expectContract(EnvironmentListSchema, list.json());
+    // 목록/단건 조회 응답에는 agentRegistrationToken 이 없다(#61)
+    expect(list.json()[0].onpremConfig).toEqual({ hostname: "mac.local" });
 
     const one = await call("GET", "/api/v1/environments/10");
     expect(one.statusCode).toBe(200);
     expectContract(EnvironmentSchema, one.json());
+    expect(one.json().onpremConfig).toEqual({ hostname: "mac.local" });
 
     const del = await call("DELETE", "/api/v1/environments/10");
     expect(del.statusCode).toBe(204);

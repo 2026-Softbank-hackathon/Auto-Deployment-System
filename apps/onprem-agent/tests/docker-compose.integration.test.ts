@@ -68,7 +68,6 @@ describe.skipIf(!enabled)("Docker Compose 통합", () => {
   it("서로 다른 Deployment의 포트·Compose 리소스를 격리하고 개별 정리한다", async () => {
     const runtime = new DockerComposeRuntime(runner, {
       stateRoot,
-      healthChecker: new LocalHealthChecker({ attempts: 30, intervalMs: 500 }),
     });
     const first = await runtime.start(
       integrationJob(101, "integration-a", "integration-job-a"),

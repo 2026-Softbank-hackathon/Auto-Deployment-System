@@ -27,6 +27,7 @@ type JobRecord = {
 };
 
 type ActiveDeployment = {
+  deploymentId: number;
   digest: string;
   result: Extract<OnpremExecutionResult, { status: "ready_for_verify" }>;
   resources: RunningDeployment;
@@ -39,6 +40,31 @@ type DeploymentRun = {
 
 function deploymentKey(job: OnpremAgentJob): string {
   return `${job.deploymentId}:${job.environmentId}`;
+}
+
+function extractLoopbackPort(localUrl: string): number {
+  let url: URL;
+  try {
+    url = new URL(localUrl);
+  } catch {
+    throw new AgentError("tunnel_failed", "로컬 endpoint가 올바르지 않습니다.");
+  }
+  const localPort = Number(url.port);
+  if (
+    url.protocol !== "http:" ||
+    url.hostname !== "127.0.0.1" ||
+    !Number.isSafeInteger(localPort) ||
+    localPort < 1 ||
+    localPort > 65_535 ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    throw new AgentError("tunnel_failed", "로컬 endpoint가 올바르지 않습니다.");
+  }
+  return localPort;
 }
 
 function cloneResultForJob(
@@ -106,11 +132,12 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
     const key = deploymentKey(job);
     const active = this.activeDeployments.get(key);
     if (active?.digest === job.image.digest) {
-      if (await active.resources.isRunning()) {
+      if (await this.isDeploymentRunning(active)) {
         const current = Promise.resolve(cloneResultForJob(active.result, job));
         this.jobs.set(job.jobId, { attempt: job.attempt, promise: current });
         return current;
       }
+      await this.tunnelProvider?.stop(active.deploymentId).catch(() => undefined);
       await active.resources.cleanup().catch(() => undefined);
       this.activeDeployments.delete(key);
     }
@@ -130,9 +157,10 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
     ).then(async () => {
       const latest = this.activeDeployments.get(key);
       if (latest?.digest === job.image.digest) {
-        if (await latest.resources.isRunning()) {
+        if (await this.isDeploymentRunning(latest)) {
           return cloneResultForJob(latest.result, job);
         }
+        await this.tunnelProvider?.stop(latest.deploymentId).catch(() => undefined);
         await latest.resources.cleanup().catch(() => undefined);
         this.activeDeployments.delete(key);
       }
@@ -146,6 +174,18 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
       }
     });
     return execution;
+  }
+
+  private async isDeploymentRunning(
+    deployment: ActiveDeployment,
+  ): Promise<boolean> {
+    if (!(await deployment.resources.isRunning())) return false;
+    if (!this.tunnelProvider?.isRunning) return true;
+    try {
+      return await this.tunnelProvider.isRunning(deployment.deploymentId);
+    } catch {
+      return false;
+    }
   }
 
   private async perform(
@@ -178,12 +218,14 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
       let tunnel;
       try {
         tunnel = await this.tunnelProvider.start({
+          jobId: job.jobId,
           deploymentId: job.deploymentId,
           environmentId: job.environmentId,
-          localUrl: running.localUrl,
-        });
+          localPort: extractLoopbackPort(running.localUrl),
+        }, { signal });
         tunnelStarted = true;
-      } catch {
+      } catch (error) {
+        if (normalizeAgentError(error).code === "cancelled") throw error;
         throw new AgentError("tunnel_failed", "Tunnel 시작에 실패했습니다.");
       }
       throwIfAborted(signal);
@@ -214,6 +256,7 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
         await previous.resources.cleanup();
       }
       this.activeDeployments.set(key, {
+        deploymentId: job.deploymentId,
         digest: job.image.digest,
         result,
         resources: running,
@@ -230,6 +273,19 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
         localUrl,
       });
     }
+  }
+
+  async shutdown(): Promise<void> {
+    const deployments = [...this.activeDeployments.values()];
+    this.activeDeployments.clear();
+    this.jobs.clear();
+    this.deploymentRuns.clear();
+    await Promise.allSettled(
+      deployments.flatMap((deployment) => [
+        this.tunnelProvider?.stop(deployment.deploymentId) ?? Promise.resolve(),
+        deployment.resources.cleanup(),
+      ]),
+    );
   }
 
   private failureResult(

@@ -16,6 +16,7 @@ import multipartPlugin from "./plugins/multipart.js";
 import sseBrokerPlugin from "./plugins/sse-broker.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import { startPgListener } from "./plugins/pg-listener.js";
+import auditLogPlugin from "./plugins/audit-log.js";
 
 import { ProjectService } from "./services/project-service.js";
 import { DeploymentService } from "./services/deployment-service.js";
@@ -29,8 +30,16 @@ import { AiUsageService } from "./services/ai-usage-service.js";
 import { SecretService } from "./services/secret-service.js";
 import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
+import { AgentService } from "./services/agent-service.js";
+import { AuditLogService } from "./services/audit-log-service.js";
+import {
+  AgentEcrCredentialService,
+  type AwsEcrRegistryFactory,
+} from "./services/agent-ecr-credential-service.js";
 
 import projectsRoutes from "./routes/projects.js";
+import auditLogsRoutes from "./routes/audit-logs.js";
+import agentsRoutes from "./routes/agents.js";
 import projectEnvRoutes from "./routes/project-env.js";
 import deploymentsRoutes from "./routes/deployments.js";
 import deploymentEventsRoutes from "./routes/deployment-events.js";
@@ -46,6 +55,9 @@ import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
 import authRoutes from "./routes/auth.js";
 import { SessionService } from "./services/session-service.js";
+import { AgentJobService } from "./services/agent-job-service.js";
+import agentJobsRoutes, { type AgentIdentity } from "./routes/agent-jobs.js";
+import agentEcrCredentialRoutes from "./routes/agent-ecr-credentials.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -63,6 +75,16 @@ export interface BuildServerOptions {
   secretMasterKey?: Buffer;
   /** API-01 세션 TTL(초). 기본 3600 */
   sessionTtlSec?: number;
+  /** 플랫폼 도메인 (고정 서비스 URL 발급용). 예: `camellia.app`. 미세팅 시 publicUrl=null */
+  platformDomain?: string;
+  /** Agent bearer key 검증 함수. Agent 등록 API와 같은 인증기를 주입한다. */
+  agentAuthenticator?: (token: string) => Promise<AgentIdentity | null>;
+  /** Agent job long-poll 제한 시간 (테스트용 override 포함). 기본 20초 */
+  agentJobPollTimeoutMs?: number;
+  /** Agent job poll 간격 (테스트용 override 포함). 기본 500ms */
+  agentJobPollIntervalMs?: number;
+  /** ECR client factory (테스트용 override). */
+  awsEcrRegistryFactory?: AwsEcrRegistryFactory;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -83,7 +105,12 @@ export async function buildServer(opts: BuildServerOptions) {
   // ── plugins ────────────────────────────────────────────────────────────────
   await fastify.register(requestIdPlugin);
   await fastify.register(errorHandlerPlugin);
-  await fastify.register(authPlugin, { apiKey: opts.apiKey, nodeEnv: opts.nodeEnv });
+  await fastify.register(authPlugin, {
+    apiKey: opts.apiKey,
+    nodeEnv: opts.nodeEnv,
+    agentJobClaimEnabled: true,
+    agentEcrCredentialEnabled: true,
+  });
   await fastify.register(multipartPlugin);
   await fastify.register(sseBrokerPlugin);
   await fastify.register(swaggerPlugin);
@@ -93,7 +120,7 @@ export async function buildServer(opts: BuildServerOptions) {
 
   // ── services ───────────────────────────────────────────────────────────────
   const projectService = new ProjectService(opts.pool);
-  const deploymentService = new DeploymentService(opts.pool, opts.boss, opts.storage);
+  const deploymentService = new DeploymentService(opts.pool, opts.boss, opts.storage, opts.platformDomain);
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);
   const analysisReportService = new AnalysisReportService(opts.pool);
@@ -105,10 +132,23 @@ export async function buildServer(opts: BuildServerOptions) {
   const secretService = new SecretService(opts.pool, secretMasterKey);
   const environmentService = new EnvironmentService(opts.pool);
   const envVarService = new EnvVarService(opts.pool);
+  const agentJobService = new AgentJobService(opts.pool);
+  const agentEcrCredentialService = new AgentEcrCredentialService(
+    opts.pool,
+    secretService,
+    opts.awsEcrRegistryFactory,
+  );
   const sessionService = opts.apiKey
     ? new SessionService(opts.apiKey, opts.sessionTtlSec ?? 3600)
     : undefined;
+  const agentService = new AgentService(opts.pool);
+  const auditLogService = new AuditLogService(opts.pool);
+  const authenticateAgent = opts.agentAuthenticator ??
+    ((token: string) => agentService.authenticate(token));
   const sseBroker = fastify.sseBroker;
+
+  // ── audit-log plugin ───────────────────────────────────────────────────────
+  await fastify.register(auditLogPlugin, { auditLogService });
 
   // ── pg-listener (LISTEN → SSE relay) ──────────────────────────────────────
   if (opts.enablePgListener !== false) {
@@ -236,6 +276,29 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(environmentsRoutes, {
       prefix: "/environments",
       environmentService,
+    });
+
+    v1.register(agentsRoutes, {
+      agentService,
+    });
+
+    v1.register(agentJobsRoutes, {
+      prefix: "/agents",
+      agentJobService,
+      authenticate: authenticateAgent,
+      pollTimeoutMs: opts.agentJobPollTimeoutMs,
+      pollIntervalMs: opts.agentJobPollIntervalMs,
+    });
+
+    v1.register(auditLogsRoutes, {
+      prefix: "/audit-logs",
+      auditLogService,
+    });
+
+    v1.register(agentEcrCredentialRoutes, {
+      prefix: "/agents",
+      service: agentEcrCredentialService,
+      authenticate: authenticateAgent,
     });
   }, { prefix: "/api/v1" });
 

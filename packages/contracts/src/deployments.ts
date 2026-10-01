@@ -22,7 +22,6 @@ import {
   DeploymentStatusSchema,
   IdStringSchema,
   IsoDateTimeSchema,
-  PgBigIntSchema,
   type TargetProfile,
   type TargetVendor,
 } from "./common.js";
@@ -89,8 +88,8 @@ export const IrVersionSchema = z
   .object({
     deploymentId: IdStringSchema,
     ir: z.record(z.unknown()),
-    /** 1부터 시작하는 배포 내 IR 버전. 실제 DB 에서는 문자열("1")로 나간다 (PgBigIntSchema 참고) */
-    version: PgBigIntSchema,
+    /** 1부터 시작하는 배포 내 IR 버전 (PATCH 요청의 version 과 같은 number) */
+    version: z.number().int(),
     generatedAt: IsoDateTimeSchema,
     /** "analyzer" | "ai_filled" | "analyzer_cache" | "user_edited" */
     source: z.string(),

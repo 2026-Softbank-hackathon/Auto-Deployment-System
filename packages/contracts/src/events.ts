@@ -47,7 +47,7 @@ export const LogLineDataSchema = z.object({ step: z.string(), line: z.string() }
 
 /** IR 수동 편집 완료 (API) */
 export const IrUpdatedDataSchema = z
-  .object({ deploymentId: IdStringSchema, version: PgBigIntSchema, source: z.string() })
+  .object({ deploymentId: IdStringSchema, version: z.number().int(), source: z.string() })
   .strict();
 
 /** 누락 리소스 결정 반영 (API) */

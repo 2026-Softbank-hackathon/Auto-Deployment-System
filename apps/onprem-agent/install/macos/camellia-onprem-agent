@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+INSTALL_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+
+if [ "${1:-}" = "register" ]; then
+  exec /usr/bin/env node "$INSTALL_ROOT/lib/main.js" --register-only
+fi
+
+exec /usr/bin/env node "$INSTALL_ROOT/lib/main.js"

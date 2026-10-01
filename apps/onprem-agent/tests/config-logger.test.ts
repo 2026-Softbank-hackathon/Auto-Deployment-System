@@ -3,23 +3,23 @@ import { loadAgentConfig } from "../src/config.js";
 import { StructuredLogger } from "../src/logger.js";
 
 describe("Agent 설정과 구조화 로그", () => {
-  it("식별자와 등록 토큰을 검증한다", () => {
+  it("최초 등록 설정과 등록 이후 설정을 구분한다", () => {
     expect(
       loadAgentConfig({
-        ONPREM_AGENT_ID: "agent-seoul-01",
+        ONPREM_CONTROL_PLANE_URL: "https://control.camellia.example",
         ONPREM_AGENT_REGISTRATION_TOKEN: "registration-token-value",
       }),
     ).toMatchObject({
-      agentId: "agent-seoul-01",
+      controlPlaneUrl: "https://control.camellia.example",
       registrationToken: "registration-token-value",
     });
 
-    expect(() => loadAgentConfig({})).toThrow();
+    expect(loadAgentConfig({})).toMatchObject({
+      controlPlaneUrl: undefined,
+      registrationToken: undefined,
+    });
     expect(() =>
-      loadAgentConfig({
-        ONPREM_AGENT_ID: "bad id",
-        ONPREM_AGENT_REGISTRATION_TOKEN: "short",
-      }),
+      loadAgentConfig({ ONPREM_AGENT_REGISTRATION_TOKEN: "short" }),
     ).toThrow();
   });
 

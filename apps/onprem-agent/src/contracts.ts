@@ -65,6 +65,10 @@ export type OnpremExecutionResult =
 export interface AgentControlPlaneClient {
   claimJob(): Promise<OnpremAgentJob | null>;
   getEcrCredential(jobId: string): Promise<EcrCredential>;
+  prepareTunnel(
+    input: TunnelStartInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<TunnelSession>;
   isJobCancelled(jobId: string): Promise<boolean>;
   reportResult(jobId: string, result: OnpremExecutionResult): Promise<void>;
   sendHeartbeat(): Promise<void>;
@@ -75,12 +79,14 @@ export interface OnpremJobExecutor {
     job: OnpremAgentJob,
     options?: { signal?: AbortSignal },
   ): Promise<OnpremExecutionResult>;
+  shutdown?(): Promise<void>;
 }
 
 export type TunnelStartInput = {
+  jobId: string;
   deploymentId: number;
   environmentId: string;
-  localUrl: string;
+  localPort: number;
 };
 
 export type TunnelResult = {
@@ -89,8 +95,25 @@ export type TunnelResult = {
 };
 
 export interface TunnelProvider {
-  start(input: TunnelStartInput): Promise<TunnelResult>;
+  start(
+    input: TunnelStartInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<TunnelResult>;
   stop(deploymentId: number): Promise<void>;
+  isRunning?(deploymentId: number): Promise<boolean>;
+}
+
+export type TunnelSession = {
+  tunnelId: string;
+  token: string;
+  hostname: string;
+};
+
+export interface TunnelSessionProvider {
+  prepare(
+    input: TunnelStartInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<TunnelSession>;
 }
 
 export type CommandRequest = {
@@ -109,6 +132,24 @@ export type CommandResult = {
 
 export interface CommandRunner {
   run(request: CommandRequest): Promise<CommandResult>;
+}
+
+export interface BackgroundProcess {
+  isRunning(): boolean;
+  waitForExit(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export interface BackgroundProcessRunner {
+  start(request: CommandRequest): Promise<BackgroundProcess>;
+}
+
+export interface TunnelReadinessChecker {
+  waitUntilReady(
+    url: string,
+    process: BackgroundProcess,
+    signal?: AbortSignal,
+  ): Promise<void>;
 }
 
 export type PreparedImage = {

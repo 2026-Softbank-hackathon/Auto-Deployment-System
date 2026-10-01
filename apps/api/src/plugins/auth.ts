@@ -24,7 +24,12 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = async (
+const authPlugin: FastifyPluginAsync<{
+  apiKey?: string;
+  nodeEnv?: string;
+  agentJobClaimEnabled?: boolean;
+  agentEcrCredentialEnabled?: boolean;
+}> = async (
   fastify,
   opts
 ) => {
@@ -49,6 +54,31 @@ const authPlugin: FastifyPluginAsync<{ apiKey?: string; nodeEnv?: string }> = as
 
     // API-01: 세션 발급은 본문 apiKey 로만 인증
     if (request.method === "POST" && path === "/api/v1/auth/session") {
+      return;
+    }
+
+    // Agent 등록·Heartbeat: 등록 토큰 / 장기 키 자체가 크레덴셜 — 세션 인증 불필요
+    if (
+      request.method === "POST" &&
+      (path === "/api/v1/agents/register" || path === "/api/v1/agents/heartbeat")
+    ) {
+      return;
+    }
+
+    // Job claim은 Agent 전용 키로 인증한다. 라우트가 bearer key를 검증한다.
+    if (
+      opts.agentJobClaimEnabled &&
+      request.method === "POST" &&
+      path === "/api/v1/agents/jobs/claim"
+    ) {
+      return;
+    }
+
+    if (
+      opts.agentEcrCredentialEnabled &&
+      request.method === "POST" &&
+      /^\/api\/v1\/agents\/jobs\/[^/]+\/ecr-credential$/.test(path)
+    ) {
       return;
     }
 

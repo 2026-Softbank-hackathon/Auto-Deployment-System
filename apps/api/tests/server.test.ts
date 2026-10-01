@@ -157,9 +157,24 @@ describe("GET /api/v1/projects", () => {
 // ── 3. POST /deployments multipart ───────────────────────────────────────────
 
 describe("POST /api/v1/deployments", () => {
-  function setupDeploymentMocks() {
+  function setupDeploymentMocks(options: { missingSecret?: string } = {}) {
     mockPool.on(/SELECT id FROM environments/, (params) => ({
       rows: [{ id: params[1] === "onprem" ? 20 : 10 }],
+    }));
+    mockPool.on(/SELECT aws_config FROM environments/, () => ({
+      rows: [{
+        aws_config: {
+          credentialsType: "access_key",
+          accessKeyIdSecretName: "aws-access-key-id",
+          secretAccessKeySecretName: "aws-secret-access-key",
+          region: "ap-northeast-2",
+        },
+      }],
+    }));
+    mockPool.on(/SELECT name FROM secrets/, () => ({
+      rows: ["aws-access-key-id", "aws-secret-access-key"]
+        .filter((name) => name !== options.missingSecret)
+        .map((name) => ({ name })),
     }));
     mockPool.on(/INSERT INTO deployments/, () => ({ rows: [{ id: 42 }] }));
     mockPool.on(/INSERT INTO source_versions/, () => ({ rows: [{ id: 1 }] }));
@@ -248,6 +263,30 @@ describe("POST /api/v1/deployments", () => {
     expect(capturedRegistryEnvironment).toBe(10);
   });
 
+  it("rejects deployment before storing the ZIP when an AWS credential Secret is missing", async () => {
+    setupDeploymentMocks({ missingSecret: "aws-secret-access-key" });
+
+    const form = new FormData();
+    form.append("project_id", "1");
+    form.append("target", "aws");
+    form.append("source", Buffer.from("PK fake zip"), {
+      filename: "app.zip",
+      contentType: "application/zip",
+    });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/deployments",
+      headers: form.getHeaders(),
+      payload: form.getBuffer(),
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("AWS_CREDENTIALS_MISSING");
+    expect(mockStorage.store.size).toBe(0);
+    expect(mockBoss.sentJobs).toHaveLength(0);
+  });
+
   it("기본 target Environment가 없으면 업로드를 저장하지 않고 409", async () => {
     const form = new FormData();
     form.append("project_id", "1");
@@ -288,6 +327,54 @@ describe("POST /api/v1/deployments", () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe("VALIDATION_ERROR");
   });
 
+});
+
+// ── publicUrl 계산 ────────────────────────────────────────────────────────────
+
+describe("GET /api/v1/deployments/:id publicUrl 계산", () => {
+  it("DEMO_PLATFORM_DOMAIN 세팅 시 고정 서비스 URL 반환", async () => {
+    // platformDomain 을 주입한 서버를 별도로 만든다
+    const domainServer = await buildServer({
+      pool: mockPool as unknown as Pool,
+      boss: mockBoss as unknown as PgBoss,
+      storage: mockStorage as unknown as Storage,
+      nodeEnv: "development",
+      logger: false,
+      platformDomain: "camellia.app",
+    });
+    await domainServer.ready();
+
+    const dep = makeDeployment(42, 1, "succeeded");
+    mockPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
+      rows: [dep],
+    }));
+    mockPool.on(/FROM deployment_steps/, () => ({ rows: [] }));
+    mockPool.on(/FROM approvals/, () => ({ rows: [] }));
+
+    const res = await domainServer.inject({ method: "GET", url: "/api/v1/deployments/42" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ publicUrl: string }>().publicUrl).toBe(
+      "https://service-1.apps.camellia.app",
+    );
+
+    await domainServer.close();
+  });
+
+  it("DEMO_PLATFORM_DOMAIN 미세팅 시 publicUrl === null", async () => {
+    // 기본 server (platformDomain 없음)
+    const dep = makeDeployment(42, 1, "succeeded");
+    mockPool.on(/SELECT id, project_id, status, target_profile, target_environment_id/, () => ({
+      rows: [dep],
+    }));
+    mockPool.on(/FROM deployment_steps/, () => ({ rows: [] }));
+    mockPool.on(/FROM approvals/, () => ({ rows: [] }));
+
+    const res = await server.inject({ method: "GET", url: "/api/v1/deployments/42" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ publicUrl: null }>().publicUrl).toBeNull();
+  });
 });
 
 // ── 4. GET /deployments/:id ───────────────────────────────────────────────────

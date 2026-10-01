@@ -5,6 +5,7 @@ import type {
   OnpremExecutionResult,
   TunnelProvider,
   TunnelResult,
+  TunnelSession,
   TunnelStartInput,
 } from "./contracts.js";
 
@@ -13,6 +14,7 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
   heartbeatCount = 0;
   private readonly jobs: OnpremAgentJob[];
   private readonly credentials = new Map<string, EcrCredential>();
+  private readonly tunnelSessions = new Map<string, TunnelSession>();
   private readonly cancellations = new Set<string>();
 
   constructor(jobs: OnpremAgentJob[] = []) {
@@ -27,6 +29,10 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
     this.credentials.set(jobId, credential);
   }
 
+  setTunnelSession(jobId: string, session: TunnelSession): void {
+    this.tunnelSessions.set(jobId, session);
+  }
+
   cancel(jobId: string): void {
     this.cancellations.add(jobId);
   }
@@ -39,6 +45,12 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
     const credential = this.credentials.get(jobId);
     if (!credential) throw new Error("Fake ECR credential이 없습니다.");
     return credential;
+  }
+
+  async prepareTunnel(input: TunnelStartInput): Promise<TunnelSession> {
+    const session = this.tunnelSessions.get(input.jobId);
+    if (!session) throw new Error("Fake Tunnel session이 없습니다.");
+    return session;
   }
 
   async isJobCancelled(jobId: string): Promise<boolean> {
@@ -60,15 +72,22 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
 export class FakeTunnelProvider implements TunnelProvider {
   readonly starts: TunnelStartInput[] = [];
   readonly stops: number[] = [];
+  private readonly active = new Set<number>();
 
   constructor(private readonly endpoint: string) {}
 
   async start(input: TunnelStartInput): Promise<TunnelResult> {
     this.starts.push(input);
+    this.active.add(input.deploymentId);
     return { endpoint: this.endpoint, tunnelId: `fake-${input.deploymentId}` };
   }
 
   async stop(deploymentId: number): Promise<void> {
     this.stops.push(deploymentId);
+    this.active.delete(deploymentId);
+  }
+
+  async isRunning(deploymentId: number): Promise<boolean> {
+    return this.active.has(deploymentId);
   }
 }

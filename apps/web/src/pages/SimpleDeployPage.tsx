@@ -6,6 +6,7 @@ import { followAppLink, type Navigate } from '../app/navigation';
 import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { isDeployTarget, TargetToggle, type DeployTarget } from '../features/deployment-start/TargetToggle';
+import { ProjectPickerDialog, useReadyProjects } from '../features/deployment-start/ProjectPickerDialog';
 import { SetupSummary } from '../features/deployment-start/SetupSummary';
 import { missingFor, setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
@@ -30,7 +31,12 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
   // 화면에 들어올 때 연결 상태를 다시 읽는다 (다른 탭이나 연결 설정 화면에서 바뀌었을 수 있다).
   useEffect(() => { void refreshProject(); }, [refreshProject]);
 
-  const project = status.ready ? status.project : null;
+  // 필수 연결(AWS)이 없는 프로젝트는 고르지 않은 것으로 다룬다. 선택 모달에도 준비된 프로젝트만 나온다.
+  const project = status.ready && status.awsReady ? status.project : null;
+  const allProjects = status.ready ? status.projects : null;
+  const readyProjects = useReadyProjects(allProjects);
+  const noneReady = readyProjects !== null && readyProjects.length === 0;
+  const [picking, setPicking] = useState(false);
   // 최근 배포의 분석 기준으로, 등록하지 않으면 배포가 실패하는 환경변수 개수. 새 ZIP은 다를 수 있어 배포를 막지는 않고 알리기만 한다.
   const projectId = project?.id ?? null;
   const [envMissing, setEnvMissing] = useState(0);
@@ -44,12 +50,12 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
     return () => { active = false; };
   }, [projectId]);
   // 고른 대상에 필요한 연결이 다 됐는지. AWS 키는 어느 대상이든 필요하다(온프레미스도 이미지를 ECR에 둔다).
-  const targetReady = status.ready && project !== null && status.awsReady && missingFor(target, projectState.phase === 'ready' ? projectState.environments : []).length === 0;
+  const targetReady = status.ready && project !== null && missingFor(target, projectState.phase === 'ready' ? projectState.environments : []).length === 0;
   const canDeploy = Boolean(file) && targetReady;
 
   // 등록한 프로젝트가 하나도 없으면(처음 쓰는 경우) 내 프로젝트로 보내 프로젝트부터 만들게 한다.
   // 앱은 있는데 AWS 연결만 없을 때는 보내지 않는다. 여기서 다른 앱으로 바꿀 수 있어야 하기 때문이다.
-  const needsFirstSetup = status.ready && status.project === null;
+  const needsFirstSetup = status.ready && status.projects.length === 0;
   useEffect(() => { if (needsFirstSetup) onRedirect('/projects'); }, [needsFirstSetup, onRedirect]);
 
   async function startDeployment() {
@@ -68,9 +74,13 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
     }
   }
 
-  // 연결이 덜 됐으면 배포 버튼이 연결 설정으로 가는 버튼이 된다 (무엇이 일어날지 누르기 전에 보이게).
-  const mustSetUp = status.ready && !targetReady;
-  const hint = isStarting ? t.deploy.hintStarting : mustSetUp ? t.deploy.hintNeedsSetup : file ? t.deploy.hintReady : t.deploy.hintEmpty;
+  // 고른 프로젝트에 온프레미스 서버가 없는데 온프레미스를 골랐으면, 배포 버튼이 그 프로젝트의 설정으로 가는 버튼이 된다.
+  const mustSetUp = status.ready && project !== null && !targetReady;
+  const hint = isStarting ? t.deploy.hintStarting
+    : !status.ready ? t.deploy.hintEmpty
+      : noneReady ? t.deploy.hintNoneReady
+        : project === null ? t.deploy.hintPickProject
+          : mustSetUp ? t.deploy.hintNeedsSetup : file ? t.deploy.hintReady : t.deploy.hintEmpty;
   // 아는 거절 사유는 안내 문구로, 모르는 사유는 서버가 준 설명을 그대로 보여 준다 (숫자 코드만 보이지 않게).
   const startErrorCode = error instanceof DeploymentApiError ? error.code : undefined;
   const setupRejected = startErrorCode !== undefined && [...environmentRequiredCodes, ...credentialCodes].includes(startErrorCode);
@@ -88,14 +98,19 @@ export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStar
       <ZipUploader file={file} onChange={(next) => { setFile(next); setError(null); }} disabled={isStarting} />
       {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.startError}</strong><br />{startErrorCopy}</div>}
       <TargetToggle value={target} onChange={setTarget} disabled={isStarting} />
-      <SetupSummary target={target} state={projectState} envMissing={envMissing} onRetry={() => void refreshProject()} onNavigate={onNavigate}
-        onSelectProject={(projectId) => { setError(null); void selectProject(projectId); }} disabled={isStarting} />
+      <SetupSummary target={target} state={projectState} usable={project !== null} envMissing={envMissing} onRetry={() => void refreshProject()} onNavigate={onNavigate}
+        onPick={() => setPicking(true)} disabled={isStarting} />
       <div className="deploy-card__footer">
         <p className={`deploy-card__hint ${canDeploy ? 'is-ready' : ''}`} aria-live="polite">{hint}</p>
-        {mustSetUp
-          ? <DeployKeycap size="lg" href={project ? `/projects/${encodeURIComponent(project.id)}/settings` : '/projects'} onClick={(event: MouseEvent<HTMLAnchorElement>) => followAppLink(event, onNavigate)}>{t.deploy.goSetup}</DeployKeycap>
+        {noneReady && project === null
+          ? <DeployKeycap size="lg" href="/projects" onClick={(event: MouseEvent<HTMLAnchorElement>) => followAppLink(event, onNavigate)}>{t.deploy.goProjects}</DeployKeycap>
+          : mustSetUp && project
+          ? <DeployKeycap size="lg" href={`/projects/${encodeURIComponent(project.id)}/settings`} onClick={(event: MouseEvent<HTMLAnchorElement>) => followAppLink(event, onNavigate)}>{t.deploy.goSetup}</DeployKeycap>
           : <DeployKeycap size="lg" sound="start" disabled={!canDeploy} busy={isStarting} onClick={() => void startDeployment()}>{t.deploy.button}</DeployKeycap>}
       </div>
     </section>
+    <ProjectPickerDialog open={picking} ready={readyProjects} hiddenCount={allProjects && readyProjects ? allProjects.length - readyProjects.length : 0}
+      selectedId={project?.id ?? null} onClose={() => setPicking(false)} onNavigate={onNavigate}
+      onSelect={(projectId) => { setPicking(false); setError(null); void selectProject(projectId); }} />
   </>;
 }

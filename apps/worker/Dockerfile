@@ -64,9 +64,11 @@ COPY --from=tools --chown=node:node /tools/plugin-cache /opt/terraform/plugin-ca
 ENV NODE_ENV=production \
     STORAGE_ROOT_DIR=/data/storage \
     TERRAFORM_BINARY=/usr/local/bin/terraform \
-    TERRAFORM_PLUGIN_CACHE_DIR=/opt/terraform/plugin-cache
+    TERRAFORM_PLUGIN_CACHE_DIR=/opt/terraform/plugin-cache \
+    TERRAFORM_WORK_DIR=/data/terraform-work
 COPY --from=deps /repo /repo
-RUN mkdir -p /data/storage && chown node:node /data/storage
+# terraform-work: 프로젝트 · 환경별 Terraform 작업 폴더(.terraform 만 남음, #260). 새 named volume 이 이 소유자를 물려받는다
+RUN mkdir -p /data/storage /data/terraform-work && chown node:node /data/storage /data/terraform-work
 # docker.sock 접근은 compose 의 group_add(호스트 docker 그룹 GID)로 부여한다
 USER node
 WORKDIR /repo/apps/worker

@@ -10,7 +10,8 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { AIRLIFT_SECONDS, awsLoaded, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget, skyPhase } from './DeployScene';
+import { awsLoaded, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { logLineForBubble } from './log-line-i18n';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -34,7 +35,7 @@ const AUTO_APPROVAL_NOTE = 'one-click auto-approval (web)';
 const autoApprovalGates: Record<string, ApprovalGate> = { awaiting_target_confirmation: 'target' };
 
 /** 지켜보던 배포가 성공했을 때, 결과 화면으로 넘어가기 전 코로가 컵에 착지하는 모습을 보여 주는 시간 */
-const SUCCESS_LANDING_MS = 1400;
+const SUCCESS_LANDING_MS = 3200;
 
 function text(value: unknown): string | null { return typeof value === 'string' && value.trim() ? value : null; }
 /** 화면 상태는 배포 status만 기준으로 한다. currentStep.name은 단계 로그 이름(analyze·verify 등)이라 status와 값 체계가 다르다. */
@@ -69,6 +70,8 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
 /** 로그 줄 앞의 "[ISO 시각]"으로 가장 최근 줄을 고른다. */
 /** 진행 탭의 "지금" 자리에 보여 주는 최근 로그 줄 수 (좁은 화면에서는 마지막 한 줄만 보인다) */
 const RECENT_LINES = 3;
+/** 방금 온 로그를 말풍선에 보여 주는 시간 */
+const LOG_TALK_MS = 9000;
 /** 생각 풍선을 코로 머리에 붙이는 최소 축척 (장면 1 단위가 이만큼의 픽셀 이상일 때). 이보다 작으면 장면 아래에 둔다 */
 const THINK_ATTACH_SCALE = 0.75;
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
@@ -112,6 +115,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const [recentLines, setRecentLines] = useState<string[]>([]);
   // 빌드 로그가 "이미지 재사용"을 알려 주면 그 원본 배포 번호 (재배포 · 롤백 · 환경 전환 장면에 쓴다)
   const [reusedFrom, setReusedFrom] = useState<string | null>(null);
+  // 실시간으로 받은 가장 최근 로그 한 줄과 받은 시각 — 코로가 말풍선으로 읽어 준다. tick 은 줄이 올 때마다 올라간다(장면의 반짝임).
+  const [liveLog, setLiveLog] = useState<{ line: string; at: number; tick: number } | null>(null);
   const [projectDeployments, setProjectDeployments] = useState<ProjectDeploymentSummary[] | null>(null);
   const [logs, setLogs] = useState<StepLog[] | null>(null);
   const [error, setError] = useState<ErrorState>(null);
@@ -135,6 +140,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         const entry = readLogLine(event.payload);
         if (!entry) return;
         setRecentLines((previous) => [...previous, entry.line].slice(-RECENT_LINES));
+        setLiveLog((previous) => ({ line: entry.line, at: Date.now(), tick: (previous?.tick ?? 0) + 1 }));
         const reused = readReusedFrom(entry.line);
         if (reused) setReusedFrom(reused);
         setLogs((previous) => (previous ? appendLogLine(previous, entry) : previous));
@@ -259,7 +265,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   }, [deploymentId, analysisDone]);
   const target = sceneTarget(text(status?.targetProfile));
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
-  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
+  // 코로의 말: 서버에서 방금 온 로그가 있으면 그것을 읽어 주고(몇 초 동안), 없으면 지금 단계를 쉬운 말로 설명한다.
+  const logTalk = liveLog && now - liveLog.at < LOG_TALK_MS ? logLineForBubble(liveLog.line, t.locale) : null;
+  const talk = rolling && view.stage !== null ? logTalk ?? (koroLine(view.stage, stepSeconds, facts, target, t, story)) : null;
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
   const box = sceneBox(target, story);
   const [koroX, koroY] = koroSpot(view, target, story);
@@ -269,14 +277,6 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   //  - 그 밖에는 오른쪽 (설계도 옆 · 탈것 조립 · 비행 중)
   //  - AWS 에서 집을 비행기에 실은 뒤에는 오른쪽에 집이 있으므로 왼쪽
   const thinkLeft = view.stage === 1 || koroX >= 800 || awsLoaded(view, target, stepSeconds);
-  // 날아가는 동안에는 하늘빛이 화면 전체에 번진다 (페이지 · 사이드바 · 카드의 바탕색). 장면의 하늘과 같은 박자다.
-  // 이 화면을 떠나거나 비행이 끝나면 원래 색으로 돌아간다.
-  const pageSky = target !== 'onprem' && view.stage === 2 && rolling ? skyPhase(stepSeconds) : 'day';
-  useEffect(() => {
-    const root = document.documentElement;
-    if (pageSky === 'day') delete root.dataset.sky; else root.dataset.sky = pageSky;
-    return () => { delete root.dataset.sky; };
-  }, [pageSky]);
   // 몰입 모드: 진행 탭에서는 화면 전체를 장면에 쓴다 (본문 폭 제한과 카드 테두리를 걷는다). 로그 · 분석 · 실패 원인 탭은 글이 많아서 평소 배치 그대로 둔다.
   const immersive = tab === 'progress' || (tab === 'auto' && view.outcome !== 'failed');
   useEffect(() => {
@@ -304,13 +304,6 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     const timer = window.setTimeout(() => playRef.current(cue), 450);
     return () => window.clearTimeout(timer);
   }, [cue]);
-  // AWS 는 검증이 시작되며 구름으로 날아가므로(이륙 소리), 내려앉은 뒤에 점검 소리를 낸다.
-  const airliftCheck = rolling && target !== 'onprem' && view.stage === 4;
-  useEffect(() => {
-    if (!airliftCheck) return;
-    const timer = window.setTimeout(() => playRef.current('check'), AIRLIFT_SECONDS * 1000 + 300);
-    return () => window.clearTimeout(timer);
-  }, [airliftCheck]);
   // 빌드 중 집의 층이 올라갈 때마다 (장면의 층수 계산과 같은 박자: 8초마다, 3층까지)
   const risingFloor = rolling && view.stage === 1 && !story?.reused ? Math.min(houseFloors(story) - 1, Math.floor(stepSeconds / 8)) : 0;
   useEffect(() => { if (risingFloor > 0) playRef.current('floor'); }, [risingFloor]);
@@ -400,11 +393,11 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure ref={setSceneElement} className={`run-scene ${thinkAttached ? 'is-attached' : ''}`} style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} eventTick={liveLog?.tick ?? 0} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
               장면이 작게 그려질 때는 머리에 붙이지 않고 장면 아래에 둔다(is-caption). */}
-          {talk && <div className={`koro-think ${thinkAttached ? (thinkLeft ? 'is-left' : 'is-right') : 'is-caption'}`}
+          {talk && <div className={`koro-think ${thinkAttached ? (thinkLeft ? 'is-left' : 'is-right') : 'is-caption'} ${logTalk ? 'is-log' : ''}`}
             style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>

@@ -11,6 +11,7 @@ import { createPool, createPgBoss, getEnv } from "@camellia/db";
 import { LocalStorage } from "@camellia/storage";
 import { createPgNotifier } from "./notifier.js";
 import { registerAll } from "./register.js";
+import { createShutdown } from "./shutdown.js";
 import { BuildHandler } from "@camellia/build-handler";
 import { AwsEcrRegistry } from "@camellia/aws-registry";
 import {
@@ -26,6 +27,7 @@ import { CloudflareClient } from "@camellia/cloudflare";
 import { DeploymentOriginActivator } from "./origin-activation.js";
 import { PublicDnsActivationChecker } from "./public-dns-activation.js";
 import { FinalUrlVerifier } from "./final-url-verifier.js";
+import { S3TerraformStateStore } from "./terraform-state-store.js";
 
 const log = pino({ name: "worker" });
 
@@ -83,6 +85,7 @@ async function main(): Promise<void> {
     terraformCli,
     terraformBackend: loadTerraformBackendConfig(),
     terraformModuleRoot: path.join(repositoryRoot, "infra/terraform/profiles"),
+    terraformStateStore: new S3TerraformStateStore(),
   };
 
   boss.on("error", (err: unknown) => {
@@ -95,14 +98,8 @@ async function main(): Promise<void> {
 
   log.info("worker started — listening for jobs");
 
-  // Graceful shutdown
-  const shutdown = async (signal: string): Promise<void> => {
-    log.info({ signal }, "shutting down worker");
-    await boss.stop();
-    await pool.end();
-    log.info("worker stopped");
-    process.exit(0);
-  };
+  // Graceful shutdown: 진행 중인 작업(Terraform apply 등)을 끝낸 뒤 종료 (#241)
+  const shutdown = createShutdown({ boss, pool, log, exit: (code) => process.exit(code) });
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

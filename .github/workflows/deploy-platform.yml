@@ -71,7 +71,8 @@ jobs:
         && contains(fromJSON('["success","skipped"]'), needs.changes.result)
         && contains(fromJSON('["success","skipped"]'), needs.infra.result) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # worker 교체는 진행 중인 사용자 배포가 끝날 때까지 최대 30분 기다린다 (compose stop_grace_period, #241)
+    timeout-minutes: 70
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       ROLE_ARN: ${{ vars.AWS_CD_ROLE_ARN }}
@@ -123,7 +124,7 @@ jobs:
           # 전체 로그는 호스트 파일로, SSM 결과에는 마지막 100줄만 (SSM 출력은 앞 24,000자에서 잘린다)
           log="/var/log/camellia-deploy/gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
           cmd="mkdir -p /var/log/camellia-deploy; bash /opt/camellia/platform/infra/platform/scripts/deploy.sh '$REF' > $log 2>&1; rc=\$?; tail -n 100 $log; echo \"[gha] full log: $log (exit \$rc)\"; exit \$rc"
-          params="$(jq -nc --arg cmd "$cmd" '{commands: [$cmd], executionTimeout: ["1800"]}')"
+          params="$(jq -nc --arg cmd "$cmd" '{commands: [$cmd], executionTimeout: ["3600"]}')"
 
           command_id="$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
@@ -135,7 +136,7 @@ jobs:
           echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
           echo "SSM command $command_id → deploy.sh $REF"
 
-          deadline=$(( $(date +%s) + 35 * 60 ))
+          deadline=$(( $(date +%s) + 62 * 60 ))
           errors=0
           status=Pending
           while :; do

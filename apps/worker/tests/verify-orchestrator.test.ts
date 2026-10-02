@@ -1,5 +1,8 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Pool } from "@camellia/db";
+import { FinalUrlVerifier } from "../src/final-url-verifier.js";
 import {
   claimVerifyStep,
   createVerifyRequestFingerprint,
@@ -438,6 +441,19 @@ describe("Verify rollout — 고정 URL 검증과 Origin 복구", () => {
     tunnelIngress: null,
   };
 
+  // 새 앱의 첫 배포: 직전 레코드가 없다.
+  const firstActivation: {
+    serviceHostname: string;
+    activatedOrigin: string;
+    previousOrigin: { hostname: string; proxied: boolean } | null;
+    tunnelIngress: null;
+  } = {
+    serviceHostname: "service-24.camellia.test",
+    activatedOrigin: "app-alb.ap-northeast-2.elb.amazonaws.com",
+    previousOrigin: null,
+    tunnelIngress: null,
+  };
+
   function result(status: "passed" | "failed"): VerifyResult {
     return {
       deploymentId: 42,
@@ -458,6 +474,10 @@ describe("Verify rollout — 고정 URL 검증과 Origin 복구", () => {
     finalStatus: "passed" | "failed",
     rollbackFails = false,
     verifierThrows = false,
+    overrides: {
+      activation?: typeof firstActivation;
+      finalUrlVerifier?: FinalUrlVerifier;
+    } = {},
   ) {
     let deploymentStatus = "verifying";
     let stepStatus = "running";
@@ -521,11 +541,11 @@ describe("Verify rollout — 고정 URL 검증과 Origin 복구", () => {
       originActivator: {
         activate: vi.fn(async () => {
           order.push("activate");
-          return activation;
+          return overrides.activation ?? activation;
         }),
         rollback,
       },
-      finalUrlVerifier: { verify },
+      finalUrlVerifier: overrides.finalUrlVerifier ?? { verify },
       log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
     } as unknown as WorkerDeps;
     return {
@@ -692,5 +712,63 @@ describe("Verify rollout — 고정 URL 검증과 Origin 복구", () => {
     expect(verify).not.toHaveBeenCalled();
     expect(deploymentStatus).toBe("failed");
     expect(lockDeleted).toBe(true);
+  });
+
+  it("첫 배포는 시스템 DNS 가 NXDOMAIN 이어도 권한 DNS 로 고정 URL을 확인해 succeeded 처리한다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok", { status: 200 })));
+    const server = createServer((_request, response) => {
+      response.writeHead(200);
+      response.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const firstDeploy = {
+        ...firstActivation,
+        serviceHostname: `${firstActivation.serviceHostname}:${port}`,
+      };
+      const state = harness("passed", false, false, {
+        activation: firstDeploy,
+        finalUrlVerifier: new FinalUrlVerifier({
+          protocol: "http",
+          resolver: { resolve4: async () => ["127.0.0.1"] },
+        }),
+      });
+
+      await expect(
+        runVerifyJob({ data: makePayload() }, state.deps, { sleep: async () => undefined }),
+      ).resolves.toMatchObject({ status: "passed", consecutivePassed: 3 });
+
+      expect(state.rollback).not.toHaveBeenCalled();
+      expect(state.getDeploymentStatus()).toBe("succeeded");
+      expect(state.notifications).toEqual(["succeeded"]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("첫 배포라도 레코드가 끝내 보이지 않으면 새 레코드를 되돌리고 failed 처리한다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok", { status: 200 })));
+    const state = harness("failed", false, false, {
+      activation: firstActivation,
+      finalUrlVerifier: new FinalUrlVerifier({
+        resolver: {
+          resolve4: async () => {
+            throw Object.assign(new Error("not found"), { code: "ENOTFOUND" });
+          },
+        },
+        dnsWaitAttempts: 2,
+      }),
+    });
+
+    await expect(
+      runVerifyJob({ data: makePayload() }, state.deps, { sleep: async () => undefined }),
+    ).resolves.toMatchObject({ status: "failed", failureReason: "dns_error" });
+
+    expect(state.rollback).toHaveBeenCalledWith(firstActivation);
+    expect(state.getDeploymentStatus()).toBe("failed");
+    expect(state.isLockDeleted()).toBe(true);
+    expect(state.notifications).toEqual(["rollback", "failed"]);
   });
 });

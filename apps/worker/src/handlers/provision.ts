@@ -173,7 +173,7 @@ export async function handleProvision(
       throw new Error("TERRAFORM_MODULE_INVALID");
     }
 
-    const stateKey = `projects/${projectId}/environments/${environmentId}/terraform.tfstate`;
+    const stateKey = terraformStateKey(projectId, environmentId);
     const resourceName = resourceNameFor(projectId, environmentId);
     const originUrl = context.status === "deploying" && context.origin_url
       ? context.origin_url
@@ -319,6 +319,7 @@ async function applyTerraform(input: {
       region: input.region,
       credentials: input.credentials,
       variables: input.variables,
+      log: (line) => input.stepLog.line(line),
     });
     const originUrl = outputs["origin_url"]?.value;
     if (typeof originUrl !== "string") {
@@ -518,12 +519,18 @@ async function loadProjectEnvironmentVariables(
   return merged;
 }
 
-function resourceNameFor(projectId: number, environmentId: number): string {
+/** Terraform state 위치 — 프로젝트 · 환경마다 하나. teardown 이 같은 key 로 destroy 한다 (#247) */
+export function terraformStateKey(projectId: number, environmentId: number): string {
+  return `projects/${projectId}/environments/${environmentId}/terraform.tfstate`;
+}
+
+/** 프로젝트 · 환경마다 고정된 AWS 리소스 이름 — teardown 도 같은 이름을 쓴다 (#247) */
+export function resourceNameFor(projectId: number, environmentId: number): string {
   const scope = `${projectId}:${environmentId}`;
   return `cam-${createHash("sha256").update(scope).digest("hex").slice(0, 16)}`;
 }
 
-function safeContainerName(name: string): string {
+export function safeContainerName(name: string): string {
   const normalized = name.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 255);
   if (!normalized || !/^[a-zA-Z0-9_-]+$/.test(normalized)) {
     throw new Error("APP_NAME_INVALID");

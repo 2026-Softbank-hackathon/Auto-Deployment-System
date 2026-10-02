@@ -4,9 +4,14 @@
  */
 
 import type { Pool } from "@camellia/db";
+import type PgBoss from "pg-boss";
 import type {
+  DeleteProjectResponse,
   DeploymentStatus,
   Project,
+  ProjectDeletion,
+  ProjectDeletionStatus,
+  ProjectDeletionWarning,
   ProjectDeployment,
   ProjectDeploymentList,
   ProjectList,
@@ -20,6 +25,11 @@ export interface ProjectRow {
   description: string | null;
   created_at: Date;
   updated_at: Date;
+  /** 삭제 요청 상태 (#247). POST /projects 의 RETURNING 처럼 읽지 않으면 undefined */
+  deletion_status?: ProjectDeletionStatus | null;
+  deletion_error?: string | null;
+  deletion_requested_at?: Date | null;
+  deletion_warnings?: ProjectDeletionWarning[] | null;
 }
 
 /** 프로젝트 목록 · 조회 row — live(지금 서비스 중인 배포) · latest(최근 배포) 요약을 함께 읽는다 */
@@ -48,6 +58,19 @@ function servicePublicUrl(projectId: number | string, platformDomain?: string): 
 function idOrNull(value: number | string | null): string | null {
   return value === null ? null : String(value);
 }
+
+function deletionToDto(row: ProjectRow): ProjectDeletion | null {
+  if (!row.deletion_status || !row.deletion_requested_at) return null;
+  return {
+    status: row.deletion_status,
+    requestedAt: row.deletion_requested_at.toISOString(),
+    error: row.deletion_error ?? null,
+    warnings: row.deletion_warnings ?? [],
+  };
+}
+
+/** 끝난 배포 상태 — 나머지는 진행 중이라 앱을 지울 수 없다 */
+const FINISHED_DEPLOYMENT_STATUSES: DeploymentStatus[] = ["succeeded", "failed", "cancelled", "rejected"];
 
 /** POST /projects 처럼 요약 컬럼이 없는 row 는 live · latest 가 null */
 export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain?: string): Project {
@@ -78,6 +101,7 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
             createdAt: summary.latest_created_at.toISOString(),
           }
         : null,
+    deletion: deletionToDto(row),
   };
 }
 
@@ -96,6 +120,7 @@ function liveDeploymentIdSql(p: string): string {
 /** 프로젝트 + live · latest 요약 — 프로젝트마다 쿼리를 따로 날리지 않도록 LATERAL 로 한 번에 읽는다 */
 const PROJECT_SUMMARY_SELECT = `
   SELECT p.id, p.name, p.description, p.created_at, p.updated_at,
+         p.deletion_status, p.deletion_error, p.deletion_requested_at, p.deletion_warnings,
          live.id AS live_deployment_id,
          live.target_environment_id AS live_environment_id,
          live_env.type AS live_environment_type,
@@ -160,7 +185,80 @@ export class ProjectService {
   constructor(
     private readonly pool: Pool,
     private readonly platformDomain?: string,
+    private readonly boss?: Pick<PgBoss, "send">,
   ) {}
+
+  /**
+   * DELETE /projects/:id — 앱 삭제 요청 (#247).
+   * 진행 중인 배포가 없으면 deleting 으로 바꾸고 teardown 잡을 넣는다. 실제 정리(Terraform destroy ·
+   * 공개 주소 · DB row 삭제)는 워커가 한다. 실패(failed)나 진행 중(deleting)에 다시 요청하면 잡을 다시 넣는다
+   * — teardown 큐는 프로젝트마다 대기 · 실행 잡을 하나씩만 두고, 워커는 끝난 프로젝트를 건너뛴다.
+   */
+  async requestDeletion(id: number): Promise<DeleteProjectResponse> {
+    if (!this.boss) throw new ApiError(500, "INTERNAL_ERROR", "작업 큐가 설정되지 않았습니다.");
+    const client = await this.pool.connect();
+    let deletion: ProjectDeletion;
+    try {
+      await client.query("BEGIN");
+      // 배포 생성(deployments FK)과 겹치지 않도록 프로젝트 row 를 잠근다
+      const project = await client.query(`SELECT id FROM projects WHERE id = $1 FOR UPDATE`, [id]);
+      if (project.rows.length === 0) {
+        throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${id}를 찾을 수 없습니다.`, "ID를 확인하세요.");
+      }
+      const active = await client.query(
+        `SELECT id, status FROM deployments WHERE project_id = $1 AND NOT (status = ANY($2::text[])) LIMIT 1`,
+        [id, FINISHED_DEPLOYMENT_STATUSES],
+      );
+      if (active.rows.length > 0) {
+        throw new ApiError(
+          409,
+          "PROJECT_DEPLOYMENT_IN_PROGRESS",
+          "진행 중인 배포가 있어 앱을 삭제할 수 없습니다.",
+          "배포가 끝나거나 취소한 뒤 다시 시도하세요.",
+        );
+      }
+      // Agent 에는 컨테이너를 내리는 작업이 없다 — 온프레미스에서 돈 적이 있으면 직접 정리해야 한다
+      const onprem = await client.query<{ onprem: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM onprem_agent_jobs job
+           JOIN deployments d ON d.id = job.deployment_id
+           WHERE d.project_id = $1
+         ) AS onprem`,
+        [id],
+      );
+      const warnings: ProjectDeletionWarning[] = onprem.rows[0]?.onprem ? ["ONPREM_MANUAL_CLEANUP"] : [];
+      const updated = await client.query<ProjectRow>(
+        `UPDATE projects
+         SET deletion_status = 'deleting',
+             deletion_error = NULL,
+             deletion_requested_at = CASE WHEN deletion_status = 'deleting'
+                                          THEN deletion_requested_at ELSE NOW() END,
+             deletion_warnings = $2::text[]
+         WHERE id = $1
+         RETURNING deletion_status, deletion_error, deletion_requested_at, deletion_warnings`,
+        [id, warnings],
+      );
+      const row = updated.rows[0];
+      const dto = row ? deletionToDto(row) : null;
+      if (!dto) throw new ApiError(500, "INTERNAL_ERROR", "삭제 요청을 저장하지 못했습니다.");
+      deletion = dto;
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // teardown 큐는 stately — 같은 프로젝트(singletonKey)의 destroy 가 겹쳐 돌지 않는다.
+    // destroy(ECS · ALB · VPC 삭제)가 기본 만료(15분)보다 길 수 있어 1시간, 실패는 워커가 failed 로 기록하므로 재시도 없음.
+    await this.boss.send("teardown", { project_id: id }, {
+      singletonKey: `project-${id}`,
+      expireInSeconds: 60 * 60,
+      retryLimit: 0,
+    });
+    return { projectId: String(id), deletion };
+  }
 
   async create(input: CreateProjectInput): Promise<Project> {
     const { name, description } = input;

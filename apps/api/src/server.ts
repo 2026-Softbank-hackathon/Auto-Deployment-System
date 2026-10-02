@@ -125,7 +125,7 @@ export async function buildServer(opts: BuildServerOptions) {
   await fastify.after();
 
   // ── services ───────────────────────────────────────────────────────────────
-  const projectService = new ProjectService(opts.pool, opts.platformDomain);
+  const projectService = new ProjectService(opts.pool, opts.platformDomain, opts.boss);
   const deploymentService = new DeploymentService(opts.pool, opts.boss, opts.storage, opts.platformDomain);
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);

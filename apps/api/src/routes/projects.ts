@@ -1,6 +1,7 @@
 /**
  * apps/api/src/routes/projects.ts
- * POST /projects, GET /projects, GET /projects/:id, GET /projects/:id/deployments
+ * POST /projects, GET /projects, GET /projects/:id, GET /projects/:id/deployments,
+ * DELETE /projects/:id (앱 삭제 — 리소스 정리를 시작, #247)
  */
 
 import { type FastifyPluginAsync } from "fastify";
@@ -46,6 +47,19 @@ const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = a
       throw new ApiError(400, "VALIDATION_ERROR", "프로젝트 ID는 양수 정수여야 합니다.");
     }
     return svc.get(id);
+  });
+
+  // DELETE /projects/:id — 202 로 받고 teardown 워커가 정리한 뒤 프로젝트를 지운다 (#247)
+  fastify.delete("/:id", {
+    schema: {
+      tags: ["projects"],
+      summary: "앱 삭제 (AWS 리소스 · 공개 주소 · 배포 기록 정리)",
+      params: toJsonSchema(ProjectIdParamsSchema),
+    },
+  }, async (request, reply) => {
+    const { id } = ProjectIdParamsSchema.parse(request.params);
+    const result = await svc.requestDeletion(id);
+    return reply.status(202).send(result);
   });
 
   // GET /projects/:id/deployments — 배포 이력 (LOG-01 / API-22)

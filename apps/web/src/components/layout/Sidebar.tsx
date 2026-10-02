@@ -7,6 +7,9 @@ import { Rail } from '../ui/Rail';
 interface SidebarProps {
   activePage: Route['page'];
   onNavigate: Navigate;
+  /** 접힌 상태 — 아이콘만 보이고, 마우스를 올리거나 키보드로 들어오면 잠깐 펼쳐진다 */
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
 const menu = [
@@ -24,9 +27,12 @@ function BrandMark() {
   </svg>;
 }
 
-export function Sidebar({ activePage, onNavigate }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, collapsed, onToggle }: SidebarProps) {
   const { t } = useI18n();
-  return <aside className="sidebar">
+  return <aside className={`sidebar ${collapsed ? 'is-collapsed' : ''}`}>
+    <button type="button" className="sidebar__toggle" onClick={onToggle} aria-pressed={!collapsed} aria-label={collapsed ? t.nav.pin : t.nav.collapse} title={collapsed ? t.nav.pin : t.nav.collapse}>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="12" rx="2.5" /><path d="M7 3 V15" />{collapsed ? <path d="M10 7 L12.5 9 L10 11" /> : <path d="M12.5 7 L10 9 L12.5 11" />}</svg>
+    </button>
     <div className="sidebar__brand">
       <div className="sidebar__brand-row">
         <BrandMark />
@@ -42,7 +48,7 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
           return <a key={item.path} href={item.path} className="sidebar__link" aria-current={active ? 'page' : undefined}
             onClick={(event) => followAppLink(event, onNavigate)}>
             <span className="sidebar__stop" aria-hidden="true">{active ? <Marble tone="running" /> : <span className="sidebar__dot" />}</span>
-            {t.nav[item.label]}
+            <span className="sidebar__label">{t.nav[item.label]}</span>
           </a>;
         })}
       </Rail>

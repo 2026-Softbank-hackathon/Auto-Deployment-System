@@ -171,7 +171,12 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .stage-chip.is-skipped { background: transparent; border-style: dotted; border-color: var(--line); color: var(--ink-soft); opacity: .7; }
 .stage-chip.is-pending { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--ink-soft); }
 
-.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 12px auto 0; }
+/* 장면의 최대 폭(--scene-max)에, 장면이 보여 주는 가로 범위의 비율(--scene-share, 잘라 낸 장면은 1보다 작다)을 곱한다 — 축척을 같게 유지한다. */
+.run-scene { --scene-max: 1100px; position: relative; width: 100%; max-width: calc(var(--scene-max) * var(--scene-share, 1)); margin: 12px auto 0; }
+/* 몰입 모드: 장면이 화면을 채운다. 세로로 넘치지 않게 화면 높이에 맞춰 폭을 묶는다(장면 비율 12:5). */
+:root[data-immersive] .run-stage { background: transparent; border-color: transparent; box-shadow: none; padding-inline: 0; }
+:root[data-immersive] .run-scene { --scene-max: min(100%, calc((100vh - 330px) * 2.4)); }
+@media (max-width: 760px) { :root[data-immersive] .run-scene { --scene-max: 100%; } }
 /* 풍선을 머리에 붙일 때는 장면 위로 풍선이 올라올 자리를 비워 둔다 */
 .run-scene.is-attached { margin-top: 44px; }
 /* 코로의 생각 풍선. 코로 머리 위 한 점(--koro-x, --koro-y)에 붙어서 코로와 같이 움직인다. */
@@ -879,10 +884,13 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @keyframes cloud-drift { from { transform: translateX(-10px); } to { transform: translateX(26px); } }
 
 /* ── 날아가는 동안의 하늘 (DeployScene) ─────────────────────────────── */
-.jr-sky__tint { fill: transparent; transition: fill 8s ease-in-out; }
-.jr-sky.is-sunset .jr-sky__tint { fill: #F9E2CF; }
-.jr-sky.is-night .jr-sky__tint { fill: #D5DCF3; }
-.jr-sky.is-dawn .jr-sky__tint { fill: #F6E6EF; }
+/* 하늘빛은 장면 안의 네모가 아니라 화면 전체의 바탕색으로 번진다 (진행 화면이 <html data-sky> 를 붙인다).
+   글자와 선은 그대로 어두운 색이므로, 바탕은 읽기에 지장이 없는 옅은 색만 쓴다. */
+.jr-sky__tint { fill: transparent; }
+:root[data-sky="sunset"] { --paper: #FBEBDD; --paper-side: #F7E2D0; --surface: #FFF7EF; }
+:root[data-sky="night"] { --paper: #E1E7F7; --paper-side: #D6DDF1; --surface: #F0F3FC; }
+:root[data-sky="dawn"] { --paper: #F9ECF2; --paper-side: #F4E3EB; --surface: #FFF8FB; }
+html, body, .sidebar, .app-header, .run-stage { transition: background-color 8s ease-in-out; }
 .jr-sky__night { opacity: 0; transition: opacity 8s ease-in-out; }
 .jr-sky.is-night .jr-sky__night { opacity: 1; }
 .jr-sky__moon { fill: var(--surface); stroke: var(--brass); stroke-width: 2.5; stroke-linejoin: round; }

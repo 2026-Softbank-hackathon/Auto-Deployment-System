@@ -1,5 +1,5 @@
 /* 앱 셸 — 레일 사이드바 + 헤더 (mockups 01~05 공통) */
-.shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+.shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); transition: grid-template-columns var(--dur-roll) var(--ease-roll); }
 
 .sidebar {
   display: flex; flex-direction: column; gap: 48px; padding: 32px 28px;
@@ -63,3 +63,36 @@
 @media (min-width: 761px) {
   .sidebar { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; }
 }
+
+/* 왼쪽 바 접기 — 넓은 화면에서만. 접으면 아이콘 띠만 남고, 마우스를 올리거나 키보드로 들어오면 내용 위로 잠깐 펼쳐진다. */
+.sidebar__toggle { display: none; }
+@media (min-width: 761px) {
+  .sidebar__toggle {
+    display: inline-flex; align-items: center; justify-content: center; position: absolute; top: 34px; right: 14px; width: 32px; height: 32px; padding: 0;
+    color: var(--ink-soft); background: transparent; border: 0; border-radius: var(--radius-input); cursor: pointer;
+  }
+  .sidebar__toggle:hover { color: var(--ink); background: var(--paper); }
+  .sidebar__toggle svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .sidebar { transition: width var(--dur-roll) var(--ease-roll), padding var(--dur-roll) var(--ease-roll), box-shadow var(--dur-roll); }
+
+  .shell.is-collapsed { grid-template-columns: 72px minmax(0, 1fr); }
+  .sidebar.is-collapsed { width: 72px; padding-inline: 18px; overflow: hidden; z-index: 40; }
+  .sidebar.is-collapsed .sidebar__name, .sidebar.is-collapsed .sidebar__version, .sidebar.is-collapsed .sidebar__tagline,
+  .sidebar.is-collapsed .sidebar__label, .sidebar.is-collapsed .sidebar__toggle { opacity: 0; pointer-events: none; }
+  .sidebar.is-collapsed .sidebar__link { white-space: nowrap; }
+  .sidebar.is-collapsed .sidebar__brand-row { white-space: nowrap; }
+  /* 잠깐 펼치기: 자리를 밀지 않고 내용 위에 겹친다 */
+  .sidebar.is-collapsed:hover, .sidebar.is-collapsed:focus-within { width: 260px; padding-inline: 28px; box-shadow: 8px 0 24px rgba(42, 38, 34, 0.12); }
+  .sidebar.is-collapsed:hover .sidebar__name, .sidebar.is-collapsed:hover .sidebar__version, .sidebar.is-collapsed:hover .sidebar__tagline,
+  .sidebar.is-collapsed:hover .sidebar__label, .sidebar.is-collapsed:hover .sidebar__toggle,
+  .sidebar.is-collapsed:focus-within .sidebar__name, .sidebar.is-collapsed:focus-within .sidebar__version, .sidebar.is-collapsed:focus-within .sidebar__tagline,
+  .sidebar.is-collapsed:focus-within .sidebar__label, .sidebar.is-collapsed:focus-within .sidebar__toggle { opacity: 1; pointer-events: auto; }
+  .sidebar__name, .sidebar__version, .sidebar__tagline, .sidebar__label, .sidebar__toggle { transition: opacity var(--dur-roll); }
+}
+@media (prefers-reduced-motion: reduce) { .shell, .sidebar { transition: none; } }
+
+/* 몰입 모드 — 배포 진행 탭(<html data-immersive>). 본문이 화면 폭을 다 쓰고, 진행 카드의 테두리를 걷어 장면이 화면에 바로 놓인다. */
+:root[data-immersive] .app-body { --content-max: none; }
+:root[data-immersive] .app-header { padding-inline: 32px; }
+:root[data-immersive] .content { max-width: none; padding: 20px 32px 40px; }
+@media (max-width: 760px) { :root[data-immersive] .content { padding: 16px 12px 40px; } :root[data-immersive] .app-header { padding-inline: 16px; } }

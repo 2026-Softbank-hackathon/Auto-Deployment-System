@@ -6,7 +6,7 @@ export const ko = {
     language: '언어',
     sound: { label: '사운드', on: '켬', off: '끔' },
   },
-  nav: { label: '메인 메뉴', dashboard: '대시보드', deploy: '간단 배포!', connections: '연결' },
+  nav: { label: '메인 메뉴', dashboard: '대시보드', deploy: '간단 배포!', connections: '연결', collapse: '메뉴 접기', pin: '메뉴 펼쳐서 고정' },
   stages: { source: '소스 업로드', analyze: 'AI 분석', build: '빌드', provision: '인프라 준비', deploy: '배포', verify: '검증', done: '완료' },
   gadgets: { source: '출발대', analyze: '도미노', build: '깔때기', provision: '나선', deploy: '도약대', verify: '저울', done: '컵' },
   status: {

@@ -10,7 +10,7 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { awsSceneStage, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { awsSceneStage, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget, skyPhase } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -270,6 +270,21 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   //  - 도착점 근처(구름 위 · 서버 옆)에서는 오른쪽에 집과 LIVE 표지가 있으므로 왼쪽
   //  - 그 밖에는 오른쪽 (설계도 옆 · 탈것 조립 · 비행 중)
   const thinkLeft = sceneView.stage === 1 || koroX >= 800;
+  // 날아가는 동안에는 하늘빛이 화면 전체에 번진다 (페이지 · 사이드바 · 카드의 바탕색). 장면의 하늘과 같은 박자다.
+  // 이 화면을 떠나거나 비행이 끝나면 원래 색으로 돌아간다.
+  const pageSky = target !== 'onprem' && sceneView.stage === 3 && rolling ? skyPhase(stepSeconds) : 'day';
+  useEffect(() => {
+    const root = document.documentElement;
+    if (pageSky === 'day') delete root.dataset.sky; else root.dataset.sky = pageSky;
+    return () => { delete root.dataset.sky; };
+  }, [pageSky]);
+  // 몰입 모드: 진행 탭에서는 화면 전체를 장면에 쓴다 (본문 폭 제한과 카드 테두리를 걷는다). 로그 · 분석 · 실패 원인 탭은 글이 많아서 평소 배치 그대로 둔다.
+  const immersive = tab === 'progress' || (tab === 'auto' && view.outcome !== 'failed');
+  useEffect(() => {
+    const root = document.documentElement;
+    if (immersive) root.dataset.immersive = 'on'; else delete root.dataset.immersive;
+    return () => { delete root.dataset.immersive; };
+  }, [immersive]);
   // 장면이 실제로 그려진 축척. 작게 그려지면 풍선이 그림을 덮으므로 머리에 붙이지 않고 장면 아래에 둔다.
   const [sceneElement, setSceneElement] = useState<HTMLElement | null>(null);
   const [sceneWidth, setSceneWidth] = useState<number | null>(null);
@@ -378,7 +393,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure ref={setSceneElement} className={`run-scene ${thinkAttached ? 'is-attached' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
+        <figure ref={setSceneElement} className={`run-scene ${thinkAttached ? 'is-attached' : ''}`} style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
           <DeployScene view={sceneView} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.

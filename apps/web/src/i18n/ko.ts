@@ -140,6 +140,18 @@ export const ko = {
     cancelling: '취소하고 있어요…',
     failed: '배포를 취소하지 못했어요.',
   },
+  settings: {
+    title: '환경설정',
+    close: '닫기',
+    tabs: { display: '화면', notifications: '알림', deploy: '배포' },
+    sound: '효과음',
+    notify: '배포가 끝나면 알림 띄우기',
+    notifyCopy: '다른 화면을 보고 있어도 완료 · 실패를 오른쪽 아래에 알려 줘요.',
+    defaultTarget: '기본 배포할 곳',
+    reviewFirst: '배포 전에 감지한 포트 확인하기',
+    reviewFirstCopy: '켜 두면 간단 배포에서 이 항목이 미리 선택돼요.',
+    note: '바꾸면 바로 적용되고, 이 브라우저에만 기억돼요.',
+  },
   notify: {
     title: { success: '배포가 완료됐어요', failed: '배포에 실패했어요', stopped: '배포가 중단됐어요' },
     view: '확인하기',

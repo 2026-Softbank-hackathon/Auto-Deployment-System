@@ -142,6 +142,18 @@ export const ja: Messages = {
     cancelling: '中止しています…',
     failed: 'デプロイを中止できませんでした。',
   },
+  settings: {
+    title: '環境設定',
+    close: '閉じる',
+    tabs: { display: '表示', notifications: '通知', deploy: 'デプロイ' },
+    sound: '効果音',
+    notify: 'デプロイが終わったら通知する',
+    notifyCopy: '別の画面を見ていても、完了・失敗を右下に表示します。',
+    defaultTarget: '既定のデプロイ先',
+    reviewFirst: 'デプロイ前に検出されたポートを確認する',
+    reviewFirstCopy: 'オンにすると、かんたんデプロイでこの項目があらかじめ選択されます。',
+    note: '変更はすぐに反映され、このブラウザにのみ保存されます。',
+  },
   notify: {
     title: { success: 'デプロイが完了しました', failed: 'デプロイに失敗しました', stopped: 'デプロイが中断されました' },
     view: '確認する',

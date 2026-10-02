@@ -550,3 +550,19 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .run-tabs { align-self: stretch; justify-content: center; }
 .tabs__dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--brick-text); vertical-align: middle; }
 .work-note__logs { border-top: var(--border); padding-top: 16px; }
+
+/* 환경설정 */
+.settings-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; color: var(--ink); background: var(--surface); border: var(--border); border-radius: var(--radius-input); cursor: pointer; }
+.settings-button:hover { border-color: var(--koro); color: var(--koro-text); }
+.settings-button:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.settings-dialog .picker-dialog__body { gap: 18px; }
+.settings-tabs { margin-top: -4px; }
+button.tabs__tab { font: inherit; font-weight: 700; background: transparent; border-left: 0; border-right: 0; border-top: 0; cursor: pointer; }
+button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--koro); }
+.settings-panel { display: grid; gap: 16px; min-height: 132px; align-content: start; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--ink); font-weight: 700; }
+.settings-row--check { cursor: pointer; }
+.settings-row--check > span { display: grid; gap: 2px; }
+.settings-row--check small { font-weight: 400; color: var(--ink-soft); }
+.settings-row--check input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--koro); }
+.settings-row--check input:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }

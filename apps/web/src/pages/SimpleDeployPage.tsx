@@ -5,16 +5,15 @@ import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { followAppLink, type Navigate } from '../app/navigation';
 import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
-import { isDeployTarget, TargetToggle, type DeployTarget } from '../features/deployment-start/TargetToggle';
+import { TargetToggle, type DeployTarget } from '../features/deployment-start/TargetToggle';
 import { ProjectPickerDialog, useReadyProjects } from '../features/deployment-start/ProjectPickerDialog';
 import { SetupSummary } from '../features/deployment-start/SetupSummary';
 import { requestReview } from '../features/deployment-progress/review-flag';
+import { usePreferences } from '../features/settings/preferences';
 import { missingFor, setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
-/** 처음 골라져 있는 배포 대상 벤더(aws | onprem). 프로필은 서버가 벤더에서 고른다. */
-const defaultTarget: DeployTarget = isDeployTarget(import.meta.env.VITE_DEMO_TARGET) ? import.meta.env.VITE_DEMO_TARGET : 'aws';
 
 /** 배포 환경이 없어서 서버가 거절한 경우 (apps/api deployment-service resolveEnvironments). */
 const environmentRequiredCodes = ['TARGET_ENVIRONMENT_REQUIRED', 'AWS_REGISTRY_ENVIRONMENT_REQUIRED'];
@@ -24,11 +23,13 @@ const credentialCodes = ['AWS_CREDENTIALS_MISSING', 'AWS_CREDENTIALS_INVALID'];
 export function SimpleDeployPage({ onStarted, onNavigate, onRedirect }: { onStarted: (deploymentId: string) => void; onNavigate: Navigate; /** 뒤로 가기에 남기지 않는 이동 */ onRedirect: Navigate }) {
   const { t } = useI18n();
   const [file, setFile] = useState<File | null>(null);
-  const [target, setTarget] = useState<DeployTarget>(defaultTarget);
+  // 처음 골라져 있는 배포할 곳과 "배포 전 확인" 여부는 환경설정의 기본값을 따른다. 이 화면에서 바꾼 것은 이번 배포에만 쓴다.
+  const { preferences } = usePreferences();
+  const [target, setTarget] = useState<DeployTarget>(preferences.defaultTarget);
   const [error, setError] = useState<unknown>(null);
   const [isStarting, setIsStarting] = useState(false);
   // 켜면 분석 뒤에 멈춰서 감지한 포트를 확인 · 수정한다 (#144). 기본은 꺼짐(원클릭).
-  const [reviewFirst, setReviewFirst] = useState(false);
+  const [reviewFirst, setReviewFirst] = useState(preferences.reviewFirst);
   const { state: projectState, refresh: refreshProject, selectProject } = useDeployProject();
   const status = setupStatus(projectState);
   // 화면에 들어올 때 연결 상태를 다시 읽는다 (다른 탭이나 연결 설정 화면에서 바뀌었을 수 있다).

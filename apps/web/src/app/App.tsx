@@ -9,6 +9,7 @@ import { ProjectsPage } from '../pages/ProjectsPage';
 import { SimpleDeployPage } from '../pages/SimpleDeployPage';
 import { DeploymentNotifier } from '../features/notifications/DeploymentNotifier';
 import { DeployProjectProvider } from '../features/deployment-start/useDeployProject';
+import { PreferencesProvider } from '../features/settings/preferences';
 import { SoundProvider } from '../features/sound/SoundProvider';
 import { I18nProvider } from '../i18n/I18nProvider';
 import { routeFromLocation, type Route } from './routes';
@@ -33,7 +34,7 @@ export function App() {
     setRoute(routeFromLocation());
   }
 
-  return <I18nProvider><SoundProvider><DeployProjectProvider><div className="shell">
+  return <I18nProvider><SoundProvider><PreferencesProvider><DeployProjectProvider><div className="shell">
     <Sidebar activePage={route.page} onNavigate={navigate} />
     <div className="app-body"><AppHeader page={route.page} />
       <main className="content">
@@ -46,5 +47,5 @@ export function App() {
       </main>
     </div>
     <DeploymentNotifier route={route} onNavigate={navigate} />
-  </div></DeployProjectProvider></SoundProvider></I18nProvider>;
+  </div></DeployProjectProvider></PreferencesProvider></SoundProvider></I18nProvider>;
 }

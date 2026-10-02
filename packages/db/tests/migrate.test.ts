@@ -36,6 +36,7 @@ describe("migration files", () => {
       "011_agent_ecr_credentials.sql",
       "012_shared_connections.sql",
       "013_health_check_attempt_phase.sql",
+      "014_health_check_legacy_unique.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

@@ -15,6 +15,7 @@ import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { isAwsStaticSiteProfile, koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
+import { SimpleProgress } from './SimpleProgress';
 import { FailureDetail } from './FailureDetail';
 import { failureKind, fixableByAwsKey, parseFailure } from './failure-reason';
 import { followAppLink, type Navigate } from '../../app/navigation';
@@ -81,6 +82,11 @@ function useNow(active: boolean): number {
     return () => window.clearInterval(timer);
   }, [active]);
   return now;
+}
+
+const VIEW_KEY = 'camellia.progressView';
+function readJourneyView(): boolean {
+  try { return window.localStorage.getItem(VIEW_KEY) === 'journey'; } catch { return false; }
 }
 
 function StageChips({ view, currentElapsed, skipped = 0 }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null; /** 앞에서부터 건너뛴 단계 수 — 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않는다 */ skipped?: number }) {
@@ -259,6 +265,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     return () => { active = false; };
   }, [deploymentId, analysisDone]);
   const target = sceneTarget(text(status?.targetProfile));
+  // 진행 화면 보기 방식: 기본은 간단히 보기(지금 하는 일 + 자동으로 끝낸 일). 여정 애니메이션은 고른 사람에게만 보여 주고, 고른 것은 이 브라우저에 기억한다.
+  const [journey, setJourney] = useState(readJourneyView);
+  function toggleJourney() {
+    const next = !journey;
+    setJourney(next);
+    try { window.localStorage.setItem(VIEW_KEY, next ? 'journey' : 'simple'); } catch { /* 저장하지 못하면 이번 화면에만 적용한다 */ }
+  }
   // 정적 사이트: AWS 는 프로필로(서버 없이 S3), 온프레미스는 분석 결과로 안다 (#275)
   const staticSite = isAwsStaticSiteProfile(text(status?.targetProfile)) || facts?.staticSite === true;
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
@@ -270,7 +283,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const parachuting = target === 'onprem' && view.stage === 3 && story?.kind === 'switch' && story.reused && story.prev !== null;
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
-  const cue = rolling ? sceneCue(view.stage, target, story) : null;
+  // 장면 효과음은 여정 애니메이션을 보고 있을 때만 낸다 (간단히 보기에는 그 소리에 맞는 그림이 없다).
+  const cue = rolling && journey ? sceneCue(view.stage, target, story) : null;
   const cueSeen = useRef(false);
   useEffect(() => {
     if (!cueSeen.current) { cueSeen.current = true; return; }
@@ -279,7 +293,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     return () => window.clearTimeout(timer);
   }, [cue]);
   // 빌드 중 집의 층이 올라갈 때마다 (장면의 층수 계산과 같은 박자: 8초마다, 3층까지)
-  const risingFloor = rolling && view.stage === 1 && !story?.reused ? Math.min(houseFloors(story) - 1, Math.floor(stepSeconds / 8)) : 0;
+  const risingFloor = rolling && journey && view.stage === 1 && !story?.reused ? Math.min(houseFloors(story) - 1, Math.floor(stepSeconds / 8)) : 0;
   useEffect(() => { if (risingFloor > 0) playRef.current('floor'); }, [risingFloor]);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
@@ -369,7 +383,10 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
+        {!journey && <SimpleProgress view={view} target={target} talk={waitingForEnv || waitingForPatch ? null : talk} facts={facts} story={story}
+          mood={view.outcome === 'failed' ? 'flustered' : view.outcome === 'success' ? 'happy' : rolling ? koroIdle(stepSeconds).mood : 'sleepy'} />}
+
+        {journey && <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
           <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
@@ -379,7 +396,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}
-        </figure>
+        </figure>}
+
+        {view.stage !== null && <div className="run-view-toggle">
+          <button type="button" className="run-view-toggle__button" onClick={toggleJourney}>
+            {journey ? t.run.simple.showSimple : t.run.simple.showJourney}
+          </button>
+        </div>}
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 

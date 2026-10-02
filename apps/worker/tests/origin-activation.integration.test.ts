@@ -28,7 +28,7 @@ describe.skipIf(!databaseUrl)("Verify → Origin: isolated PostgreSQL + HTTP", (
     for (const file of [
       "001_initial.sql", "002_health_check_attempts.sql", "003_verify_job_idempotency.sql",
       "004_secrets_environments.sql", "006_deployment_environments.sql", "009_onprem_agent_jobs.sql",
-      "013_health_check_attempt_phase.sql",
+      "013_health_check_attempt_phase.sql", "022_project_subdomain.sql",
     ]) {
       await pool.query(await readFile(new URL(`../../../packages/db/migrations/${file}`, import.meta.url), "utf8"));
     }

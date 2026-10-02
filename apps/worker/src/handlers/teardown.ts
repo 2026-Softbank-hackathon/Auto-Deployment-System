@@ -3,7 +3,7 @@
  *
  * 앱 삭제 (#247) — DELETE /projects/:id 가 넣은 teardown 잡.
  * 1. Agent cleanup Job 완료를 확인해 온프레미스 런타임 정리
- * 2. 공개 주소(service-{projectId}) · 온프레미스 검증 주소 DNS 와 Tunnel ingress 정리 (best effort)
+ * 2. 공개 주소({subdomain}, #300) · 온프레미스 검증 주소 DNS 와 Tunnel ingress 정리 (best effort)
  * 3. 이 앱을 배포한 AWS 연결마다 provision 과 같은 backend · 자격 증명으로 terraform destroy → state 삭제
  * 4. 배포 기록(deployments 와 딸린 row) · 프로젝트 전용 연결 · 시크릿 · 환경변수 삭제 (공용 연결은 그대로)
  * 실패하면 프로젝트를 남기고 deletion_status=failed + 이유를 기록해 다시 시도할 수 있게 한다.
@@ -50,6 +50,8 @@ const FALLBACK_VARIABLES = {
 type ProjectRow = {
   id: number | string;
   name: string;
+  /** 앱 주소 (#300). 비어 있으면 service-{id} */
+  subdomain?: string | null;
   deletion_status: string | null;
   deletion_warnings: string[] | null;
 };
@@ -82,7 +84,7 @@ export async function handleTeardown(
   }
 
   const projectResult = await deps.pool.query<ProjectRow>(
-    `SELECT id, name, deletion_status, deletion_warnings FROM projects WHERE id = $1`,
+    `SELECT id, name, subdomain, deletion_status, deletion_warnings FROM projects WHERE id = $1`,
     [projectId],
   );
   const project = projectResult.rows[0];
@@ -110,13 +112,13 @@ export async function handleTeardown(
     await waitForOnpremCleanup(deps, onpremDeploymentIds);
 
     // 1. 공개 주소부터 내린다 — 지울 ALB 를 가리키는 레코드가 남지 않게
-    const cloudflareFailures = await removeOrigins(deps, projectId, onpremDeploymentIds);
+    const cloudflareFailures = await removeOrigins(deps, projectId, project.subdomain, onpremDeploymentIds);
 
     // 2. AWS 리소스
     const destroyedEnvironments: string[] = [];
     const skippedEnvironments: string[] = [];
     for (const target of await loadAwsTargets(deps, projectId)) {
-      const destroyed = await destroyEnvironment(deps, projectId, target);
+      const destroyed = await destroyEnvironment(deps, projectId, project.subdomain, target);
       (destroyed ? destroyedEnvironments : skippedEnvironments).push(String(target.environment_id));
     }
 
@@ -200,11 +202,12 @@ async function assertNoActiveDeployment(deps: WorkerDeps, projectId: number): Pr
 async function removeOrigins(
   deps: WorkerDeps,
   projectId: number,
+  subdomain: string | null | undefined,
   onpremDeploymentIds: number[],
 ): Promise<string[]> {
   if (!deps.originActivator) return ["ORIGIN_CONFIGURATION_MISSING"];
   try {
-    const failures = await deps.originActivator.removeProjectOrigins({ projectId, onpremDeploymentIds });
+    const failures = await deps.originActivator.removeProjectOrigins({ projectId, subdomain, onpremDeploymentIds });
     if (failures.length > 0) {
       deps.log?.warn({ project_id: projectId, failures }, "teardown: 일부 공개 주소를 정리하지 못했습니다");
     }
@@ -249,6 +252,7 @@ async function loadAwsTargets(deps: WorkerDeps, projectId: number): Promise<AwsT
 async function destroyEnvironment(
   deps: WorkerDeps,
   projectId: number,
+  subdomain: string | null | undefined,
   target: AwsTargetRow,
 ): Promise<boolean> {
   const { secretReader, terraformCli, terraformBackend, terraformModuleRoot, terraformStateStore } = deps;
@@ -280,7 +284,7 @@ async function destroyEnvironment(
   };
   if (!(await terraformStateStore.exists(location))) return false;
 
-  const { moduleRef, variables } = destroyInputs(target, projectId, deps.platformDomain);
+  const { moduleRef, variables } = destroyInputs(target, projectId, subdomain, deps.platformDomain);
   const moduleDirectory = path.resolve(
     terraformModuleRoot,
     moduleRef.replace(/^infra\/terraform\/profiles\//, ""),
@@ -309,6 +313,7 @@ async function destroyEnvironment(
 function destroyInputs(
   target: AwsTargetRow,
   projectId: number,
+  subdomain: string | null | undefined,
   platformDomain: string | undefined,
 ): {
   moduleRef: string;
@@ -332,7 +337,7 @@ function destroyInputs(
         app_name: safeContainerName(plan.application.name),
         container_image: target.immutable_ref ?? FALLBACK_VARIABLES.container_image,
         ...(plan.runtime.type === "s3-website" && platformDomain
-          ? { bucket_name: staticSiteBucketName(projectId, platformDomain) }
+          ? { bucket_name: staticSiteBucketName(projectId, platformDomain, subdomain) }
           : {}),
       },
     };

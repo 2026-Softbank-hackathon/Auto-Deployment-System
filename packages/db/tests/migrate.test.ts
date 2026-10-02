@@ -44,6 +44,7 @@ describe("migration files", () => {
       "019_deploy_mode.sql",
       "020_source_patches.sql",
       "021_terraform_outputs.sql",
+      "022_project_subdomain.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

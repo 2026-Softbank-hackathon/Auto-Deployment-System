@@ -7,7 +7,12 @@ import {
   type OnpremDockerDeploymentPlan,
 } from "@camellia/adapters";
 import { AwsRegistryError } from "@camellia/aws-registry";
-import { AwsConfigSchema, PLATFORM_INJECTED_ENV_NAMES } from "@camellia/contracts";
+import {
+  AwsConfigSchema,
+  PLATFORM_INJECTED_ENV_NAMES,
+  projectSubdomain,
+  serviceHostname,
+} from "@camellia/contracts";
 import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
@@ -25,6 +30,8 @@ export type ProvisionJobPayload = {
 type ProvisionContext = {
   status: Status;
   project_id: number | string;
+  /** 앱 주소 (#300). 비어 있으면 service-{project_id} — 정적 사이트 버킷 이름 */
+  project_subdomain: string | null;
   target_profile: string | null;
   target_environment_id: number | string | null;
   target_environment_type: string | null;
@@ -408,7 +415,7 @@ async function provisionStaticSite(input: {
     throw new Error("STATIC_SITE_DEPENDENCY_MISSING");
   }
   if (!deps.platformDomain) throw new Error("STATIC_SITE_DOMAIN_MISSING");
-  const bucket = staticSiteBucketName(input.projectId, deps.platformDomain);
+  const bucket = staticSiteBucketName(input.projectId, deps.platformDomain, context.project_subdomain);
 
   // 버킷 정책은 Cloudflare 에서 오는 요청만 받는다 — 공개 주소를 바꾸기 전 직접 검증하려고 워커 IP 도 연다
   const egressIp = await deps.egressIpResolver?.();
@@ -519,11 +526,15 @@ async function provisionStaticSite(input: {
 
 /**
  * 정적 사이트 버킷 이름 = 공개 호스트 이름 (#274). S3 웹사이트 endpoint 는 Host 헤더로 버킷을 찾으므로
- * Cloudflare 가 service-{projectId}.{도메인} 으로 프록시하려면 버킷 이름이 정확히 같아야 한다.
+ * Cloudflare 가 {subdomain}.{도메인} 으로 프록시하려면 버킷 이름이 정확히 같아야 한다.
+ * 앱 주소(#300)를 고르지 않은 예전 프로젝트는 service-{projectId}.
  */
-export function staticSiteBucketName(projectId: number, platformDomain: string): string {
-  const domain = platformDomain.trim().replace(/\.$/, "").toLowerCase();
-  return `service-${projectId}.${domain}`;
+export function staticSiteBucketName(
+  projectId: number,
+  platformDomain: string,
+  subdomain?: string | null,
+): string {
+  return serviceHostname(projectSubdomain(subdomain, projectId).toLowerCase(), platformDomain);
 }
 
 /**
@@ -754,6 +765,7 @@ async function loadProvisionContext(
   const result = await deps.pool.query<ProvisionContext>(
     `SELECT d.status,
             d.project_id,
+            (SELECT p.subdomain FROM projects p WHERE p.id = d.project_id) AS project_subdomain,
             d.target_profile,
             d.target_environment_id,
             target_environment.type AS target_environment_type,

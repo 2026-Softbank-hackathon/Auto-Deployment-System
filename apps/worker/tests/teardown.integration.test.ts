@@ -241,6 +241,8 @@ describe.skipIf(!databaseUrl)("teardown (#247): isolated PostgreSQL", () => {
     ].sort());
     expect(d.removeProjectOrigins).toHaveBeenCalledWith({
       projectId: target,
+      // 주소를 고르지 않은 앱 — DB 가 service-{id} 로 채운다 (#300)
+      subdomain: `service-${target}`,
       onpremDeploymentIds: [expect.any(Number), expect.any(Number)],
     });
 

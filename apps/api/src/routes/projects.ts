@@ -1,7 +1,8 @@
 /**
  * apps/api/src/routes/projects.ts
  * POST /projects, GET /projects, GET /projects/:id, GET /projects/:id/deployments,
- * DELETE /projects/:id (앱 삭제 — 리소스 정리를 시작, #247)
+ * DELETE /projects/:id (앱 삭제 — 리소스 정리를 시작, #247),
+ * GET /projects/subdomain-availability (앱 주소 확인, #300)
  */
 
 import { type FastifyPluginAsync } from "fastify";
@@ -10,6 +11,7 @@ import {
   IdParamsSchema as ProjectIdParamsSchema,
   ListProjectDeploymentsQuerySchema as ListDeploymentsQuerySchema,
   ListProjectsQuerySchema,
+  SubdomainAvailabilityQuerySchema,
 } from "@camellia/contracts";
 import { ProjectService } from "../services/project-service.js";
 import { toJsonSchema } from "../plugins/swagger.js";
@@ -35,6 +37,18 @@ const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = a
   }, async (request) => {
     const query = ListProjectsQuerySchema.parse(request.query);
     return svc.list({ limit: query.limit, cursor: query.cursor });
+  });
+
+  // GET /projects/subdomain-availability — 새 앱 · 주소 변경 입력란의 실시간 확인 (#300)
+  fastify.get("/subdomain-availability", {
+    schema: {
+      tags: ["projects"],
+      summary: "앱 주소 사용 가능 여부 (형식 · 예약어 · 다른 앱 사용 중)",
+      querystring: toJsonSchema(SubdomainAvailabilityQuerySchema),
+    },
+  }, async (request) => {
+    const { name } = SubdomainAvailabilityQuerySchema.parse(request.query);
+    return svc.subdomainAvailability(name);
   });
 
   // GET /projects/:id

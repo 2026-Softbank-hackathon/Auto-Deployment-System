@@ -788,8 +788,6 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-tag rect { fill: var(--ink); }
 .jr-tag text { fill: var(--on-ink); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
 /* 지금까지 서비스하던 버전 */
-.jr-old-house { transition: opacity var(--dur-scene); }
-.jr-old-house.is-retired { opacity: .4; }
 .jr-old-house .jr-tag { transform: translate(0, 18px); }
 /* LIVE 표지: 서비스 중인 집 위. 성공하면 새 집으로 옮겨 간다 */
 .jr-live { transition: transform var(--dur-scene) var(--ease-roll); }

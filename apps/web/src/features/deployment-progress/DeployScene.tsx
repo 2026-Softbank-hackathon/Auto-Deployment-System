@@ -11,13 +11,18 @@ import { KoroHat, KoroProp } from './KoroProp';
  *   1 빌드      — 집(컨테이너 이미지)을 짓는다. 층이 올라간다
  *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 비행기를 조립한다 · 온프레미스: 서버 옆 자리를 만들고 수레를 조립한다
  *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다 · 온프레미스: 수레에 실어 서버 옆으로 민다
+ *                 (AWS는 서버의 "배포" 상태가 순식간에 지나간다. 실제 대기는 "인프라 준비"에서 일어나므로,
+ *                  진행 화면이 인프라 준비 도중에 이 장면으로 넘긴다 — awsSceneStage)
  *   4 검증      — 도착한 집에 불이 들어오는지 점검한다
  *   5 완료      — 집에 깃발이 오른다
  * 같은 집이 배포할 곳에 따라 다른 길로 간다(같은 이미지, 다른 환경).
  *
  * 재배포 · 롤백 · 환경 전환 (story):
  *   - 지금까지 서비스하던 버전은 도착점 옆자리에 작은 집으로 서 있고, LIVE 표지가 그 위에 있다.
- *     이 배포가 성공하면 표지가 새 집으로 옮겨 가고 옛 집은 불이 꺼진다.
+ *     이 배포가 성공하면 표지가 새 집으로 옮겨 간다. 옛 집은 그대로 불이 켜져 있다
+ *     (온프레미스의 이전 컨테이너도, 환경 전환 뒤의 옛 환경도 실제로 계속 떠 있다 — 주소만 가리키지 않는다).
+ *   - 예외: AWS의 같은 환경 배포(업데이트 · 롤백)는 서비스 하나를 제자리에서 교체한다(ECS 롤링).
+ *     그래서 옛 집이 집터에 서 있다가, 새 집이 도착하면(검증 단계) 그 자리를 넘겨주고 사라진다.
  *   - 환경 전환이면 두 도착점(구름 · 서버 옆)을 함께 그린다.
  *   - 전에 만든 이미지를 재사용하면 집을 짓지 않고 창고(이미지 저장소)에서 꺼낸다.
  *   - 환경 전환(이미지 재사용)은 창고를 거치지 않고, 지금 환경에 있는 집과 같은 집이 다른 환경으로 건너간다:
@@ -108,6 +113,17 @@ function House({ floors, roofed, windows, tag }: { floors: number; roofed: boole
   </>;
 }
 
+/**
+ * AWS 여정에서 장면에 쓸 단계. Terraform apply 가 인프라와 새 버전 교체를 한 번에 하고 끝날 때까지 "인프라 준비"에 머문다.
+ * 그동안 비행기 조립만 보여 주면 비행 장면은 볼 수 없으므로, 조립을 잠깐 보여 준 뒤에는 날아가는 장면으로 넘긴다.
+ * (진행률이 아니다 — 언제 끝날지는 모른다. 구름에 내려앉는 것은 서버가 검증 단계를 알려 줬을 때다.)
+ */
+export const AWS_ASSEMBLE_SECONDS = 12;
+export function awsSceneStage(view: DeploymentStatusView, target: SceneTarget, stepSeconds: number): DeploymentStatusView {
+  const flying = target !== 'onprem' && view.stage === 2 && view.outcome === 'active' && !view.waiting && stepSeconds >= AWS_ASSEMBLE_SECONDS;
+  return flying ? { ...view, stage: 3 } : view;
+}
+
 /** 빌드 중에 올라간 층수. 빌드 단계에서 실제로 흐른 시간만큼 한 층씩 쌓고(최대 3층), 지붕은 빌드가 끝났을 때만 올린다. */
 const FLOOR_SECONDS = 8;
 const FLOORS = 3;
@@ -147,12 +163,16 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const prevOnGround = prev ? (prev.target === null ? onGround : prev.target === 'onprem') : onGround;
   const showCloud = !onGround || (prev !== null && !prevOnGround);
   const showLot = onGround || (prev !== null && prevOnGround);
-  const oldSlot = prevOnGround ? LOT_OLD_SLOT : CLOUD_OLD_SLOT;
+  const arrived = reached(4);
+  // AWS의 같은 환경 배포는 제자리 교체다: 옛 집이 집터에 서 있다가 새 집이 도착하면 자리를 넘겨준다.
+  const inPlace = prev !== null && !onGround && !prevOnGround;
+  const oldSlot = inPlace ? CLOUD_SLOT : prevOnGround ? LOT_OLD_SLOT : CLOUD_OLD_SLOT;
+  const oldScale = inPlace ? 1 : OLD_SCALE;
+  const oldShown = prev !== null && !(inPlace && arrived);
   // 환경 전환: 집은 옛 환경의 집 자리에서 출발한다(배포 단계 전에는 옛 집에 겹쳐 있으므로 숨긴다).
   const moving = isMoving(story) && reached(1);
   const parachuting = moving && onGround && stage === 3;
   const house: Spot = moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround);
-  const arrived = reached(4);
 
   const stageName = stage !== null && stage < railStageCount ? t.stages[railStages[stage]] : '';
   const label = view.outcome === 'failed' ? t.run.sceneFailed
@@ -160,13 +180,14 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       : view.outcome !== 'active' ? t.run.sceneStopped
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
           : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
-  const fullLabel = prev && !succeeded ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
+  const fullLabel = prev && !succeeded && !(inPlace && arrived) ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
 
   const [cx, cy] = koroSpot(view, target, story);
 
   const box = sceneBox(target, story);
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
-  const liveAt: Spot | null = succeeded ? [house[0], house[1] - HOUSE_HEIGHT - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * OLD_SCALE - 14] : null;
+  // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
+  const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - HOUSE_HEIGHT - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
   return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`0 ${box.top} ${SCENE_SIZE.width} ${box.height}`} role="img" aria-label={fullLabel}>
@@ -192,13 +213,13 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <ellipse className="jr-cloud" cx="1125" cy="206" rx="46" ry="24" />
       <path className="jr-cloud" d="M900 150 H1160 A32 32 0 0 1 1160 214 H900 A32 32 0 0 1 900 150 Z" />
       {(target === 'aws' || onGround) && <text className="jr-sign" x="1030" y="192" textAnchor="middle">AWS</text>}
-      {!onGround && <rect className={`jr-pad ${padClass}`} x={CLOUD_SLOT[0] - 47} y="144" width="94" height="6" rx="2" />}
+      {!onGround && <rect className={`jr-pad ${inPlace ? 'is-ready' : padClass}`} x={CLOUD_SLOT[0] - 47} y="144" width="94" height="6" rx="2" />}
       {!onGround && <path className="jr-route" d="M566 396 Q 800 330 960 230" />}
     </g>}
 
-    {/* 지금까지 서비스하던 버전 — 이 배포가 성공하면 불이 꺼진다 */}
-    {prev && <g className={`jr-old-house ${succeeded ? 'is-retired' : ''}`} style={{ transform: `translate(${oldSlot[0]}px, ${oldSlot[1]}px) scale(${OLD_SCALE})` }}>
-      <House floors={FLOORS} roofed windows={succeeded ? 'off' : 'on'} tag={prev.label} />
+    {/* 지금까지 서비스하던 버전. 성공해도 불은 켜져 있다(실제로 계속 떠 있다). AWS 제자리 교체만 새 집이 도착하면 사라진다 */}
+    {prev && oldShown && <g className="jr-old-house" style={{ transform: `translate(${oldSlot[0]}px, ${oldSlot[1]}px) scale(${oldScale})` }}>
+      <House floors={FLOORS} roofed windows="on" tag={prev.label} />
     </g>}
 
     {/* 0 · 설계도 — 올린 소스(ZIP)를 읽어 배포 명세(IR)를 그린다 */}

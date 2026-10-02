@@ -29,19 +29,22 @@ const LINE_SECONDS = 7;
 /** 지금 단계에서 코로가 할 말. 단계에서 흐른 시간에 따라 차례로 돌아간다. */
 export function koroLine(stage: number, stepSeconds: number, facts: AnalysisFacts | null, target: SceneTarget, t: Messages, story: DeployStory | null = null): string | null {
   const talk = t.run.talk;
-  const lines = storyLines(stage, story, talk).concat(stageLines(stage, facts, target, talk, story?.reused === true));
+  const lines = storyLines(stage, story, talk, target).concat(stageLines(stage, facts, target, talk, story?.reused === true));
   if (!lines.length) return null;
   return lines[Math.floor(Math.max(0, stepSeconds) / LINE_SECONDS) % lines.length];
 }
 
 /** 재배포 · 롤백 · 환경 전환일 때 먼저 하는 말 */
-function storyLines(stage: number, story: DeployStory | null, talk: Messages['run']['talk']): string[] {
+function storyLines(stage: number, story: DeployStory | null, talk: Messages['run']['talk'], target: SceneTarget): string[] {
   if (!story) return [];
+  // AWS의 같은 환경 배포는 서비스 하나를 제자리에서 새 버전으로 바꾼다 (인프라 준비 단계에서 일어난다).
+  const inPlace = story.prev !== null && story.kind !== 'switch' && target !== 'onprem';
   // "같은 이미지, 장소만 바꾼다"는 지금 서비스 중인 버전과 이름표가 같을 때만 말한다 (환경을 바꾸면서 예전 이미지로 되돌리는 경우도 있다).
   const sameImage = story.prev !== null && story.prev.label === story.label;
   if (stage === 1 && story.reused) return [talk.reuse, ...(story.kind === 'switch' && sameImage ? [talk.reuseSwitch] : story.kind === 'rollback' ? [talk.rollback(story.label)] : [])];
   if (stage >= 2 && stage <= 4 && story.kind === 'switch') return [talk.switchKeeps];
-  if (stage >= 2 && stage <= 4 && story.kind === 'rollback') return [talk.rollback(story.label)];
+  if (stage >= 2 && stage <= 4 && story.kind === 'rollback') return [talk.rollback(story.label), ...(inPlace && stage === 2 ? [talk.awsInPlace] : [])];
+  if (stage === 2 && inPlace) return [talk.awsInPlace];
   return [];
 }
 
@@ -50,7 +53,7 @@ function stageLines(stage: number, facts: AnalysisFacts | null, target: SceneTar
   const lines: string[] = stage === 0 ? [...talk.analyze]
     : stage === 1 ? [...(facts?.stack ? [facts.port ? talk.foundStackPort(facts.stack, facts.port) : talk.foundStack(facts.stack)] : []), ...(facts && facts.services > 1 ? [talk.foundServices(facts.services)] : []), ...talk.build]
       : stage === 2 ? [...(target === 'onprem' ? talk.provisionOnprem : talk.provisionAws), ...talk.provision]
-        : stage === 3 ? [...talk.deploy]
+        : stage === 3 ? [...(target === 'onprem' ? talk.deployOnprem : talk.deploy)]
           : stage === 4 ? [...talk.verify] : [];
   return lines;
 }

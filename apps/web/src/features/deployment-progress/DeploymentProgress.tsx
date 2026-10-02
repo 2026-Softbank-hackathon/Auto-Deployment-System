@@ -10,7 +10,7 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { DeployScene, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { awsSceneStage, DeployScene, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -257,10 +257,12 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const target = sceneTarget(text(status?.targetProfile));
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
-  const [koroX, koroY] = koroSpot(view, target, story);
+  // 장면에 쓰는 단계: AWS는 인프라 준비 도중에 비행 장면으로 넘어간다(서버의 "배포" 상태가 순식간이라서). 코로의 말은 실제 단계를 따른다.
+  const sceneView = awsSceneStage(view, target, stepSeconds);
+  const [koroX, koroY] = koroSpot(sceneView, target, story);
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
-  const cue = rolling ? sceneCue(view.stage, target, story) : null;
+  const cue = rolling ? sceneCue(sceneView.stage, target, story) : null;
   const cueSeen = useRef(false);
   useEffect(() => {
     if (!cueSeen.current) { cueSeen.current = true; return; }
@@ -357,7 +359,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
+          <DeployScene view={sceneView} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}

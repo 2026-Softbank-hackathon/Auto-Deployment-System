@@ -33,6 +33,7 @@ function makeHarness(overrides: Partial<{
   buildFailure: Error;
   autoApproveFailure: Error;
   reusableDigest: string;
+  registryOwnerProjectId: string | null;
 }> = {}) {
   let currentStatus = overrides.status ?? "queued";
   const queries: Array<{ sql: string; params: unknown[] }> = [];
@@ -85,6 +86,8 @@ function makeHarness(overrides: Partial<{
               source_storage_key: "sources/demo.zip",
               ir_json: IR,
               registry_environment_type: "aws",
+              registry_environment_project_id:
+                overrides.registryOwnerProjectId === undefined ? "1" : overrides.registryOwnerProjectId,
               aws_config:
                 credentialsType === "access_key"
                   ? {
@@ -123,7 +126,7 @@ function makeHarness(overrides: Partial<{
   const boss = { send: vi.fn(async () => "job-id") };
   const notifier = { notify: vi.fn(async () => {}) };
   const secretReader = {
-    read: vi.fn(async (_projectId: number, name: string) =>
+    read: vi.fn(async (_projectId: number | null, name: string) =>
       name === "aws-access" ? "access-value" : "secret-value",
     ),
   };
@@ -200,6 +203,18 @@ describe("handleBuild", () => {
       isDirectory: true,
       cleanup: vi.fn(async () => {}),
     });
+  });
+
+  it("레지스트리가 공용 연결이면 공용 시크릿을 읽고 ECR 저장소는 배포 프로젝트 것을 쓴다 (#215)", async () => {
+    const harness = makeHarness({ registryOwnerProjectId: null });
+
+    await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+    const context = harness.queries.find((q) => q.sql.includes("SELECT d.status"))!;
+    expect(context.sql).toContain("registry_environment.project_id AS registry_environment_project_id");
+    expect(harness.secretReader.read).toHaveBeenCalledWith(null, "aws-access");
+    expect(harness.secretReader.read).toHaveBeenCalledWith(null, "aws-secret");
+    expect(harness.registry.ensureProjectRepository).toHaveBeenCalledWith(1);
   });
 
   it("Secret reference로 ECR에 build하고 digest를 저장한다", async () => {

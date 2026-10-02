@@ -25,6 +25,8 @@ type BuildContextRow = {
   source_storage_key: string | null;
   ir_json: unknown | null;
   registry_environment_type: string;
+  /** 레지스트리 연결의 소유 프로젝트 — 공용 연결(#215)이면 null */
+  registry_environment_project_id: number | string | null;
   aws_config: unknown | null;
   existing_artifact_id: number | string | null;
 };
@@ -95,9 +97,14 @@ export async function handleBuild(
     }
 
     await stepLog.line("빌드 준비");
+    // 시크릿은 레지스트리 연결의 소유 범위에서 읽는다 (공용 연결이면 공용 시크릿, #215)
+    const secretOwnerId =
+      context.registry_environment_project_id === null
+        ? null
+        : parseProjectId(context.registry_environment_project_id);
     const [accessKeyId, secretAccessKey] = await Promise.all([
-      required.secretReader.read(projectId, awsConfig.accessKeyIdSecretName),
-      required.secretReader.read(projectId, awsConfig.secretAccessKeySecretName),
+      required.secretReader.read(secretOwnerId, awsConfig.accessKeyIdSecretName),
+      required.secretReader.read(secretOwnerId, awsConfig.secretAccessKeySecretName),
     ]);
     const registry = required.awsRegistryFactory({
       region: awsConfig.region,
@@ -164,6 +171,7 @@ async function loadBuildContext(
             source.storage_key AS source_storage_key,
             ir.ir_json,
             registry_environment.type AS registry_environment_type,
+            registry_environment.project_id AS registry_environment_project_id,
             registry_environment.aws_config,
             artifact.id AS existing_artifact_id
      FROM deployments d

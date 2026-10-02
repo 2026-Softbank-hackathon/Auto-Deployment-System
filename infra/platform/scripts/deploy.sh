@@ -64,7 +64,13 @@ main() {
 
   # ── 3. compose ──────────────────────────────────────────────────────────
   cd "$PLATFORM_DIR"
-  docker compose --profile tunnel up -d --build --remove-orphans
+  docker compose --profile tunnel build
+  # worker 는 진행 중인 사용자 배포가 끝날 때까지 최대 30분 멈추며 교체된다 (stop_grace_period, #241).
+  # 한 번에 up 하면 compose 가 그동안 다른 서비스 시작도 미루므로, worker 를 뺀 나머지를 먼저 올린다
+  mapfile -t services < <(docker compose --profile tunnel config --services | grep -vx worker)
+  docker compose --profile tunnel up -d --no-build --remove-orphans "${services[@]}"
+  log "worker 교체 — 진행 중인 작업이 있으면 끝날 때까지 기다린다"
+  docker compose --profile tunnel up -d --no-build --no-deps worker
   docker image prune -f >/dev/null
   docker compose --profile tunnel ps
   log "done"

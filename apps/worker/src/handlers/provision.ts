@@ -319,6 +319,7 @@ async function applyTerraform(input: {
       region: input.region,
       credentials: input.credentials,
       variables: input.variables,
+      log: (line) => input.stepLog.line(line),
     });
     const originUrl = outputs["origin_url"]?.value;
     if (typeof originUrl !== "string") {

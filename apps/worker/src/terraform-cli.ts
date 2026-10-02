@@ -32,6 +32,8 @@ export type TerraformCliRequest = {
   region: string;
   credentials: TerraformAwsCredentials;
   variables: Record<string, TerraformVariable>;
+  /** 사용자에게 보여줄 진행 로그 (예: 남은 state 락 해제) */
+  log?: (line: string) => Promise<void>;
 };
 
 export type TerraformOutput = {
@@ -82,17 +84,29 @@ export type TerraformCliOptions = {
   executable?: string;
   tempRoot?: string;
   execute?: TerraformCommandExecutor;
+  /**
+   * 이 시각보다 먼저 만들어진 state 락은 죽은 프로세스가 남긴 것으로 보고 해제한다.
+   * 기본값은 이 워커 프로세스의 시작 시각. 플랫폼은 worker 가 하나뿐이고 compose 는
+   * 이전 컨테이너를 멈춘 뒤 새 컨테이너를 띄우므로, 그 전에 잡힌 락의 주인은 살아 있을 수 없다.
+   */
+  staleLockBefore?: Date;
 };
+
+/** state 락이 잡혀 있으면 이만큼 기다린다 (plan · apply) */
+const LOCK_TIMEOUT = "1m";
 
 export class TerraformCli {
   private readonly executable: string;
   private readonly tempRoot: string;
   private readonly execute: TerraformCommandExecutor;
+  private readonly staleLockBefore: Date;
 
   constructor(options: TerraformCliOptions = {}) {
     this.executable = options.executable ?? "terraform";
     this.tempRoot = options.tempRoot ?? os.tmpdir();
     this.execute = options.execute ?? executeTerraformCommand;
+    this.staleLockBefore =
+      options.staleLockBefore ?? new Date(Date.now() - process.uptime() * 1000);
   }
 
   async apply(request: TerraformCliRequest): Promise<TerraformOutputs> {
@@ -135,17 +149,31 @@ export class TerraformCli {
       ], workspace, env);
 
       const planPath = path.join(workspace, "tfplan");
-      await this.run("TERRAFORM_PLAN_FAILED", [
+      const planArgs = [
         "plan",
         "-input=false",
         "-no-color",
+        `-lock-timeout=${LOCK_TIMEOUT}`,
         "-var-file=terraform.tfvars.json",
         `-out=${planPath}`,
-      ], workspace, env);
+      ];
+      try {
+        await this.run("TERRAFORM_PLAN_FAILED", planArgs, workspace, env);
+      } catch (error) {
+        // 이전 워커가 apply 도중 죽으면 S3 락 파일이 남는다 → 주인이 죽은 락이면 풀고 한 번 더
+        const lock = error instanceof TerraformCliError ? parseStateLock(error.detail) : null;
+        if (!lock || lock.created >= this.staleLockBefore) throw error;
+        await request.log?.(
+          `이전 워커가 남긴 Terraform state 락(${lock.id}, ${lock.created.toISOString()})을 해제합니다.`,
+        );
+        await this.run("TERRAFORM_PLAN_FAILED", ["force-unlock", "-force", lock.id], workspace, env);
+        await this.run("TERRAFORM_PLAN_FAILED", planArgs, workspace, env);
+      }
       await this.run("TERRAFORM_APPLY_FAILED", [
         "apply",
         "-input=false",
         "-no-color",
+        `-lock-timeout=${LOCK_TIMEOUT}`,
         planPath,
       ], workspace, env);
 
@@ -209,6 +237,24 @@ function validateRequest(request: TerraformCliRequest): void {
   ) {
     throw new TerraformCliError("TERRAFORM_INPUT_INVALID");
   }
+}
+
+/** "Error acquiring the state lock" 출력의 Lock Info 에서 ID 와 생성 시각을 읽는다 */
+function parseStateLock(
+  detail: string | undefined,
+): { id: string; created: Date } | null {
+  if (!detail || !detail.includes("Error acquiring the state lock")) return null;
+  const id = detail.match(/^\s*ID:\s+([0-9a-f-]{36})\s*$/im)?.[1];
+  // 예: "Created:   2026-10-02 05:20:11.123456789 +0000 UTC"
+  const created = detail.match(
+    /^\s*Created:\s+(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d+)? ([+-]\d{2})(\d{2})/m,
+  );
+  if (!id || !created) return null;
+  const [, date, time, fraction = "", offsetHours, offsetMinutes] = created;
+  const value = new Date(
+    `${date}T${time}${fraction.slice(0, 4)}${offsetHours}:${offsetMinutes}`,
+  );
+  return Number.isNaN(value.getTime()) ? null : { id, created: value };
 }
 
 function isValidStateKey(key: string): boolean {

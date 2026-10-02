@@ -10,7 +10,7 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { awsSceneStage, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget, skyPhase } from './DeployScene';
+import { AIRLIFT_SECONDS, awsLoaded, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget, skyPhase } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -260,19 +260,18 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const target = sceneTarget(text(status?.targetProfile));
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
-  // 장면에 쓰는 단계: AWS는 인프라 준비 도중에 비행 장면으로 넘어간다(서버의 "배포" 상태가 순식간이라서). 코로의 말은 실제 단계를 따른다.
-  const sceneView = awsSceneStage(view, target, stepSeconds);
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
   const box = sceneBox(target, story);
-  const [koroX, koroY] = koroSpot(sceneView, target, story);
+  const [koroX, koroY] = koroSpot(view, target, story);
   // 생각 풍선을 펼치는 쪽: 장면의 다른 그림과 겹치지 않는 쪽을 고른다.
   //  - 집 짓는 중에는 오른쪽에 집이 있으므로 왼쪽
   //  - 도착점 근처(구름 위 · 서버 옆)에서는 오른쪽에 집과 LIVE 표지가 있으므로 왼쪽
   //  - 그 밖에는 오른쪽 (설계도 옆 · 탈것 조립 · 비행 중)
-  const thinkLeft = sceneView.stage === 1 || koroX >= 800;
+  //  - AWS 에서 집을 비행기에 실은 뒤에는 오른쪽에 집이 있으므로 왼쪽
+  const thinkLeft = view.stage === 1 || koroX >= 800 || awsLoaded(view, target, stepSeconds);
   // 날아가는 동안에는 하늘빛이 화면 전체에 번진다 (페이지 · 사이드바 · 카드의 바탕색). 장면의 하늘과 같은 박자다.
   // 이 화면을 떠나거나 비행이 끝나면 원래 색으로 돌아간다.
-  const pageSky = target !== 'onprem' && sceneView.stage === 3 && rolling ? skyPhase(stepSeconds) : 'day';
+  const pageSky = target !== 'onprem' && view.stage === 2 && rolling ? skyPhase(stepSeconds) : 'day';
   useEffect(() => {
     const root = document.documentElement;
     if (pageSky === 'day') delete root.dataset.sky; else root.dataset.sky = pageSky;
@@ -297,7 +296,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const thinkAttached = sceneWidth !== null && sceneWidth / box.width >= THINK_ATTACH_SCALE;
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
-  const cue = rolling ? sceneCue(sceneView.stage, target, story) : null;
+  const cue = rolling ? sceneCue(view.stage, target, story) : null;
   const cueSeen = useRef(false);
   useEffect(() => {
     if (!cueSeen.current) { cueSeen.current = true; return; }
@@ -305,6 +304,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     const timer = window.setTimeout(() => playRef.current(cue), 450);
     return () => window.clearTimeout(timer);
   }, [cue]);
+  // AWS 는 검증이 시작되며 구름으로 날아가므로(이륙 소리), 내려앉은 뒤에 점검 소리를 낸다.
+  const airliftCheck = rolling && target !== 'onprem' && view.stage === 4;
+  useEffect(() => {
+    if (!airliftCheck) return;
+    const timer = window.setTimeout(() => playRef.current('check'), AIRLIFT_SECONDS * 1000 + 300);
+    return () => window.clearTimeout(timer);
+  }, [airliftCheck]);
   // 빌드 중 집의 층이 올라갈 때마다 (장면의 층수 계산과 같은 박자: 8초마다, 3층까지)
   const risingFloor = rolling && view.stage === 1 && !story?.reused ? Math.min(houseFloors(story) - 1, Math.floor(stepSeconds / 8)) : 0;
   useEffect(() => { if (risingFloor > 0) playRef.current('floor'); }, [risingFloor]);
@@ -394,7 +400,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure ref={setSceneElement} className={`run-scene ${thinkAttached ? 'is-attached' : ''}`} style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
-          <DeployScene view={sceneView} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
               장면이 작게 그려질 때는 머리에 붙이지 않고 장면 아래에 둔다(is-caption). */}

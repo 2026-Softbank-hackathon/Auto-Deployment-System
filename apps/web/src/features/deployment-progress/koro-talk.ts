@@ -87,8 +87,9 @@ export function sceneCue(stage: number | null, target: SceneTarget, story: Deplo
     case 0: return 'scan';
     case 1: return moving ? null : story?.reused ? 'warehouse' : 'hammer';
     case 2: return target === 'onprem' && !moving ? 'robot' : 'wrench';
-    case 3: return target === 'onprem' ? (moving ? 'parachute' : 'roll') : 'takeoff';
-    case 4: return 'check';
+    // AWS 는 배포 상태가 순식간이라 이륙 소리를 검증 시작에 낸다(점검 소리는 내려앉은 뒤 — 진행 화면이 따로 낸다)
+    case 3: return target === 'onprem' ? (moving ? 'parachute' : 'roll') : null;
+    case 4: return target === 'onprem' ? 'check' : 'takeoff';
     default: return null;
   }
 }

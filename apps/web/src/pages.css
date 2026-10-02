@@ -831,6 +831,9 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-robot__antenna { fill: var(--brass); stroke: var(--ink); stroke-width: 2; }
 .jr-robot__name { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 8px; font-weight: 700; letter-spacing: .5px; }
 .jr-plane { opacity: 0; }
+/* 구름으로 날아가기(AWS): 집 · 비행기 · 코로가 같은 시간 동안 함께 올라간다. 비행기는 내려앉은 뒤 사라진다. */
+.deploy-scene.is-airlift .jr-house, .deploy-scene.is-airlift .scene-koro { transition-duration: 3.6s; transition-timing-function: ease-in-out; }
+.jr-plane.is-landed { opacity: 0; transition: transform 3.6s ease-in-out, opacity .6s ease 3.7s; }
 .jr-plane.is-shown { opacity: 1; }
 .jr-house, .jr-robot, .jr-plane { transition: transform var(--dur-scene) var(--ease-roll), opacity var(--dur-roll); }
 

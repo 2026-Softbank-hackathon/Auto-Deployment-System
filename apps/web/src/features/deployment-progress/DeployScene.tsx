@@ -11,8 +11,8 @@ import { KoroHat, KoroProp } from './KoroProp';
  *   1 빌드      — 집(컨테이너 이미지)을 짓는다. 층이 올라간다
  *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 비행기를 조립한다 · 온프레미스: 에이전트 로봇에게 집을 넘긴다
  *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다 · 온프레미스: 에이전트 로봇이 집을 이고 서버 옆으로 알아서 옮긴다
- *                 (AWS는 서버의 "배포" 상태가 순식간에 지나간다. 실제 대기는 "인프라 준비"에서 일어나므로,
- *                  진행 화면이 인프라 준비 도중에 이 장면으로 넘긴다 — awsSceneStage)
+ *                 (AWS는 서버의 "배포" 상태가 순식간에 지나간다. 그래서 비행은 검증 단계가 시작되는 순간 몇 초 동안 보인다.
+ *                  그 전의 긴 "인프라 준비"는 땅에서 비행기를 조립하고 집을 싣는 장면이다 — awsLoaded)
  *   4 검증      — 도착한 집에 불이 들어오는지 점검한다
  *   5 완료      — 집에 깃발이 오른다
  * 같은 집이 배포할 곳에 따라 다른 길로 간다(같은 이미지, 다른 환경).
@@ -48,11 +48,10 @@ export function sceneTarget(profile: string | null): SceneTarget {
 type Spot = readonly [number, number];
 /** 비행기의 바닥 중심 좌표: 조립하는 곳(땅) → 날아가는 중(하늘). 집과 코로는 비행기 등(PLANE_TOP 높이)에 탄다 */
 const PLANE_GROUND: Spot = [800, GROUND];
-// 날아가는 자리는 장면 가운데 왼쪽이다 — 코로의 생각 풍선이 구름 위 세계와 겹치지 않게 떨어뜨려 놓았다.
-const PLANE_AIR: Spot = [560, 350];
+
 const PLANE_TOP = 64;
 /** 단계별 코로 중심 좌표 (0 설계도 · 1 집 짓는 곳 · 2 탈것 준비 · 3 이동 중 · 4 도착 · 5 완료) */
-const skySpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [640, KORO_Y], [PLANE_AIR[0] + 55, PLANE_AIR[1] - PLANE_TOP - KORO_SIZE / 2], [950, 114], [950, 114]];
+const skySpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [640, KORO_Y], [950, 114], [950, 114], [950, 114]];
 // 온프레미스: 집을 지은 뒤에는 에이전트 로봇이 알아서 옮긴다. 코로는 집 짓는 곳에서 넘겨주고 지켜보다가, 검증 때 서버 옆으로 간다.
 const groundSpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [415, KORO_Y], [415, KORO_Y], [880, KORO_Y], [880, KORO_Y]];
 /** 에이전트 로봇의 바닥 중심: 서버 옆 대기 자리 → 집 옆(넘겨받기) → 집을 이고 가는 중 */
@@ -73,7 +72,7 @@ const STOPPED_SPOT: Spot = [600, KORO_Y];
 const HOUSE_SITE: Spot = [520, GROUND];
 function houseSpot(stage: number, onGround: boolean): Spot {
   if (stage <= 2) return HOUSE_SITE;
-  if (stage === 3) return onGround ? [ROBOT_CARRY[0], GROUND - ROBOT_TOP] : [PLANE_AIR[0] - 38, PLANE_AIR[1] - PLANE_TOP];
+  if (stage === 3) return onGround ? [ROBOT_CARRY[0], GROUND - ROBOT_TOP] : CLOUD_SLOT;
   return onGround ? LOT_SLOT : CLOUD_SLOT;
 }
 
@@ -135,15 +134,17 @@ function House({ floors, total = FLOORS, roofed, windows, tag }: { floors: numbe
 }
 
 /**
- * AWS 여정에서 장면에 쓸 단계. Terraform apply 가 인프라와 새 버전 교체를 한 번에 하고 끝날 때까지 "인프라 준비"에 머문다.
- * 그동안 비행기 조립만 보여 주면 비행 장면은 볼 수 없으므로, 조립을 잠깐 보여 준 뒤에는 날아가는 장면으로 넘긴다.
- * (진행률이 아니다 — 언제 끝날지는 모른다. 구름에 내려앉는 것은 서버가 검증 단계를 알려 줬을 때다.)
+ * AWS 여정의 "인프라 준비"는 땅에서 일어난다. Terraform apply 가 인프라와 새 버전 교체를 끝낼 때까지 몇 분을 머문다.
+ * 처음에는 비행기를 조립하고, 잠시 뒤에는 집을 비행기에 싣고 이륙을 기다린다(둘 다 땅 위).
+ * 날아가는 것은 서버가 "배포"를 알릴 때다 — AWS 는 그 상태가 순식간에 지나가서, 검증 단계가 시작되며 구름으로 날아가 내려앉는다.
+ * (조립 → 싣기의 전환은 진행률이 아니다. 언제 끝날지는 모른다.)
  */
 export const AWS_ASSEMBLE_SECONDS = 12;
-export function awsSceneStage(view: DeploymentStatusView, target: SceneTarget, stepSeconds: number): DeploymentStatusView {
-  const flying = target !== 'onprem' && view.stage === 2 && view.outcome === 'active' && !view.waiting && stepSeconds >= AWS_ASSEMBLE_SECONDS;
-  return flying ? { ...view, stage: 3 } : view;
+export function awsLoaded(view: DeploymentStatusView, target: SceneTarget, stepSeconds: number): boolean {
+  return target !== 'onprem' && view.stage === 2 && view.outcome === 'active' && !view.waiting && stepSeconds >= AWS_ASSEMBLE_SECONDS;
 }
+/** 구름으로 날아가는 데 걸리는 시간(초). CSS 의 이동 시간과 맞춘다 */
+export const AIRLIFT_SECONDS = 3.6;
 
 /**
  * 날아가는 동안의 하늘. 그 단계에서 실제로 흐른 시간에 따라 낮 → 노을 → 밤 → 새벽으로 바뀐다(5분에 한 바퀴).
@@ -204,22 +205,26 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   // 환경 전환: 집은 옛 환경의 집 자리에서 출발한다(배포 단계 전에는 옛 집에 겹쳐 있으므로 숨긴다).
   const moving = isMoving(story) && reached(1);
   const parachuting = moving && onGround && stage === 3;
-  const house: Spot = moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround);
+  // AWS 인프라 준비: 조립이 끝나면 집을 비행기 등에 싣고 땅에서 이륙을 기다린다.
+  const loaded = awsLoaded(view, target, stepSeconds);
+  const house: Spot = loaded ? [PLANE_GROUND[0] - 38, GROUND - PLANE_TOP] : moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround);
+  // 구름으로 날아가는 중: 배포 상태이거나, 검증이 막 시작된 몇 초 (AWS 는 배포 상태가 순식간이다)
+  const airlift = !onGround && rolling && (stage === 3 || (stage === 4 && stepSeconds < AIRLIFT_SECONDS));
 
   const stageName = stage !== null && stage < railStageCount ? t.stages[railStages[stage]] : '';
   const label = view.outcome === 'failed' ? t.run.sceneFailed
     : succeeded ? t.run.sceneSucceeded
       : view.outcome !== 'active' ? t.run.sceneStopped
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
-          : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
+          : (loaded ? t.run.sceneLoaded : stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
   const fullLabel = prev && !succeeded && !(inPlace && arrived) ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
 
   const [cx, cy] = koroSpot(view, target, story);
 
   const handingOff = onGround && !moving && (stage === 2 || stage === 3);
   const box = sceneBox(target, story);
-  // 날아가는 중(AWS 여정의 비행 장면): 구름 · 새 · 열기구가 뒤로 흘러가고 하늘빛이 바뀐다.
-  const traveling = !onGround && stage === 3 && rolling;
+  // AWS 인프라 준비는 길다. 그동안 하늘에는 구름 · 새 · 열기구가 지나가고, 흐른 시간에 따라 하늘빛이 바뀐다.
+  const traveling = !onGround && stage === 2 && rolling;
   const sky = traveling ? skyPhase(stepSeconds) : 'day';
   const clipId = useId();
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
@@ -227,7 +232,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
-  return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
+  return <svg className={`deploy-scene is-${view.outcome} ${!onGround && reached(3) ? 'is-airlift' : ''}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
     {showCloud && <>
       {/* 흘러가는 것들이 잘라 낸 장면 밖으로 나가지 않게 한다 */}
       <defs><clipPath id={clipId}><rect x={box.left} y={box.top - 70} width={box.width} height={GROUND - box.top + 70} /></clipPath></defs>
@@ -313,9 +318,9 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 2 · 탈것 준비 — AWS: 조립하는 비행기 */}
-    {!onGround && <g className={`jr-plane ${stage === 2 || stage === 3 ? 'is-shown' : ''} ${working(2) ? 'is-building' : ''} ${stage === 3 ? 'is-flying' : ''}`}
-      style={place(stage !== null && stage >= 4 ? [1320, 240] : stage === 3 ? PLANE_AIR : PLANE_GROUND)}>
-      {stage === 3 && <path className="jr-plane__wind" d="M-150 -52 H-118 M-164 -36 H-124 M-150 -20 H-118" />}
+    {!onGround && <g className={`jr-plane ${stage === 2 ? 'is-shown' : reached(3) ? 'is-landed' : ''} ${working(2) && !loaded ? 'is-building' : ''} ${airlift ? 'is-flying' : ''}`}
+      style={place(reached(3) ? [CLOUD_SLOT[0] + 38, CLOUD_SLOT[1] + PLANE_TOP] : PLANE_GROUND)}>
+      {airlift && <path className="jr-plane__wind" d="M-150 -52 H-118 M-164 -36 H-124 M-150 -20 H-118" />}
       <path className="jr-plane__tail" d="M-100 -60 L-122 -96 H-92 L-70 -64 Z" />
       <path className="jr-plane__body" d={`M-104 -${PLANE_TOP} H78 Q112 -${PLANE_TOP} 112 -39 Q112 -14 78 -14 H-70 Q-104 -14 -104 -${PLANE_TOP} Z`} />
       <path className="jr-plane__wing" d="M-26 -30 H44 L22 -6 H-46 Z" />
@@ -341,7 +346,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 집 = 컨테이너 이미지. 한 번 지은 집이 그대로 배포할 곳까지 간다 */}
-    <g className={`jr-house ${moving && stage !== null && stage <= 2 ? 'is-hidden' : ''}`} style={place(house)}>
+    <g className={`jr-house ${moving && !loaded && stage !== null && stage <= 2 ? 'is-hidden' : ''}`} style={place(house)}>
       {parachuting && <g className="jr-parachute">
         <path className="jr-line" d="M-58 -152 L-44 -80 M58 -152 L44 -80 M0 -176 V-108" />
         <path className="jr-parachute__canopy" d="M-62 -150 Q0 -232 62 -150 Q31 -166 0 -150 Q-31 -166 -62 -150 Z" />
@@ -359,9 +364,9 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         {/* 팔과 도구는 몸 뒤에, 안전모는 몸 앞에 그린다. 일하는 중이 아니거나 조는 동안에는 팔만 내린다 */}
         {/* 온프레미스(전환이 아닐 때)의 인프라 준비 · 배포: 코로는 로봇에게 넘겨주고 손을 흔든다 */}
-        <KoroProp activity={traveling ? Math.floor(stepSeconds / 14) % 3 : 0} stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
+        <KoroProp activity={loaded ? Math.floor(stepSeconds / 14) % 3 : 0} stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff || loaded ? 3 : stage} carrying={reused && !moving} />
         <Koro mood={mood} size={KORO_SIZE} />
-        {rolling && !dozing && ((stage === 1 && !reused) || (stage === 2 && !handingOff)) && <KoroHat />}
+        {rolling && !dozing && ((stage === 1 && !reused) || (stage === 2 && !handingOff && !loaded)) && <KoroHat />}
       </g>
       {dozing && <g className="scene-zzz" aria-hidden="true"><text x={KORO_SIZE - 4} y="4">z</text><text x={KORO_SIZE + 8} y="-10">z</text></g>}
     </g>

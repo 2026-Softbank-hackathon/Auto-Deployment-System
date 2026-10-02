@@ -6,6 +6,7 @@
 #   1. git-ref(브랜치 · 태그 · 커밋, 기본 main)를 받아 체크아웃
 #   2. SSM Parameter Store(<prefix>/*)를 읽어 infra/platform/.env 생성 (권한 600)
 #   3. docker compose --profile tunnel up -d --build
+#   4. 디스크 정리 (안 쓰는 이미지 · 빌드 캐시 · 사용자 앱 이미지). 실패해도 배포는 성공으로 둔다
 #
 # 설정: /etc/camellia/platform.conf (user-data 가 만듦) — AWS_REGION, CAMELLIA_SSM_PREFIX
 # 최초 부팅(user-data)과 이후 갱신이 같은 스크립트를 쓴다.
@@ -27,6 +28,28 @@ main() {
   REQUIRED_KEYS=(POSTGRES_PASSWORD API_KEY SECRET_MASTER_KEY CONSOLE_BASIC_AUTH_PASSWORD CLOUDFLARE_TUNNEL_TOKEN)
 
   log() { echo "[camellia-deploy] $*"; }
+
+  disk_usage() { df -h / | awk 'NR == 2 { print $3 " / " $2 " (" $5 ")" }'; }
+
+  cleanup_disk() {
+    log "disk before cleanup: $(disk_usage)"
+    docker image prune -f >/dev/null
+    # 빌드 캐시는 5GB 만 남긴다. Docker 28+ 는 --reserved-space, 이전 버전은 --keep-storage
+    docker builder prune -f --reserved-space 5gb >/dev/null 2>&1 \
+      || docker builder prune -f --keep-storage 5gb >/dev/null
+    # worker 가 빌드해 ECR 에 push 한 사용자 앱 이미지 (<계정>.dkr.ecr.../camellia/projects/<id>:<tag>).
+    # 진행 중인 빌드와 겹치지 않게 1시간 지난 것만 지우고, 컨테이너가 쓰는 이미지는 docker rmi 가 거부한다
+    local cutoff ref created removed=0
+    cutoff=$(( $(date +%s) - 3600 ))
+    while read -r ref; do
+      created="$(docker image inspect -f '{{.Created}}' "$ref" 2>/dev/null)" || continue
+      created="$(date -d "$created" +%s 2>/dev/null)" || continue
+      [ "$created" -lt "$cutoff" ] || continue
+      docker rmi "$ref" >/dev/null 2>&1 && removed=$((removed + 1))
+    done < <(docker image ls --filter 'reference=*/camellia/projects/*' --format '{{.Repository}}:{{.Tag}}' | grep -v ':<none>$')
+    log "user-app images removed: $removed"
+    log "disk after cleanup: $(disk_usage)"
+  }
 
   # ── 1. 소스 ──────────────────────────────────────────────────────────────
   log "git ref: $REF"
@@ -71,7 +94,11 @@ main() {
   docker compose --profile tunnel up -d --no-build --remove-orphans "${services[@]}"
   log "worker 교체 — 진행 중인 작업이 있으면 끝날 때까지 기다린다"
   docker compose --profile tunnel up -d --no-build --no-deps worker
-  docker image prune -f >/dev/null
+
+  # ── 4. 디스크 정리 ──────────────────────────────────────────────────────
+  # 매 배포 빌드 캐시와 worker 가 빌드한 사용자 앱 이미지가 쌓여 루트 디스크가 찬다 (#257).
+  # best-effort: `|| ...` 로 부르므로 함수 안에서는 set -e 가 꺼지고, 실패해도 배포는 성공이다
+  cleanup_disk || log "디스크 정리 중 오류 — 무시한다"
   docker compose --profile tunnel ps
   log "done"
 }

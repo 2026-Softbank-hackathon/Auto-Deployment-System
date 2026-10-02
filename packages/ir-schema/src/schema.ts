@@ -124,6 +124,34 @@ const HealthSchema = z
   .describe("헬스체크 설정");
 
 // ---------------------------------------------------------------------------
+// services[*].static — type=static 일 때 정적 파일을 만드는 방법
+// ---------------------------------------------------------------------------
+
+const StaticSiteSchema = z
+  .object({
+    build_command: z
+      .string()
+      .min(1)
+      .max(500)
+      .regex(/^[^\r\n\0]+$/, "한 줄 명령이어야 합니다")
+      .optional()
+      .describe("정적 파일 빌드 명령 (예: \"npm run build\"). 없으면 소스를 그대로 서빙"),
+    output_dir: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\/?$/, "소스 루트 기준 상대 경로여야 합니다")
+      .refine((value) => !value.split("/").includes(".."), "소스 밖을 가리킬 수 없습니다")
+      .default(".")
+      .describe("서빙할 파일이 있는 폴더 (소스 루트 기준). 빌드 도구 기본값: vite·parcel=dist, CRA=build"),
+    spa_fallback: z
+      .boolean()
+      .default(true)
+      .describe("없는 경로를 index.html 로 응답할지 (SPA 클라이언트 라우팅)"),
+  })
+  .describe("정적 사이트 설정. 빌드 결과를 컨테이너(nginx) 이미지 하나로 만들어 모든 환경에 같은 digest 로 배포");
+
+// ---------------------------------------------------------------------------
 // services[*]
 // ---------------------------------------------------------------------------
 
@@ -173,6 +201,7 @@ const ServiceSchema = z
       .array(z.string())
       .optional()
       .describe("이 서비스가 의존하는 다른 서비스 이름 목록. 위상 정렬 순서에 사용됨"),
+    static: StaticSiteSchema.optional().describe("type=static 서비스의 빌드 · 서빙 설정"),
   })
   .describe("단일 서비스 정의");
 
@@ -369,6 +398,7 @@ export type Ir = z.infer<typeof IrSchema>;
 export type IrMetadata = z.infer<typeof MetadataSchema>;
 export type IrService = z.infer<typeof ServiceSchema>;
 export type IrServiceType = z.infer<typeof ServiceTypeSchema>;
+export type IrStaticSite = z.infer<typeof StaticSiteSchema>;
 export type IrResource = z.infer<typeof ResourceSchema>;
 export type IrDeploy = z.infer<typeof DeploySchema>;
 export type IrExpose = z.infer<typeof ExposeSchema>;
@@ -383,6 +413,7 @@ export {
   ServiceSchema,
   ServiceTypeSchema,
   BuildSchema,
+  StaticSiteSchema,
   HealthSchema,
   ExposeValueSchema,
   SizeSchema,

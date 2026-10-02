@@ -67,6 +67,19 @@ export function buildIr(input: IrBuildInput): IrBuildResult {
       });
     }
 
+    // 정적 사이트 (#272): 서버 코드가 없으니 command 없이 nginx 이미지의 포트 · 루트 경로로 확인한다
+    if (serviceType === "static" && svc.static) {
+      servicesMap[serviceName] = {
+        type: "static",
+        expose: "public",
+        size: "small",
+        ...(svc.port !== undefined ? { port: svc.port } : {}),
+        health: { path: "/", expected_status: 200, timeout_seconds: 3 },
+        static: { ...svc.static },
+      };
+      continue;
+    }
+
     const serviceEntry: IrService = {
       type: serviceType,
       expose: "public",

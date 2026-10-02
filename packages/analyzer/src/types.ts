@@ -39,6 +39,12 @@ export type ServiceCandidate = {
   env_defaults?: Record<string, string>;
   /** 감지 근거 목록 (예: "package.json", "server.js line 42") */
   detected_from: string[];
+  /** type=static 일 때 빌드 명령 · 결과 폴더 · SPA fallback (#272) */
+  static?: {
+    build_command?: string;
+    output_dir: string;
+    spa_fallback: boolean;
+  };
 };
 
 // ---------------------------------------------------------------------------

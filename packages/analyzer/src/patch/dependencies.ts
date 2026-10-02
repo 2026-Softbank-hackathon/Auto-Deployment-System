@@ -28,9 +28,9 @@ type PackageJson = {
 export function addNodePostgresDependencies(
   packageJsonText: string,
   options: { typescript: boolean },
-): { text: string; changed: boolean; notes: string[] } {
+): { text: string; changed: boolean; notes: Array<{ ko: string; ja: string }> } {
   const pkg = JSON.parse(packageJsonText) as PackageJson;
-  const notes: string[] = [];
+  const notes: Array<{ ko: string; ja: string }> = [];
   let changed = false;
 
   if (!pkg.dependencies?.["pg"]) {
@@ -44,7 +44,10 @@ export function addNodePostgresDependencies(
   for (const [name, command] of Object.entries(pkg.scripts ?? {})) {
     if (isEsmEsbuildBundle(command) && !command.includes("--banner:js")) {
       pkg.scripts![name] = `${command} ${ESM_REQUIRE_BANNER}`;
-      notes.push(`scripts.${name}: ESM 번들에서 pg(CommonJS)가 동작하도록 createRequire 배너 추가`);
+      notes.push({
+        ko: `scripts.${name}: ESM 번들에서 pg(CommonJS)가 동작하도록 createRequire 배너 추가`,
+        ja: `scripts.${name}: ESM バンドルで pg(CommonJS) が動くよう createRequire バナーを追加`,
+      });
       changed = true;
     }
   }

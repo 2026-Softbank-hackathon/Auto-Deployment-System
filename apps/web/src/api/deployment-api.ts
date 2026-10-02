@@ -183,8 +183,19 @@ export async function patchDeploymentIr(deploymentId: string, ir: Record<string,
   await assertOk(response);
 }
 
-export interface DeploymentPatchCandidate { description: string; diff: string }
-export interface DeploymentDiagnosisResponse { failedStep: string | null; summary: string; patchCandidates: DeploymentPatchCandidate[] }
+/** 한국어 · 일본어 설명 (#147). 두 언어 값이 없는 예전 데이터는 두 언어 모두 서버가 준 원문 */
+export interface LocalizedText { ko: string; ja: string }
+
+function readLocalized(value: unknown, fallback: string): LocalizedText {
+  if (value && typeof value === 'object') {
+    const { ko, ja } = value as { ko?: unknown; ja?: unknown };
+    if (typeof ko === 'string' && typeof ja === 'string') return { ko, ja };
+  }
+  return { ko: fallback, ja: fallback };
+}
+
+export interface DeploymentPatchCandidate { description: LocalizedText; diff: string }
+export interface DeploymentDiagnosisResponse { failedStep: string | null; summary: LocalizedText; patchCandidates: DeploymentPatchCandidate[] }
 
 /** API-36 — 실패한 배포의 AI 진단. 진단이 아직 없으면(404) null. */
 export async function getDeploymentDiagnosis(deploymentId: string): Promise<DeploymentDiagnosisResponse | null> {
@@ -194,10 +205,10 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
   if (typeof body.summary !== 'string') throw new Error('AI 진단 응답 형식이 올바르지 않습니다.');
   const patchCandidates = (Array.isArray(body.patchCandidates) ? body.patchCandidates : []).flatMap((item): DeploymentPatchCandidate[] => {
     if (!item || typeof item !== 'object') return [];
-    const { description, diff } = item as { description?: unknown; diff?: unknown };
-    return typeof description === 'string' && typeof diff === 'string' ? [{ description, diff }] : [];
+    const { description, descriptionI18n, diff } = item as { description?: unknown; descriptionI18n?: unknown; diff?: unknown };
+    return typeof description === 'string' && typeof diff === 'string' ? [{ description: readLocalized(descriptionI18n, description), diff }] : [];
   });
-  return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: body.summary, patchCandidates };
+  return { failedStep: typeof body.failedStep === 'string' ? body.failedStep : null, summary: readLocalized(body.summaryI18n, body.summary), patchCandidates };
 }
 
 /**
@@ -253,8 +264,8 @@ export async function decideDeploymentGate(deploymentId: string, gate: ApprovalG
 export interface SourcePatchFile { path: string; change: 'added' | 'modified'; additions: number; deletions: number; /** 규칙으로 다시 만든 파일(package-lock.json) — diff 에 없음 */ generated: boolean }
 export interface DeploymentSourcePatch {
   status: 'pending' | 'approved' | 'rejected';
-  summary: string;
-  notes: string[];
+  summary: LocalizedText;
+  notes: LocalizedText[];
   /** unified diff (generated 파일 제외) */
   diff: string;
   files: SourcePatchFile[];
@@ -280,9 +291,11 @@ export async function getDeploymentPatch(deploymentId: string): Promise<Deployme
       generated: file.generated === true,
     }];
   });
+  const notes = Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === 'string') : [];
+  const notesI18n = Array.isArray(body.notesI18n) ? body.notesI18n.map((note) => readLocalized(note, '')) : null;
   return {
-    status, summary: body.summary, diff: body.diff, files,
-    notes: Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === 'string') : [],
+    status, summary: readLocalized(body.summaryI18n, body.summary), diff: body.diff, files,
+    notes: notesI18n ?? notes.map((note) => readLocalized(null, note)),
     model: typeof body.model === 'string' ? body.model : null,
   };
 }

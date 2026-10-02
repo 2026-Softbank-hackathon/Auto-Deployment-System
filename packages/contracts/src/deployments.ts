@@ -23,6 +23,7 @@ import {
   DeploymentStatusSchema,
   IdStringSchema,
   IsoDateTimeSchema,
+  LocalizedTextSchema,
   type TargetProfile,
   type TargetVendor,
 } from "./common.js";
@@ -169,9 +170,14 @@ export const SourcePatchSchema = z
     /** 지금은 SQLite → PostgreSQL 겸용(dual-mode) 하나 */
     kind: z.literal("sqlite_to_postgres"),
     status: z.enum(["pending", "approved", "rejected"]),
-    /** 승인하는 사람에게 보여 줄 한두 문장 */
+    /** 승인하는 사람에게 보여 줄 한두 문장 (한국어) */
     summary: z.string(),
+    /** 알아 둘 점 (한국어) */
     notes: z.array(z.string()),
+    /** summary 의 한국어 · 일본어 (#147). 이 필드가 생기기 전에 만든 수정안에는 없다 */
+    summaryI18n: LocalizedTextSchema.optional(),
+    /** notes 의 한국어 · 일본어 (#147). 이 필드가 생기기 전에 만든 수정안에는 없다 */
+    notesI18n: z.array(LocalizedTextSchema).optional(),
     /** unified diff (lock 파일처럼 규칙으로 다시 만든 파일은 빠짐) */
     diff: z.string(),
     files: z.array(
@@ -267,7 +273,10 @@ export type DeploymentHealth = z.infer<typeof DeploymentHealthSchema>;
 
 export const PatchCandidateSchema = z
   .object({
+    /** 한국어 */
     description: z.string(),
+    /** description 의 한국어 · 일본어 (#147). 예전 진단에는 없다 */
+    descriptionI18n: LocalizedTextSchema.optional(),
     /** unified diff */
     diff: z.string(),
   })
@@ -279,7 +288,10 @@ export const DiagnosisSchema = z
     /** 주의: 이 응답은 deploymentId 가 number */
     deploymentId: z.number().int(),
     failedStep: z.string().nullable(),
+    /** 한국어 */
     summary: z.string(),
+    /** summary 의 한국어 · 일본어 (#147). 예전 진단에는 없다 */
+    summaryI18n: LocalizedTextSchema.optional(),
     patchCandidates: z.array(PatchCandidateSchema),
     generatedAt: IsoDateTimeSchema,
   })

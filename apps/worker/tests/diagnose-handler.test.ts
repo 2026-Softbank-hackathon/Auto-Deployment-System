@@ -83,6 +83,20 @@ function makeDeps(pool: WorkerDeps["pool"]): WorkerDeps {
   };
 }
 
+type DiagnosisSchemaShape = {
+  properties: {
+    summary: { required: string[] };
+    patchCandidates: { items: { properties: { description: { required: string[] }; diff: { type: string } } } };
+  };
+};
+
+/** 고정 안내 문구도 한국어 · 일본어를 함께 저장한다 */
+function expectBilingual(stored: { summary: string; summaryI18n?: { ko: string; ja: string } }) {
+  expect(stored.summaryI18n?.ko).toBe(stored.summary);
+  expect(stored.summaryI18n?.ja).toBeTruthy();
+  expect(stored.summaryI18n?.ja).not.toMatch(/[가-힣]/);
+}
+
 describe("handleDiagnose", () => {
   it("이미 진단이 있으면 Claude 호출 없이 skip", async () => {
     const pool = makePool({ existing: [{ diagnosis_json: { summary: "already" } }] });
@@ -102,9 +116,12 @@ describe("handleDiagnose", () => {
     const deps = makeDeps(pool);
     const responseJson = JSON.stringify({
       failedStep: "build",
-      summary: "docker build 실패",
+      summary: { ko: "docker build 실패", ja: "docker build に失敗しました" },
       patchCandidates: [
-        { description: "Node 22 → 18 downgrade", diff: "-FROM node:22\n+FROM node:18" },
+        {
+          description: { ko: "Node 22 → 18 로 낮추기", ja: "Node 22 → 18 に下げる" },
+          diff: "-FROM node:22\n+FROM node:18",
+        },
       ],
     });
     const client = makeClient(`여기 진단 결과입니다:\n${responseJson}`);
@@ -117,8 +134,16 @@ describe("handleDiagnose", () => {
     );
     expect(updateCall).toBeDefined();
     const stored = JSON.parse((updateCall![1] as unknown[])[0] as string);
-    expect(stored.summary).toContain("docker build");
-    expect(stored.patchCandidates).toHaveLength(1);
+    // summary · description 은 한국어(예전 화면 호환), *I18n 에 한국어 · 일본어 (#147)
+    expect(stored.summary).toBe("docker build 실패");
+    expect(stored.summaryI18n).toEqual({ ko: "docker build 실패", ja: "docker build に失敗しました" });
+    expect(stored.patchCandidates).toEqual([
+      {
+        description: "Node 22 → 18 로 낮추기",
+        descriptionI18n: { ko: "Node 22 → 18 로 낮추기", ja: "Node 22 → 18 に下げる" },
+        diff: "-FROM node:22\n+FROM node:18",
+      },
+    ]);
     // ai_usage INSERT 도 호출됐어야 함
     const usageCall = calls.find(
       (c) => typeof c[0] === "string" && c[0].includes("INSERT INTO ai_usage"),
@@ -139,6 +164,7 @@ describe("handleDiagnose", () => {
     expect(updateCall).toBeDefined();
     const stored = JSON.parse((updateCall![1] as unknown[])[0] as string);
     expect(stored.summary).toMatch(/SDK/);
+    expectBilingual(stored);
     expect(stored.patchCandidates).toEqual([]);
     // ai_usage INSERT 는 없어야 (Claude 호출 없음)
     const usageCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find(
@@ -157,9 +183,14 @@ describe("handleDiagnose", () => {
     expect(params["max_tokens"]).toBeGreaterThanOrEqual(16000);
     expect(params["thinking"]).toBeUndefined();
     expect(params["tool_choice"]).toBeUndefined();
-    const oc = params["output_config"] as { effort?: string; format?: { type: string } };
+    const oc = params["output_config"] as { effort?: string; format?: { type: string; schema: DiagnosisSchemaShape } };
     expect(oc.effort).toBe("medium");
     expect(oc.format?.type).toBe("json_schema");
+    // 설명은 한 번의 호출로 한국어 · 일본어를 함께 받는다 (#147)
+    const schema = oc.format!.schema;
+    expect(schema.properties.summary.required).toEqual(["ko", "ja"]);
+    expect(schema.properties.patchCandidates.items.properties.description.required).toEqual(["ko", "ja"]);
+    expect(schema.properties.patchCandidates.items.properties.diff.type).toBe("string");
 
     // ai_usage 에 실제 모델 ID 와 Sonnet 5.5 요금 추정치
     const usageCall = findCall(pool, "INSERT INTO ai_usage");
@@ -188,6 +219,7 @@ describe("handleDiagnose", () => {
 
     const stored = JSON.parse((findCall(pool, "UPDATE deployments SET diagnosis_json")![1] as unknown[])[0] as string);
     expect(stored.summary).toMatch(/거절/);
+    expectBilingual(stored);
     expect(stored.failedStep).toBe("build");
     expect(stored.patchCandidates).toEqual([]);
     expect(findCall(pool, "INSERT INTO ai_usage")).toBeDefined();
@@ -198,6 +230,7 @@ describe("handleDiagnose", () => {
     await handleDiagnose({ data: { deployment_id: 1 } }, makeDeps(pool));
     const stored = JSON.parse((findCall(pool, "UPDATE deployments SET diagnosis_json")![1] as unknown[])[0] as string);
     expect(stored.summary).toMatch(/AI/);
+    expectBilingual(stored);
     expect(stored.patchCandidates).toEqual([]);
     expect(findCall(pool, "INSERT INTO ai_usage")).toBeUndefined();
   });

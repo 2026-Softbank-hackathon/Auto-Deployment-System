@@ -70,7 +70,9 @@ const fakeLockfile = async (directory: string) => {
 
 describe("createSqlitePatch", () => {
   it("샘플 앱: AI 수정 + pg · @types/pg + lock 파일 갱신 + unified diff", async () => {
-    const client = mockClient([{ summary: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.", notes: [], files: await patchedFiles() }]);
+    const summary = { ko: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.", ja: "SQLite のアクセスコードを PostgreSQL 兼用に変更します。" };
+    const note = { ko: "처음 시작할 때 데이터를 옮깁니다.", ja: "初回起動時にデータを移行します。" };
+    const client = mockClient([{ summary, notes: [note], files: await patchedFiles() }]);
     const usages: unknown[] = [];
 
     const patch = await createSqlitePatch(dir, resource, {
@@ -99,6 +101,9 @@ describe("createSqlitePatch", () => {
     expect(patch.diff).toContain('+    "pg": "^8.23.1"');
     expect(patch.diff).not.toContain("package-lock.json");
     expect(patch.model).toBe("claude-test");
+    // 설명은 한국어 · 일본어를 한 번에 받는다 (#147)
+    expect(patch.summary).toEqual(summary);
+    expect(patch.notes).toEqual([note]);
     expect(usages).toHaveLength(1);
 
     // 보낸 내용: SQLite 를 쓰는 파일이 먼저, 접속 환경변수 · 데이터 파일 · 구조화 출력
@@ -109,6 +114,11 @@ describe("createSqlitePatch", () => {
     expect(payload.files[0].path).toBe("src/db.ts");
     expect(payload.context_files.map((file: { path: string }) => file.path)).toContain("package.json");
     expect(request.output_config?.format?.type).toBe("json_schema");
+    const schema = request.output_config?.format?.schema as {
+      properties: { summary: { required: string[] }; notes: { items: { required: string[] } } };
+    };
+    expect(schema.properties.summary.required).toEqual(["ko", "ja"]);
+    expect(schema.properties.notes.items.required).toEqual(["ko", "ja"]);
 
     await applyPatch(dir, patch.files);
     expect(await readFile(join(dir, "src/db.ts"), "utf8")).toContain("pg.Pool");
@@ -122,8 +132,8 @@ describe("createSqlitePatch", () => {
         : file,
     );
     const client = mockClient([
-      { summary: "x", notes: [], files: bad },
-      { summary: "고쳤습니다.", notes: [], files: good },
+      { summary: { ko: "x", ja: "x" }, notes: [], files: bad },
+      { summary: { ko: "고쳤습니다.", ja: "修正しました。" }, notes: [], files: good },
     ]);
 
     const patch = await createSqlitePatch(dir, resource, { client, updateLockfile: fakeLockfile });
@@ -135,7 +145,7 @@ describe("createSqlitePatch", () => {
 
   it("앱 밖 경로 · 설정 파일 수정은 받지 않고, 끝내 고치지 못하면 건너뛴다", async () => {
     const client = mockClient([
-      { summary: "x", notes: [], files: [{ path: "../etc/passwd", content: "x" }, { path: "Dockerfile", content: "FROM x" }] },
+      { summary: { ko: "x", ja: "x" }, notes: [], files: [{ path: "../etc/passwd", content: "x" }, { path: "Dockerfile", content: "FROM x" }] },
     ]);
 
     const patch = await createSqlitePatch(dir, resource, { client, updateLockfile: fakeLockfile });
@@ -148,7 +158,7 @@ describe("createSqlitePatch", () => {
 
   it("접속 환경변수를 읽지 않는 답은 받지 않는다", async () => {
     const files = (await patchedFiles()).map((file) => ({ ...file, content: file.content.replaceAll("DATABASE_URL", "DB_URL") }));
-    const client = mockClient([{ summary: "x", notes: [], files }]);
+    const client = mockClient([{ summary: { ko: "x", ja: "x" }, notes: [], files }]);
 
     const patch = await createSqlitePatch(dir, resource, { client, maxAttempts: 1, updateLockfile: fakeLockfile });
 
@@ -168,7 +178,7 @@ describe("createSqlitePatch", () => {
   });
 
   it("lock 파일 갱신이 실패하면 수정안을 쓰지 않는다 (npm ci 가 깨지므로)", async () => {
-    const client = mockClient([{ summary: "x", notes: [], files: await patchedFiles() }]);
+    const client = mockClient([{ summary: { ko: "x", ja: "x" }, notes: [], files: await patchedFiles() }]);
 
     const patch = await createSqlitePatch(dir, resource, {
       client,

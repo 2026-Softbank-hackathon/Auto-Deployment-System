@@ -479,6 +479,19 @@ describe("deployments 응답 계약", () => {
       expect(missing.statusCode).toBe(404);
     });
 
+    it("GET /deployments/:id/patch — 한국어 · 일본어 설명이 있으면 summaryI18n · notesI18n 도 (#147)", async () => {
+      const summaryI18n = { ko: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.", ja: "SQLite のコードを PostgreSQL 兼用にします。" };
+      const notesI18n = [{ ko: "데이터를 옮깁니다.", ja: "データを移します。" }];
+      pool.on(/FROM source_patches WHERE deployment_id/, () => ({
+        rows: [{ ...patchRow(), notes: ["데이터를 옮깁니다."], summary_i18n: summaryI18n, notes_i18n: notesI18n }],
+      }));
+
+      const res = await call("GET", "/api/v1/deployments/42/patch");
+
+      expect(res.json()).toMatchObject({ summary: summaryI18n.ko, notes: ["데이터를 옮깁니다."], summaryI18n, notesI18n });
+      expectContract(SourcePatchSchema, res.json());
+    });
+
     it("POST approvals gate=patch 승인 — 수정된 소스를 새 소스 버전으로 넣고 대상 확인으로", async () => {
       const events = collectEvents("42");
       const sqls: Array<{ sql: string; params: unknown[] }> = [];
@@ -656,6 +669,34 @@ describe("deployments 응답 계약", () => {
     const res = await call("GET", "/api/v1/deployments/42/diagnosis");
 
     expect(res.statusCode).toBe(200);
+    expectContract(DiagnosisSchema, res.json());
+    expect(res.json()).not.toHaveProperty("summaryI18n");
+  });
+
+  it("GET /deployments/:id/diagnosis — 한국어 · 일본어 설명 (#147)", async () => {
+    const summaryI18n = { ko: "의존성 설치 실패", ja: "依存関係のインストールに失敗" };
+    const descriptionI18n = { ko: "lockfile 추가", ja: "lockfile を追加" };
+    pool.on(/SELECT diagnosis_json FROM deployments/, () => ({
+      rows: [
+        {
+          diagnosis_json: {
+            failedStep: "build",
+            summary: summaryI18n.ko,
+            summaryI18n,
+            patchCandidates: [{ description: descriptionI18n.ko, descriptionI18n, diff: "--- a\n+++ b" }],
+            generatedAt: NOW.toISOString(),
+          },
+        },
+      ],
+    }));
+
+    const res = await call("GET", "/api/v1/deployments/42/diagnosis");
+
+    expect(res.json()).toMatchObject({
+      summary: summaryI18n.ko,
+      summaryI18n,
+      patchCandidates: [{ description: descriptionI18n.ko, descriptionI18n }],
+    });
     expectContract(DiagnosisSchema, res.json());
   });
 

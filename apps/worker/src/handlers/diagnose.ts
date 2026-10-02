@@ -28,17 +28,61 @@ export type DiagnoseJobPayload = {
   deployment_id: number;
 };
 
+/** 한국어 · 일본어 문구 (#147) */
+export type LocalizedText = { ko: string; ja: string };
+
+/** 저장 형식: description · summary 는 한국어(예전 화면 호환), *I18n 에 두 언어 */
 export type PatchCandidate = {
   description: string;
+  descriptionI18n: LocalizedText;
   diff: string;
 };
 
 export type DiagnosisResult = {
   failedStep: string | null;
   summary: string;
+  summaryI18n: LocalizedText;
   patchCandidates: PatchCandidate[];
   generatedAt: string;
 };
+
+/** AI 를 쓰지 못했을 때의 안내 문구 */
+const FALLBACK_SUMMARY = {
+  aiDisabled: {
+    ko: "AI 진단이 꺼져 있어(AI_PROVIDER 미설정) 진단을 건너뜁니다.",
+    ja: "AI 診断がオフのため(AI_PROVIDER 未設定)、診断をスキップします。",
+  },
+  sdkUnavailable: {
+    ko: "AI 진단 SDK를 사용할 수 없어 진단을 건너뜁니다.",
+    ja: "AI 診断の SDK を使えないため、診断をスキップします。",
+  },
+  refused: (category: string) => ({
+    ko: `AI 가 이 진단 요청을 거절했습니다 (category: ${category}).`,
+    ja: `AI がこの診断リクエストを拒否しました (category: ${category})。`,
+  }),
+  maxTokens: {
+    ko: "AI 응답이 길이 제한(max_tokens)에서 잘려 진단을 만들지 못했습니다.",
+    ja: "AI の応答が長さの上限(max_tokens)で途切れたため、診断を作成できませんでした。",
+  },
+  unparsable: {
+    ko: "AI 응답을 파싱할 수 없습니다.",
+    ja: "AI の応答を解析できませんでした。",
+  },
+  empty: { ko: "요약 없음", ja: "要約なし" },
+} as const;
+
+function sameText(text: string): LocalizedText {
+  return { ko: text, ja: text };
+}
+
+function isLocalizedText(value: unknown): value is LocalizedText {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Record<string, unknown>)["ko"] === "string" &&
+    typeof (value as Record<string, unknown>)["ja"] === "string"
+  );
+}
 
 /**
  * Sonnet 5.5 는 thinking 을 끌 수 없고(disabled → 400) thinking 토큰이 max_tokens 에 포함된다.
@@ -51,18 +95,29 @@ const MAX_TOKENS = 16000;
  */
 const EFFORT = "medium" as const;
 
+/** 한국어 · 일본어를 한 번에 받는 설명 (#147) — 콘솔을 어느 언어로 보든 같은 진단을 보여 준다 */
+const LOCALIZED_TEXT_SCHEMA = {
+  type: "object",
+  properties: {
+    ko: { type: "string", description: "Korean." },
+    ja: { type: "string", description: "Japanese, same meaning as ko." },
+  },
+  required: ["ko", "ja"],
+  additionalProperties: false,
+};
+
 /** 구조화 출력 스키마 — 응답이 항상 이 모양의 JSON 이 되도록 강제한다. */
 const DIAGNOSIS_SCHEMA = {
   type: "object",
   properties: {
     failedStep: { anyOf: [{ type: "string" }, { type: "null" }] },
-    summary: { type: "string" },
+    summary: LOCALIZED_TEXT_SCHEMA,
     patchCandidates: {
       type: "array",
       items: {
         type: "object",
         properties: {
-          description: { type: "string" },
+          description: LOCALIZED_TEXT_SCHEMA,
           diff: { type: "string" },
         },
         required: ["description", "diff"],
@@ -110,7 +165,7 @@ export async function handleDiagnose(
     log?.info({ deployment_id, reason: ai.reason }, "AI disabled; storing fallback diagnosis");
     await storeDiagnosis(pool, deployment_id, {
       failedStep: context.failedStep,
-      summary: "AI 진단이 꺼져 있어(AI_PROVIDER 미설정) 진단을 건너뜁니다.",
+      ...summaryOf(FALLBACK_SUMMARY.aiDisabled),
       patchCandidates: [],
       generatedAt: new Date().toISOString(),
     });
@@ -126,7 +181,7 @@ export async function handleDiagnose(
     log?.warn({ err: e, deployment_id }, "Claude SDK unavailable; storing fallback diagnosis");
     await storeDiagnosis(pool, deployment_id, {
       failedStep: context.failedStep,
-      summary: "AI 진단 SDK를 사용할 수 없어 진단을 건너뜁니다.",
+      ...summaryOf(FALLBACK_SUMMARY.sdkUnavailable),
       patchCandidates: [],
       generatedAt: new Date().toISOString(),
     });
@@ -135,7 +190,9 @@ export async function handleDiagnose(
 
   // 4. 프롬프트 (시크릿 마스킹)
   const systemPrompt =
-    "당신은 CI/CD 배포 실패 원인을 진단하는 AI입니다. 실패한 배포의 상태·로그·IR을 보고 (1) 실패 원인 한국어 3-5문장 요약, (2) 수정 후보 최대 3개 (각각 description + unified diff 형식)를 JSON으로 반환하세요. 형식: { failedStep, summary, patchCandidates: [{ description, diff }] }.";
+    "당신은 CI/CD 배포 실패 원인을 진단하는 AI입니다. 실패한 배포의 상태·로그·IR을 보고 (1) 실패 원인 3-5문장 요약, (2) 수정 후보 최대 3개 (각각 description + unified diff 형식)를 JSON으로 반환하세요. " +
+    "사용자는 콘솔을 한국어 또는 일본어로 보므로 summary 와 description 은 같은 내용을 한국어(ko)와 일본어(ja)로 함께 씁니다. 코드 · 파일 이름 · 명령어는 두 언어 모두 그대로 두고, diff 는 하나만 씁니다. " +
+    "형식: { failedStep, summary: { ko, ja }, patchCandidates: [{ description: { ko, ja }, diff }] }.";
   const userPrompt = `배포 컨텍스트 (시크릿 마스킹됨):\n${redact(JSON.stringify(context, null, 2))}\n\n위 정보로 진단 JSON 을 반환하세요.`;
 
   const response = await client.messages.create({
@@ -157,37 +214,43 @@ export async function handleDiagnose(
       : response.content.find((c: AnthropicContentBlock) => c.type === "text");
   let parsed: Omit<DiagnosisResult, "generatedAt"> = {
     failedStep: context.failedStep,
-    summary:
+    ...summaryOf(
       response.stop_reason === "refusal"
-        ? `AI 가 이 진단 요청을 거절했습니다 (category: ${response.stop_details?.category ?? "none"}).`
+        ? FALLBACK_SUMMARY.refused(response.stop_details?.category ?? "none")
         : response.stop_reason === "max_tokens"
-          ? "AI 응답이 길이 제한(max_tokens)에서 잘려 진단을 만들지 못했습니다."
-          : "AI 응답을 파싱할 수 없습니다.",
+          ? FALLBACK_SUMMARY.maxTokens
+          : FALLBACK_SUMMARY.unparsable,
+    ),
     patchCandidates: [],
   };
   if (textBlock && textBlock.type === "text" && response.stop_reason !== "max_tokens") {
     const match = textBlock.text.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        const j = JSON.parse(match[0]) as Partial<DiagnosisResult>;
+        const j = JSON.parse(match[0]) as {
+          failedStep?: string | null;
+          summary?: unknown;
+          patchCandidates?: Array<{ description?: unknown; diff?: unknown } | null>;
+        };
         parsed = {
           failedStep: j.failedStep ?? context.failedStep,
-          summary: typeof j.summary === "string" ? j.summary : "요약 없음",
+          ...summaryOf(localized(j.summary) ?? FALLBACK_SUMMARY.empty),
           patchCandidates: Array.isArray(j.patchCandidates)
-            ? j.patchCandidates.slice(0, 3).map((p) => ({
-                description: String(p?.description ?? ""),
-                diff: String(p?.diff ?? ""),
-              }))
+            ? j.patchCandidates.slice(0, 3).map((p) => {
+                const description = localized(p?.description) ?? sameText("");
+                return {
+                  description: description.ko,
+                  descriptionI18n: description,
+                  diff: String(p?.diff ?? ""),
+                };
+              })
             : [],
         };
       } catch {
-        parsed = {
-          ...parsed,
-          summary: textBlock.text.slice(0, 500),
-        };
+        parsed = { ...parsed, ...summaryOf(sameText(textBlock.text.slice(0, 500))) };
       }
     } else {
-      parsed = { ...parsed, summary: textBlock.text.slice(0, 500) };
+      parsed = { ...parsed, ...summaryOf(sameText(textBlock.text.slice(0, 500))) };
     }
   }
 
@@ -216,6 +279,17 @@ export async function handleDiagnose(
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/** 저장 형식의 요약 — summary 는 한국어(예전 화면 호환), summaryI18n 에 두 언어 */
+function summaryOf(text: LocalizedText): Pick<DiagnosisResult, "summary" | "summaryI18n"> {
+  return { summary: text.ko, summaryI18n: { ko: text.ko, ja: text.ja } };
+}
+
+/** 모델이 준 설명. {ko, ja} 가 아니고 문자열이면 두 언어에 같은 문자열 */
+function localized(value: unknown): LocalizedText | null {
+  if (isLocalizedText(value)) return value;
+  return typeof value === "string" ? sameText(value) : null;
+}
 
 async function gatherContext(
   pool: WorkerDeps["pool"],

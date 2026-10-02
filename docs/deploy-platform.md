@@ -71,7 +71,7 @@ On-Prem Agent 는 `ONPREM_CONTROL_PLANE_URL=https://console.camellia-deploy.app`
 | `infra/platform/compose.yaml` | 운영 스택. `cloudflared` 는 `tunnel` 프로필 |
 | `infra/platform/compose.local.yaml` | 로컬 검증용: web 을 `127.0.0.1:8080` 에 publish |
 | `infra/platform/platform.env.example` | `.env` 항목 전체 |
-| `infra/platform/scripts/deploy.sh` | 호스트에서 git checkout → SSM → `.env` → `compose up --build` |
+| `infra/platform/scripts/deploy.sh` | 호스트에서 git checkout → SSM → `.env` → `compose up --build` → 디스크 정리 |
 | `infra/platform/terraform/` | VPC · SG · IAM · EC2 · Cloudflare Tunnel · DNS · SSM(Tunnel token), `github-cd.tf`(CD 용 GitHub OIDC · IAM 역할), `github-terraform.tf`(Terraform CI 용 plan · apply 역할), `backend.tf`(S3 state), `tests/` mock plan 테스트 |
 | `.github/workflows/deploy-platform.yml` | CD: main push → (infra 변경 시 Terraform apply 먼저) → SSM 으로 `deploy.sh <커밋 SHA>` → `/health` 확인 (4.7) |
 | `.github/workflows/terraform-platform.yml` | Terraform CI: PR 에 plan 코멘트, main 에서 apply (8절) |

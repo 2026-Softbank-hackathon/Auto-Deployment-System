@@ -106,8 +106,11 @@ resource "aws_lb_target_group" "function" {
 
   # ALB 헬스체크는 끈다 — 켜면 주기적으로 함수를 호출한다. 준비 확인은 Lambda Web Adapter 가,
   # 배포 검증은 워커가 origin /health 로 한다. 타깃이 하나뿐이라 상태가 unavailable 이어도 ALB 는 보낸다.
+  # 꺼 둬도 interval · timeout 은 API 에 같이 넘어가고, lambda 타깃 그룹은 interval > timeout 이어야 한다.
   health_check {
-    enabled = false
+    enabled  = false
+    interval = 35
+    timeout  = 30
   }
 
   tags = local.tags

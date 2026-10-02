@@ -247,6 +247,9 @@ export type Diagnosis = z.infer<typeof DiagnosisSchema>;
 /**
  * 이전에 올린 소스(IR 포함)를 재사용해 바로 빌드부터 재배포한다.
  * `targetEnvironmentId` 를 주면 해당 환경으로 override (이슈 #140 과 공유).
+ * - 다른 종류 환경이면 프로필 · 이미지 Registry 환경을 그 환경에 맞게 다시 고른다.
+ * - 원본 배포의 이미지가 있고 Registry 환경이 같으면 빌드 없이 같은 이미지(digest)를 쓴다.
+ * - 롤백 = 이전 배포 ID 로 같은 환경에 재배포.
  */
 export const RedeployBodySchema = z.object({
   /** 재배포할 환경 ID override. 없으면 소스 deployment 의 환경 그대로. */

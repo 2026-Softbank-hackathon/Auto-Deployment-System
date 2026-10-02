@@ -18,6 +18,7 @@ import type {
   TargetVendor,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
+import { resolveProfile } from "./profile-resolver.js";
 
 export interface DeploymentRow {
   id: number;
@@ -329,10 +330,11 @@ export class DeploymentService {
       id: number;
       status: string;
       target_profile: string | null;
-      target_environment_id: number | null;
-      registry_environment_id: number | null;
+      target_environment_id: number | string | null;
+      registry_environment_id: number | string | null;
+      project_id: number | string;
     }>(
-      `SELECT id, status, target_profile, target_environment_id, registry_environment_id
+      `SELECT id, status, target_profile, target_environment_id, registry_environment_id, project_id
        FROM deployments WHERE id = $1`,
       [fromDeploymentId],
     );
@@ -400,10 +402,29 @@ export class DeploymentService {
     );
     const sv = svRes.rows[0];
 
-    const targetEnvironmentId = options?.targetEnvironmentId ?? src.target_environment_id;
-    const targetProfile = src.target_profile;
+    // 대상 환경을 바꾸면 그 환경 종류에 맞는 프로필과 Registry 환경을 다시 고른다.
+    // 같은 환경이면 원본 배포의 값을 그대로 쓴다 (롤백 = 이전 배포를 같은 환경에 재배포).
+    let targetEnvironmentId = src.target_environment_id;
+    let targetProfile = src.target_profile;
+    let registryEnvironmentId = src.registry_environment_id;
+    const overrideId = options?.targetEnvironmentId;
+    if (overrideId != null && String(overrideId) !== String(src.target_environment_id)) {
+      const target = await this.findRedeployTarget(overrideId, src.project_id);
+      targetEnvironmentId = target.id;
+      targetProfile = resolveProfile(target.type);
+      registryEnvironmentId =
+        target.type === "aws"
+          ? target.id
+          : await this.findOnpremRegistry(src.project_id, src.registry_environment_id);
+      if (String(registryEnvironmentId) !== String(src.registry_environment_id)) {
+        await this.validateRegistryCredentials(
+          Number(src.project_id),
+          Number(registryEnvironmentId),
+        );
+      }
+    }
 
-    // 5. env_lock 확인 (대상 환경이 다른 활성 배포로 잠겨있으면 409)
+    // 5. env_lock 확인 (같은 프로젝트에서 대상 환경에 진행 중인 배포가 있으면 409)
     if (targetEnvironmentId != null) {
       const lockRes = await this.pool.query<{ id: number }>(
         `SELECT d.id
@@ -411,6 +432,7 @@ export class DeploymentService {
          WHERE d.target_environment_id = $1
            AND d.status = ANY($2::text[])
            AND d.id != $3
+           AND d.project_id = $4
          LIMIT 1`,
         [
           targetEnvironmentId,
@@ -424,6 +446,7 @@ export class DeploymentService {
             "verifying",
           ],
           fromDeploymentId,
+          src.project_id,
         ],
       );
       if (lockRes.rows.length > 0) {
@@ -444,10 +467,10 @@ export class DeploymentService {
       const depRes = await client.query<{ id: number }>(
         `INSERT INTO deployments
            (project_id, status, target_profile, target_environment_id, registry_environment_id)
-         SELECT project_id, 'queued', $2, $3, registry_environment_id
+         SELECT project_id, 'queued', $2, $3, $4
          FROM deployments WHERE id = $1
          RETURNING id`,
-        [fromDeploymentId, targetProfile, targetEnvironmentId],
+        [fromDeploymentId, targetProfile, targetEnvironmentId, registryEnvironmentId],
       );
       newDeploymentId = depRes.rows[0]!.id;
 
@@ -486,6 +509,70 @@ export class DeploymentService {
       status: "queued" as const,
       eventsUrl: `/api/v1/deployments/${newDeploymentId}/events`,
     };
+  }
+
+  /** 재배포 대상 환경 — 원본 배포의 프로젝트 환경이거나 공용 환경(project_id NULL)이어야 한다. */
+  private async findRedeployTarget(
+    environmentId: number,
+    projectId: number | string,
+  ): Promise<{ id: string; type: TargetVendor }> {
+    const result = await this.pool.query<{
+      id: number | string;
+      type: TargetVendor;
+      project_id: number | string | null;
+    }>(
+      `SELECT id, type, project_id FROM environments WHERE id = $1`,
+      [environmentId],
+    );
+    const env = result.rows[0];
+    if (!env) {
+      throw new ApiError(
+        404,
+        "NOT_FOUND",
+        `환경 ID ${environmentId}를 찾을 수 없습니다.`,
+        "GET /environments 로 배포할 수 있는 환경을 확인하세요.",
+      );
+    }
+    if (env.project_id != null && String(env.project_id) !== String(projectId)) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "다른 프로젝트의 환경으로는 재배포할 수 없습니다.",
+        "이 프로젝트의 환경이나 공용 환경을 고르세요.",
+      );
+    }
+    return { id: String(env.id), type: env.type };
+  }
+
+  /**
+   * 온프레미스 대상의 이미지 Registry(AWS) 환경.
+   * 원본 배포의 Registry 가 AWS 면 그대로 (같은 이미지 재사용 가능), 아니면 프로젝트 기본 AWS, 그다음 공용 기본 AWS.
+   */
+  private async findOnpremRegistry(
+    projectId: number | string,
+    sourceRegistryId: number | string | null,
+  ): Promise<string> {
+    const result = await this.pool.query<{ id: number | string }>(
+      `SELECT id
+       FROM environments WHERE type = 'aws'
+         AND (project_id = $1 OR project_id IS NULL)
+         AND (id = $2::bigint OR is_default = TRUE)
+       ORDER BY COALESCE(id = $2::bigint, FALSE) DESC,
+                (project_id IS NULL) ASC,
+                id ASC
+       LIMIT 1`,
+      [projectId, sourceRegistryId],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new ApiError(
+        409,
+        "AWS_REGISTRY_ENVIRONMENT_REQUIRED",
+        "On-Prem 배포 이미지를 저장할 기본 AWS 환경이 등록되어 있지 않습니다.",
+        "사용자 AWS 계정의 Private ECR을 사용하므로 AWS 환경을 먼저 등록하세요.",
+      );
+    }
+    return String(row.id);
   }
 
   private async resolveEnvironments(

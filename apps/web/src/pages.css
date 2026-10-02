@@ -191,7 +191,6 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .koro-think.is-caption { position: static; width: auto; height: auto; display: flex; justify-content: center; margin-top: 10px; }
 .koro-think.is-caption .koro-think__dot { display: none; }
 .koro-think.is-caption .koro-think__bubble { position: static; max-width: 100%; padding: 7px 14px; font-size: 13px; border-radius: 16px; box-shadow: none; }
-}
 .koro-prop__line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .koro-prop__line--thick { stroke-width: 4.5; }
 .koro-prop__glass { fill: color-mix(in srgb, var(--surface) 70%, transparent); stroke: var(--ink); stroke-width: 4; }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { createDeployment, DeploymentApiError, listEnvironments, listProjectEnv, type EnvironmentSummary } from '../api/deployment-api';
 import { loadEnvPlan, missingEnvNames } from '../features/setup/env-plan';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
@@ -6,6 +6,7 @@ import { followAppLink, type Navigate } from '../app/navigation';
 import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
 import { AppChooser, findAppByName, suggestAppName, type AppChoice } from '../features/deployment-start/AppChooser';
 import { ConnectionPicker, type ConnectionOption } from '../features/deployment-start/ConnectionPicker';
+import { clearDeployDraft, readDeployDraft, saveDeployDraft } from '../features/deployment-start/deploy-draft';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { useDeployProject, type DeployProject } from '../features/deployment-start/useDeployProject';
 import { ZipUploader } from '../features/deployment-start/ZipUploader';
@@ -30,13 +31,16 @@ function requestedProjectId(): string | null {
 export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploymentId: string) => void; onNavigate: Navigate }) {
   const { t } = useI18n();
   const copy = t.deploy;
-  const [file, setFile] = useState<File | null>(null);
+  // 이 화면을 떠났다 돌아와도 고르던 것(ZIP · 앱 · 연결)이 남아 있게, 떠나기 전 상태에서 이어서 시작한다 (deploy-draft).
+  // 주소의 ?project= 로 앱을 골라 들어왔으면 앱은 그쪽을 따른다.
+  const [draft] = useState(readDeployDraft);
+  const [file, setFile] = useState<File | null>(draft?.file ?? null);
   const [error, setError] = useState<{ kind: 'app' | 'deploy'; error: unknown } | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   // 처음 골라져 있는 연결의 종류와 "배포 전 확인" 여부는 환경설정의 기본값을 따른다. 이 화면에서 바꾼 것은 이번 배포에만 쓴다.
   const { preferences } = usePreferences();
   // 켜면 분석 뒤에 멈춰서 감지한 포트를 확인 · 수정한다 (#144). 기본은 꺼짐(원클릭).
-  const [reviewFirst, setReviewFirst] = useState(preferences.reviewFirst);
+  const [reviewFirst, setReviewFirst] = useState(draft?.reviewFirst ?? preferences.reviewFirst);
   const { createDeployProject } = useDeployProject();
 
   // ── 앱 ──
@@ -51,11 +55,11 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
 
   const [choice, setChoice] = useState<AppChoice>(() => {
     const requested = requestedProjectId();
-    return requested ? { mode: 'existing', projectId: requested } : { mode: 'new', name: '' };
+    return requested ? { mode: 'existing', projectId: requested } : draft?.choice ?? { mode: 'new', name: '' };
   });
   /** 사용자가 앱 칸을 직접 바꿨는지. 바꾸지 않았으면 ZIP을 올릴 때 이름으로 앱을 정해 준다. */
-  const [appTouched, setAppTouched] = useState(() => requestedProjectId() !== null);
-  const [nameEdited, setNameEdited] = useState(false);
+  const [appTouched, setAppTouched] = useState(() => requestedProjectId() !== null || (draft?.appTouched ?? false));
+  const [nameEdited, setNameEdited] = useState(() => requestedProjectId() === null && (draft?.nameEdited ?? false));
   const selectedProject = choice.mode === 'existing' && projects ? projects.find((project) => project.id === choice.projectId) ?? null : null;
   const newName = choice.mode === 'new' ? choice.name.trim() : '';
   const appReady = choice.mode === 'new' ? newName !== '' && findAppByName(projects, newName) === null : selectedProject !== null;
@@ -123,7 +127,10 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
             : connection.agentLastSeenAt ? copy.connection.offline : copy.connection.notRegistered,
     }));
   const enabled = (options ?? []).filter((option) => option.disabledReason === null);
-  const [connectionId, setConnectionId] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(draft?.connectionId ?? null);
+  // 배포를 시작한 뒤에는 다시 저장하지 않는다 (시작하면서 비운 것을 되살리지 않게).
+  const started = useRef(false);
+  useEffect(() => { if (!started.current) saveDeployDraft({ file, choice, appTouched, nameEdited, connectionId, reviewFirst }); }, [file, choice, appTouched, nameEdited, connectionId, reviewFirst]);
   // 직접 고르기 전에는 설정의 기본 배포할 곳과 같은 종류의 첫 연결(기본 연결 먼저)을 골라 둔다.
   // 그 종류의 연결이 있는데 지금 쓸 수 없으면(오프라인 등) 다른 종류로 대신 고르지 않는다. 그 종류가 아예 없을 때만 다른 연결을 고른다.
   // 직접 고른 연결을 쓸 수 없게 되어도 다른 연결로 몰래 바꾸지 않고 다시 고르게 한다.
@@ -159,6 +166,9 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
       }
       const deployment = await createDeployment(file, projectId, selected.connection.id);
       if (reviewFirst) requestReview(deployment.deploymentId);
+      // 배포를 시작했으니 다음에 이 화면을 열 때는 빈 상태에서 시작한다.
+      started.current = true;
+      clearDeployDraft();
       onStarted(deployment.deploymentId);
     } catch (requestError) {
       setError({ kind: 'deploy', error: requestError });

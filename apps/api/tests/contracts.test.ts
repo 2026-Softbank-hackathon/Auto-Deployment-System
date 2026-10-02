@@ -520,6 +520,24 @@ describe("secrets 응답 계약", () => {
     expect(del.statusCode).toBe(204);
     expect(del.body).toBe("");
   });
+
+  it("공용 시크릿 (#215) — projectId 없이 POST 201 · GET 목록 · DELETE 204", async () => {
+    pool.on(/INSERT INTO secrets/, () => ({ rows: [{ created_at: NOW }] }));
+    pool.on(/FROM secrets/, () => ({ rows: [{ name: "aws-key", project_id: null, created_at: NOW }] }));
+
+    const created = await call("POST", "/api/v1/secrets", { name: "aws-key", value: "v" });
+    expect(created.statusCode).toBe(201);
+    expectContract(SecretSchema, created.json());
+    expect(created.json()).toMatchObject({ projectId: null, shared: true });
+
+    const list = await call("GET", "/api/v1/secrets");
+    expect(list.statusCode).toBe(200);
+    expectContract(SecretListSchema, list.json());
+    expect(list.json()[0]).toMatchObject({ projectId: null, shared: true });
+
+    const del = await call("DELETE", "/api/v1/secrets/aws-key");
+    expect(del.statusCode).toBe(204);
+  });
 });
 
 describe("environments 응답 계약", () => {
@@ -566,6 +584,32 @@ describe("environments 응답 계약", () => {
     const del = await call("DELETE", "/api/v1/environments/10");
     expect(del.statusCode).toBe(204);
     expect(del.body).toBe("");
+  });
+
+  it("공용 연결 (#215) — projectId 없이 POST 201 · GET 목록(Agent 연결 상태 포함)", async () => {
+    pool.on(/INSERT INTO environments/, () => ({ rows: [{ id: "11", is_default: true, created_at: NOW }] }));
+    pool.on(/FROM environments/, () => ({
+      rows: [{ ...envRow, id: "11", project_id: null, agent_last_seen_at: NOW, agent_online: true }],
+    }));
+
+    const created = await call("POST", "/api/v1/environments", {
+      name: "my-mac",
+      type: "onprem",
+      onpremConfig: { agentRegistrationToken: "tok", hostname: "mac.local" },
+    });
+    expect(created.statusCode).toBe(201);
+    expectContract(CreateEnvironmentResponseSchema, created.json());
+    expect(created.json()).toMatchObject({ projectId: null, shared: true, agentOnline: false });
+
+    const list = await call("GET", "/api/v1/environments");
+    expect(list.statusCode).toBe(200);
+    expectContract(EnvironmentListSchema, list.json());
+    expect(list.json()[0]).toMatchObject({
+      projectId: null,
+      shared: true,
+      agentOnline: true,
+      agentLastSeenAt: NOW.toISOString(),
+    });
   });
 
   it("GET 단건 (aws, lastSeenAt 있음)", async () => {

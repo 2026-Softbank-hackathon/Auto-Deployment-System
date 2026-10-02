@@ -4,14 +4,17 @@
  *
  *   POST   /environments                      → 201 { id, name, type, ..., createdAt }
  *   GET    /environments?projectId=<N>        → 200 [환경 목록]
+ *   GET    /environments                      → 200 [공용 연결 목록] (#215)
  *   GET    /environments/:id                  → 200 { ... }
- *   DELETE /environments/:id                  → 204 (진행 중 배포 있으면 409)
+ *   DELETE /environments/:id                  → 204 (진행 중 배포 · 배포 기록 있으면 409)
+ *
+ * POST 바디에 projectId 를 생략하면 공용 연결 — 모든 프로젝트가 배포 때 고를 수 있다(#215).
  */
 
 import { type FastifyPluginAsync } from "fastify";
 import {
   CreateEnvironmentBodySchema as CreateBody,
-  ProjectIdQuerySchema as ProjectIdQuery,
+  OptionalProjectIdQuerySchema as ProjectIdQuery,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { EnvironmentService } from "../services/environment-service.js";

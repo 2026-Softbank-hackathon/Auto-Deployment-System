@@ -6,14 +6,19 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  CreateEnvironmentBodySchema,
+  CreateSecretBodySchema,
   DEPLOYMENT_EVENT_NAMES,
   DeploymentEventSchema,
   DeploymentSchema,
+  EnvironmentSchema,
   ErrorBodySchema,
   ListProjectDeploymentsQuerySchema,
+  OptionalProjectIdQuerySchema,
   PatchProjectEnvBodySchema,
   ProjectDeploymentSchema,
   ProjectSchema,
+  SecretSchema,
   TARGET_VENDORS,
   TargetVendorSchema,
   type DeploymentEventData,
@@ -183,5 +188,52 @@ describe("SSE 이벤트", () => {
         "state_changed",
       ].sort(),
     );
+  });
+});
+
+describe("공용 연결 (#215)", () => {
+  const environment = {
+    id: "10",
+    projectId: null,
+    shared: true,
+    name: "my-mac",
+    type: "onprem",
+    isDefault: true,
+    onpremConfig: { hostname: "mac.local" },
+    agentStatus: null,
+    lastSeenAt: null,
+    agentOnline: true,
+    agentLastSeenAt: "2026-09-30T03:00:00.000Z",
+    createdAt: "2026-09-30T03:00:00.000Z",
+  };
+
+  it("Environment — 공용 연결은 projectId=null · shared=true, Agent 상태 필드가 있어야 함", () => {
+    expect(EnvironmentSchema.safeParse(environment).success).toBe(true);
+    expect(EnvironmentSchema.safeParse({ ...environment, projectId: "1", shared: false }).success).toBe(true);
+    const { agentOnline: _online, ...missingOnline } = environment;
+    expect(EnvironmentSchema.safeParse(missingOnline).success).toBe(false);
+    const { shared: _shared, ...missingShared } = environment;
+    expect(EnvironmentSchema.safeParse(missingShared).success).toBe(false);
+  });
+
+  it("Secret — 공용 시크릿은 projectId=null · shared=true", () => {
+    const secret = { name: "aws-key", projectId: null, shared: true, createdAt: "2026-09-30T03:00:00.000Z" };
+    expect(SecretSchema.safeParse(secret).success).toBe(true);
+    const { shared: _shared, ...missing } = secret;
+    expect(SecretSchema.safeParse(missing).success).toBe(false);
+  });
+
+  it("요청 — 환경 · 시크릿 생성과 목록 쿼리에서 projectId 생략 가능", () => {
+    expect(
+      CreateEnvironmentBodySchema.safeParse({
+        name: "aws",
+        type: "aws",
+        awsConfig: { credentialsType: "access_key", region: "ap-northeast-2" },
+      }).success,
+    ).toBe(true);
+    expect(CreateSecretBodySchema.safeParse({ name: "aws-key", value: "v" }).success).toBe(true);
+    expect(OptionalProjectIdQuerySchema.parse({})).toEqual({});
+    expect(OptionalProjectIdQuerySchema.parse({ projectId: "3" })).toEqual({ projectId: 3 });
+    expect(OptionalProjectIdQuerySchema.safeParse({ projectId: "0" }).success).toBe(false);
   });
 });

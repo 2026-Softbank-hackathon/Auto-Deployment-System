@@ -94,8 +94,10 @@ export function deploymentToDto(
 
 export interface CreateDeploymentInput {
   projectId: number;
-  targetVendor: TargetVendor;
-  targetProfile: string;
+  /** environmentId 가 없으면 필수. 둘 다 있으면 연결 type 과 같아야 한다 */
+  targetVendor?: TargetVendor;
+  /** 배포할 연결을 직접 고름 (공용 연결 또는 이 프로젝트 연결, #215) */
+  environmentId?: number;
   fileBuffer: Buffer;
 }
 
@@ -108,10 +110,12 @@ export class DeploymentService {
   ) {}
 
   async create(input: CreateDeploymentInput): Promise<CreateDeploymentResponse> {
-    const { projectId, targetVendor, targetProfile, fileBuffer } = input;
+    const { projectId, fileBuffer } = input;
 
-    const { targetEnvironmentId, registryEnvironmentId } =
-      await this.resolveEnvironments(projectId, targetVendor);
+    const { targetVendor, targetEnvironmentId, registryEnvironmentId } =
+      await this.resolveEnvironments(projectId, input.targetVendor, input.environmentId);
+    // vendor → profile ID 매핑 (연결을 직접 고르면 연결 type 이 vendor)
+    const targetProfile = resolveProfile(targetVendor);
 
     // 1. sha256 계산
     const sha256 = createHash("sha256").update(fileBuffer).digest("hex");
@@ -417,10 +421,7 @@ export class DeploymentService {
           ? target.id
           : await this.findOnpremRegistry(src.project_id, src.registry_environment_id);
       if (String(registryEnvironmentId) !== String(src.registry_environment_id)) {
-        await this.validateRegistryCredentials(
-          Number(src.project_id),
-          Number(registryEnvironmentId),
-        );
+        await this.validateRegistryCredentials(Number(registryEnvironmentId));
       }
     }
 
@@ -575,24 +576,69 @@ export class DeploymentService {
     return String(row.id);
   }
 
+  /**
+   * 배포 대상 · 이미지 레지스트리 연결을 정한다 (#215).
+   * - environmentId 가 있으면 그 연결 (공용이거나 이 프로젝트 것만). 연결 type 이 vendor
+   * - 없으면 vendor 의 프로젝트 기본 연결 → 없으면 공용 기본 연결
+   * - On-Prem 이면 레지스트리는 프로젝트 기본 AWS → 공용 기본 AWS
+   */
   private async resolveEnvironments(
     projectId: number,
-    targetVendor: TargetVendor,
+    requestedVendor: TargetVendor | undefined,
+    environmentId: number | undefined,
   ): Promise<{
+    targetVendor: TargetVendor;
     targetEnvironmentId: number;
     registryEnvironmentId: number;
   }> {
     const findDefault = async (type: "aws" | "onprem") => {
+      // 프로젝트 기본 연결을 먼저, 없으면 공용 기본 연결 (NULLS LAST)
       const result = await this.pool.query<{ id: number }>(
         `SELECT id FROM environments
-         WHERE project_id = $1 AND type = $2 AND is_default = TRUE
+         WHERE (project_id = $1 OR project_id IS NULL)
+           AND type = $2 AND is_default = TRUE
+         ORDER BY project_id NULLS LAST
          LIMIT 1`,
         [projectId, type],
       );
       return result.rows[0]?.id ?? null;
     };
 
-    const targetEnvironmentId = await findDefault(targetVendor);
+    let targetVendor: TargetVendor;
+    let targetEnvironmentId: number | null;
+    if (environmentId !== undefined) {
+      const chosen = await this.pool.query<{ id: number; type: TargetVendor }>(
+        `SELECT id, type FROM environments
+         WHERE id = $1 AND (project_id = $2 OR project_id IS NULL)`,
+        [environmentId, projectId],
+      );
+      const row = chosen.rows[0];
+      if (!row) {
+        throw new ApiError(
+          404,
+          "NOT_FOUND",
+          `연결 ID ${environmentId}를 찾을 수 없습니다.`,
+          "공용 연결이나 이 프로젝트에 등록한 연결만 고를 수 있습니다.",
+        );
+      }
+      if (requestedVendor !== undefined && requestedVendor !== row.type) {
+        throw new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          `target(${requestedVendor})이 고른 연결의 종류(${row.type})와 다릅니다.`,
+          "environment_id 를 보낼 때는 target 을 생략하거나 연결 종류와 맞추세요.",
+        );
+      }
+      targetVendor = row.type;
+      targetEnvironmentId = row.id;
+    } else {
+      if (requestedVendor === undefined) {
+        throw new ApiError(400, "VALIDATION_ERROR", "target 또는 environment_id 가 필요합니다.");
+      }
+      targetVendor = requestedVendor;
+      targetEnvironmentId = await findDefault(targetVendor);
+    }
+
     if (targetEnvironmentId === null) {
       throw new ApiError(
         409,
@@ -603,8 +649,9 @@ export class DeploymentService {
     }
 
     if (targetVendor === "aws") {
-      await this.validateRegistryCredentials(projectId, targetEnvironmentId);
+      await this.validateRegistryCredentials(targetEnvironmentId);
       return {
+        targetVendor,
         targetEnvironmentId,
         registryEnvironmentId: targetEnvironmentId,
       };
@@ -620,22 +667,24 @@ export class DeploymentService {
       );
     }
 
-    await this.validateRegistryCredentials(projectId, registryEnvironmentId);
+    await this.validateRegistryCredentials(registryEnvironmentId);
 
-    return { targetEnvironmentId, registryEnvironmentId };
+    return { targetVendor, targetEnvironmentId, registryEnvironmentId };
   }
 
-  private async validateRegistryCredentials(
-    projectId: number,
-    environmentId: number,
-  ): Promise<void> {
-    const result = await this.pool.query<{ aws_config: AwsConfig | null }>(
-      `SELECT aws_config
+  /** 시크릿은 연결의 소유 범위(프로젝트 또는 공용)에서 찾는다 (#215) */
+  private async validateRegistryCredentials(environmentId: number): Promise<void> {
+    const result = await this.pool.query<{
+      aws_config: AwsConfig | null;
+      project_id: number | string | null;
+    }>(
+      `SELECT aws_config, project_id
        FROM environments
-       WHERE id = $1 AND project_id = $2 AND type = 'aws'`,
-      [environmentId, projectId],
+       WHERE id = $1 AND type = 'aws'`,
+      [environmentId],
     );
     const config = result.rows[0]?.aws_config;
+    const ownerProjectId = result.rows[0]?.project_id ?? null;
 
     if (!config || config.credentialsType !== "access_key") return;
 
@@ -656,8 +705,8 @@ export class DeploymentService {
     const secretResult = await this.pool.query<{ name: string }>(
       `SELECT name
        FROM secrets
-       WHERE project_id = $1 AND name = ANY($2::text[])`,
-      [projectId, secretNames],
+       WHERE project_id IS NOT DISTINCT FROM $1::bigint AND name = ANY($2::text[])`,
+      [ownerProjectId, secretNames],
     );
     const found = new Set(secretResult.rows.map((row) => row.name));
     const missing = secretNames.filter((name) => !found.has(name));

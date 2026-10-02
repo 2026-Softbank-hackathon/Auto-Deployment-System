@@ -41,9 +41,10 @@ export class ApprovalService {
       const depRes = await client.query<{
         id: number;
         status: string;
+        project_id: number | string;
         target_environment_id: number | null;
       }>(
-        `SELECT id, status, target_environment_id
+        `SELECT id, status, project_id, target_environment_id
          FROM deployments WHERE id = $1 FOR UPDATE`,
         [deploymentId]
       );
@@ -87,7 +88,9 @@ export class ApprovalService {
               "배포 대상 Environment가 연결되어 있지 않습니다.",
             );
           }
-          const envKey = `environment:${dep.target_environment_id}`;
+          // 공용 연결(#215)은 여러 앱이 같이 쓰므로 앱(프로젝트)마다 락을 잡는다 —
+          // 리소스도 프로젝트마다 따로 만들어 서로 막을 이유가 없다.
+          const envKey = `environment:${dep.target_environment_id}:project:${dep.project_id}`;
           const leaseExpires = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2시간
 
           // 충돌 시 409 DEPLOYMENT_LOCKED

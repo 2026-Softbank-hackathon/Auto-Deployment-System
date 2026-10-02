@@ -232,4 +232,67 @@ describe("EnvironmentService.delete", () => {
     const svc = new EnvironmentService(pool);
     await expect(svc.delete(999)).rejects.toMatchObject({ statusCode: 404 });
   });
+
+  it("배포 기록이 참조 중이면(FK RESTRICT) 500 대신 409 (#215)", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("FROM deployments")) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("DELETE FROM environments")) {
+        throw Object.assign(new Error("violates foreign key constraint"), { code: "23503" });
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+    await expect(svc.delete(10)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT",
+      message: expect.stringContaining("배포한 기록"),
+    });
+  });
+});
+
+describe("EnvironmentService 공용 연결 (#215)", () => {
+  it("projectId 없이 만들면 프로젝트 확인 없이 project_id NULL 로 저장하고 공용 범위에서 기본값을 정한다", async () => {
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = makePool(async (sql, params) => {
+      calls.push({ sql: sql.replace(/\s+/g, " ").trim(), params });
+      if (sql.includes("SELECT name FROM secrets")) {
+        return { rows: [{ name: "k" }, { name: "s" }], rowCount: 2 };
+      }
+      if (sql.includes("INSERT INTO environments")) {
+        return { rows: [{ id: 20, is_default: true, created_at: new Date() }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    const svc = new EnvironmentService(pool);
+
+    const dto = await svc.create({
+      name: "aws-shared",
+      type: "aws",
+      awsConfig: {
+        credentialsType: "access_key",
+        accessKeyIdSecretName: "k",
+        secretAccessKeySecretName: "s",
+        region: "ap-northeast-2",
+      },
+    });
+
+    expect(dto).toMatchObject({ projectId: null, shared: true, isDefault: true, agentOnline: false });
+    expect(calls.some((c) => c.sql.includes("FROM projects"))).toBe(false);
+    const secretCheck = calls.find((c) => c.sql.includes("FROM secrets"))!;
+    expect(secretCheck.sql).toContain("project_id IS NOT DISTINCT FROM $1::bigint");
+    expect(secretCheck.params[0]).toBeNull();
+    expect(calls.find((c) => c.sql.includes("pg_advisory_xact_lock"))!.params).toEqual(["shared:aws"]);
+    expect(calls.find((c) => c.sql.includes("INSERT INTO environments"))!.params[0]).toBeNull();
+  });
+
+  it("list() 에 projectId 가 없으면 공용 연결만 읽는다", async () => {
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = makePool(async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: [], rowCount: 0 };
+    });
+    await new EnvironmentService(pool).list({});
+    expect(calls[0]!.sql).toContain("LEFT JOIN agents");
+    expect(calls[0]!.params).toEqual([null]);
+  });
 });

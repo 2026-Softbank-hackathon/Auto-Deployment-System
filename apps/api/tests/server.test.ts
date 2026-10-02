@@ -161,7 +161,7 @@ describe("POST /api/v1/deployments", () => {
     mockPool.on(/SELECT id FROM environments/, (params) => ({
       rows: [{ id: params[1] === "onprem" ? 20 : 10 }],
     }));
-    mockPool.on(/SELECT aws_config FROM environments/, () => ({
+    mockPool.on(/SELECT aws_config, project_id FROM environments/, () => ({
       rows: [{
         aws_config: {
           credentialsType: "access_key",

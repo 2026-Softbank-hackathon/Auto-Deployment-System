@@ -29,12 +29,18 @@ beforeEach(async () => {
 
 afterEach(async () => server.close());
 
-async function upload(order: string[], target = "aws", contents: Buffer = source) {
+async function upload(
+  order: string[],
+  target = "aws",
+  contents: Buffer = source,
+  environmentId = "12",
+) {
   const form = new FormData();
   for (const field of order) {
     if (field === "source") form.append(field, new Blob([contents], { type: "application/zip" }), "mock.zip");
     if (field === "project_id") form.append(field, "7");
     if (field === "target") form.append(field, target);
+    if (field === "environment_id") form.append(field, environmentId);
   }
   const request = new Request("http://localhost/api/v1/deployments", { method: "POST", body: form });
   const contentType = request.headers.get("content-type")!;
@@ -69,11 +75,38 @@ describe("POST deployments browser multipart field ordering", () => {
   ] as const)("%s 필드 순서 %j를 처리한다", async (target, order) => {
     const response = await upload([...order], target);
     expect(response.statusCode, response.body).toBe(202);
+    // vendor → profile 매핑은 서비스가 최종 연결 type 으로 한다 (#215)
     expect(create).toHaveBeenCalledWith({
       projectId: 7, targetVendor: target,
-      targetProfile: target === "aws" ? "aws-ecs-basic" : "onprem-docker-basic",
       fileBuffer: source,
     });
+  });
+
+  it("environment_id 만 보내면 target 없이 서비스로 넘긴다 (#215)", async () => {
+    const response = await upload(["source", "project_id", "environment_id"]);
+    expect(response.statusCode, response.body).toBe(202);
+    expect(create).toHaveBeenCalledWith({ projectId: 7, environmentId: 12, fileBuffer: source });
+  });
+
+  it("environment_id 와 target 을 같이 보내면 둘 다 넘긴다 (일치 여부는 서비스가 확인)", async () => {
+    const response = await upload(["source", "project_id", "target", "environment_id"], "onprem");
+    expect(response.statusCode, response.body).toBe(202);
+    expect(create).toHaveBeenCalledWith({
+      projectId: 7, targetVendor: "onprem", environmentId: 12, fileBuffer: source,
+    });
+  });
+
+  it.each(["0", "abc", "1.5"])("environment_id=%s 는 거절한다", async (value) => {
+    const response = await upload(["source", "project_id", "environment_id"], "aws", source, value);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("environment_id");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("environment_id 와 함께 보낸 잘못된 target 은 거절한다", async () => {
+    const response = await upload(["source", "project_id", "target", "environment_id"], "aws-ecs-basic");
+    expect(response.statusCode).toBe(400);
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("Profile ID를 vendor로 보내면 여전히 거절한다", async () => {
@@ -97,6 +130,12 @@ describe("POST deployments browser multipart field ordering", () => {
 
   it.each(["target", "project_id"])("중복된 %s 필드를 거절한다", async (field) => {
     const response = await upload(["source", "project_id", "target", field]);
+    expect(response.statusCode).toBe(400);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("중복된 environment_id 필드를 거절한다", async () => {
+    const response = await upload(["source", "project_id", "environment_id", "environment_id"]);
     expect(response.statusCode).toBe(400);
     expect(create).not.toHaveBeenCalled();
   });

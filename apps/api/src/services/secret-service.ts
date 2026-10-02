@@ -4,6 +4,9 @@
  *
  * 저장: value → { ciphertext, iv(12B), authTag(16B) } · 원시 value 는 응답/로그 어디에도 없음
  * 복호화: 워커가 배포 시점에만 호출 (decrypt · 이 이슈 스코프 밖)
+ *
+ * 소유 범위(#215): projectId 가 있으면 그 프로젝트 시크릿, 없으면(null) 공용 시크릿.
+ * 공용 연결은 공용 시크릿을, 프로젝트 연결은 그 프로젝트 시크릿을 참조한다.
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
@@ -12,6 +15,10 @@ import type { Secret } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export type SecretDto = Secret;
+
+function ownerLabel(projectId: number | null): string {
+  return projectId == null ? "공용 시크릿" : `프로젝트 ${projectId}`;
+}
 
 export class SecretService {
   constructor(
@@ -23,10 +30,13 @@ export class SecretService {
     }
   }
 
-  async create(input: { projectId: number; name: string; value: string }): Promise<SecretDto> {
-    const proj = await this.pool.query(`SELECT 1 FROM projects WHERE id = $1`, [input.projectId]);
-    if (proj.rowCount === 0) {
-      throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${input.projectId}를 찾을 수 없습니다.`);
+  async create(input: { projectId?: number; name: string; value: string }): Promise<SecretDto> {
+    const projectId = input.projectId ?? null;
+    if (projectId !== null) {
+      const proj = await this.pool.query(`SELECT 1 FROM projects WHERE id = $1`, [projectId]);
+      if (proj.rowCount === 0) {
+        throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${projectId}를 찾을 수 없습니다.`);
+      }
     }
 
     const iv = randomBytes(12);
@@ -39,11 +49,12 @@ export class SecretService {
         `INSERT INTO secrets (project_id, name, ciphertext, iv, auth_tag)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING created_at`,
-        [input.projectId, input.name, ciphertext, iv, authTag],
+        [projectId, input.name, ciphertext, iv, authTag],
       );
       return {
         name: input.name,
-        projectId: input.projectId,
+        projectId,
+        shared: projectId === null,
         createdAt: res.rows[0]!.created_at.toISOString(),
       };
     } catch (e) {
@@ -52,38 +63,40 @@ export class SecretService {
         throw new ApiError(
           409,
           "CONFLICT",
-          `시크릿 이름 '${input.name}' 이 프로젝트 ${input.projectId} 에 이미 존재합니다.`,
+          `시크릿 이름 '${input.name}' 이 ${ownerLabel(projectId)} 에 이미 존재합니다.`,
         );
       }
       throw e;
     }
   }
 
-  async list(input: { projectId: number }): Promise<SecretDto[]> {
-    const res = await this.pool.query<{ name: string; project_id: number; created_at: Date }>(
+  async list(input: { projectId?: number }): Promise<SecretDto[]> {
+    const res = await this.pool.query<{ name: string; project_id: number | null; created_at: Date }>(
       `SELECT name, project_id, created_at FROM secrets
-       WHERE project_id = $1 ORDER BY name`,
-      [input.projectId],
+       WHERE project_id IS NOT DISTINCT FROM $1::bigint ORDER BY name`,
+      [input.projectId ?? null],
     );
     return res.rows.map((r) => ({
       name: r.name,
       projectId: r.project_id,
+      shared: r.project_id === null,
       createdAt: r.created_at.toISOString(),
     }));
   }
 
-  async delete(input: { projectId: number; name: string }): Promise<void> {
+  async delete(input: { projectId?: number; name: string }): Promise<void> {
+    const projectId = input.projectId ?? null;
     const references = await this.pool.query<{ id: number }>(
       `SELECT id
        FROM environments
-       WHERE project_id = $1
+       WHERE project_id IS NOT DISTINCT FROM $1::bigint
          AND type = 'aws'
          AND (
            aws_config ->> 'accessKeyIdSecretName' = $2
            OR aws_config ->> 'secretAccessKeySecretName' = $2
          )
        LIMIT 1`,
-      [input.projectId, input.name],
+      [projectId, input.name],
     );
     if (references.rows.length > 0) {
       throw new ApiError(
@@ -95,23 +108,26 @@ export class SecretService {
     }
 
     const res = await this.pool.query(
-      `DELETE FROM secrets WHERE project_id = $1 AND name = $2`,
-      [input.projectId, input.name],
+      `DELETE FROM secrets WHERE project_id IS NOT DISTINCT FROM $1::bigint AND name = $2`,
+      [projectId, input.name],
     );
     if (res.rowCount === 0) {
       throw new ApiError(
         404,
         "NOT_FOUND",
-        `시크릿 '${input.name}' 이 프로젝트 ${input.projectId} 에 없습니다.`,
+        `시크릿 '${input.name}' 이 ${ownerLabel(projectId)} 에 없습니다.`,
       );
     }
   }
 
-  /** 워커에서만 호출 (배포 시점 AWS 인증 등). 이 이슈에서는 라우트로 노출 안 함. */
-  async decrypt(input: { projectId: number; name: string }): Promise<string> {
+  /**
+   * 워커 · Agent ECR 인증에서만 호출 (배포 시점 AWS 인증 등). 라우트로 노출 안 함.
+   * projectId 는 시크릿을 참조하는 연결(environment)의 소유 범위 — 공용 연결이면 null.
+   */
+  async decrypt(input: { projectId: number | null; name: string }): Promise<string> {
     const res = await this.pool.query<{ ciphertext: Buffer; iv: Buffer; auth_tag: Buffer }>(
       `SELECT ciphertext, iv, auth_tag FROM secrets
-       WHERE project_id = $1 AND name = $2`,
+       WHERE project_id IS NOT DISTINCT FROM $1::bigint AND name = $2`,
       [input.projectId, input.name],
     );
     const row = res.rows[0];
@@ -119,7 +135,7 @@ export class SecretService {
       throw new ApiError(
         404,
         "NOT_FOUND",
-        `시크릿 '${input.name}' 이 프로젝트 ${input.projectId} 에 없습니다.`,
+        `시크릿 '${input.name}' 이 ${ownerLabel(input.projectId)} 에 없습니다.`,
       );
     }
     const decipher = createDecipheriv("aes-256-gcm", this.masterKey, row.iv);

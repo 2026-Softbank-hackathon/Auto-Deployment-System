@@ -16,7 +16,7 @@ export type AgentEcrCredential = {
 };
 
 type CredentialRow = {
-  project_id: number | string;
+  project_id: number | string | null;
   aws_config: unknown;
   payload: unknown;
   attempt: number;
@@ -59,7 +59,8 @@ export class AgentEcrCredentialService {
          AND target_environment.id = job.environment_id
          AND target_environment.type = 'onprem'
          AND registry_environment.type = 'aws'
-         AND registry_environment.project_id = deployment.project_id
+         AND (registry_environment.project_id IS NULL
+              OR registry_environment.project_id = deployment.project_id)
        RETURNING registry_environment.project_id,
                  registry_environment.aws_config,
                  job.payload,
@@ -103,8 +104,9 @@ export class AgentEcrCredentialService {
     }
 
     const image = imageFromPayload(row.payload);
-    const projectId = Number(row.project_id);
-    if (!Number.isSafeInteger(projectId) || projectId <= 0) {
+    // 레지스트리 연결의 소유 범위 — 공용 연결(#215)이면 null 이고 시크릿도 공용에서 찾는다
+    const projectId = row.project_id === null ? null : Number(row.project_id);
+    if (projectId !== null && (!Number.isSafeInteger(projectId) || projectId <= 0)) {
       throw new Error("AWS_REGISTRY_PROJECT_INVALID");
     }
 

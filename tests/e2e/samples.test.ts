@@ -378,3 +378,28 @@ describe.skipIf(skipE2e)("e2e sample: apps/samples/monolith 업로드", () => {
     expectMonolithIr(body.ir);
   });
 });
+
+// ── 6. apps/samples/static-site (정적 사이트 데모 앱, #275) ──────────────────────
+
+const STATIC_SITE_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../apps/samples/static-site"
+);
+
+describe("sample app: apps/samples/static-site — 분석기 규칙 기반", () => {
+  it("루트 index.html → static 서비스 · 빌드 없음 · port 8080 · health / · IR 유효", async () => {
+    const result = await analyze(STATIC_SITE_DIR);
+
+    expect(result.ir_valid, `ir_errors: ${JSON.stringify(result.ir_errors)}`).toBe(true);
+    expect(result.services).toHaveLength(1);
+    expect(result.services[0]!.type).toBe("static");
+
+    const ir = IrSchema.parse(result.ir_draft);
+    const svc = Object.values(ir.services)[0]!;
+    expect(svc.type).toBe("static");
+    expect(svc.port).toBe(8080);
+    expect(svc.health.path).toBe("/");
+    expect(svc.static).toEqual({ output_dir: ".", spa_fallback: true });
+    expect(svc.command).toBeUndefined();
+  });
+});

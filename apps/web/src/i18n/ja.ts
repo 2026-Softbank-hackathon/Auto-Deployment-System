@@ -470,6 +470,11 @@ export const ja: Messages = {
     aiUsage: (tokensIn, tokensOut, cost) => `AI使用量 — 入力 ${tokensIn} · 出力 ${tokensOut} トークン · $${cost}`,
   },
   run: {
+    staticSite: {
+      badge: '静的サイト',
+      aws: 'AWSではサーバーなしでS3ウェブサイトとして配信します',
+      onprem: '同じイメージをnginxコンテナとして実行します',
+    },
     titleActive: 'デプロイ中',
     titleSucceeded: 'デプロイ完了',
     titleFailed: 'デプロイできませんでした',
@@ -619,6 +624,7 @@ export const ja: Messages = {
     failedCopy: 'このデプロイは最後まで進みませんでした。原因は進行状況の画面で確認できます。',
     copyUrl: 'URLをコピー',
     factTarget: 'デプロイ先',
+    factRuntime: '実行方式',
     factDuration: '所要時間',
     timelineTitle: '段階別の所要時間',
     factFinished: '完了時刻',

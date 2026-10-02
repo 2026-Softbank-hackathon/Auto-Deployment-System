@@ -96,6 +96,9 @@ export type DeployMode = 'container' | 'serverless';
 /** 서버리스로 배포한 프로필 — 배포 내역 · 앱 상세의 "서버리스" 표시 */
 export const SERVERLESS_PROFILE = 'aws-lambda-basic';
 
+/** AWS 에 서버 없이 S3 웹사이트로 배포한 정적 사이트 프로필 — "정적 사이트" 표시 (#275) */
+export const STATIC_SITE_PROFILE = 'aws-static-basic';
+
 /** mode 를 주면 앱의 배포 형태도 바뀐다. 없으면 앱에 저장된 형태(새 앱은 컨테이너)로 배포한다 */
 export async function createDeployment(source: File, projectId: string, environmentId: string, mode?: DeployMode): Promise<CreateDeploymentResponse> {
   const form = new FormData();

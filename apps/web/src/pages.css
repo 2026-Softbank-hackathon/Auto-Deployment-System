@@ -149,6 +149,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .run-head__elapsed { font-family: var(--font-mono); font-size: 18px; color: var(--ink-soft); }
 .run-head__meta { display: flex; flex-direction: column; gap: 2px; color: var(--ink-soft); font-size: 14px; }
 .run-head__id { font-family: var(--font-mono); font-size: 12px; }
+.run-head__static { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; }
 
 .run-tape { gap: 10px; padding: 6px 12px; }
 .run-tape__track { position: relative; width: 28px; height: 10px; }
@@ -556,6 +557,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .deploy-advanced__hint { margin: 2px 0 0; font-size: 13px; }
 /* 서버리스로 배포한 배포 · 앱 표시 */
 .serverless-badge { display: inline-block; padding: 1px 7px; font-size: 12px; font-weight: 700; color: var(--brass-deep); border: 1px solid var(--brass); border-radius: var(--radius-tape); white-space: nowrap; }
+/* 정적 사이트(AWS 는 서버 없이 S3) 표시 (#275) */
+.static-site-badge { display: inline-block; padding: 1px 7px; font-size: 12px; font-weight: 700; color: var(--moss-text); border: 1px solid var(--moss); border-radius: var(--radius-tape); white-space: nowrap; }
 
 /* 배포 현황: 검색 · 상태 필터 · 페이지 */
 .dashboard-tools { display: flex; align-items: end; gap: 12px 16px; flex-wrap: wrap; }

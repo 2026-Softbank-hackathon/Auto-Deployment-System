@@ -4,11 +4,13 @@ import { getProfile } from "@camellia/profiles";
 import type { DeploymentAdapter } from "./adapter.js";
 import { AdapterError } from "./errors.js";
 import { awsEcsAdapter } from "./aws-ecs.js";
+import { awsLambdaAdapter } from "./aws-lambda.js";
 import { onpremDockerAdapter } from "./onprem-docker.js";
 import type { DeploymentPlan } from "./types.js";
 
 const ADAPTERS: Record<string, DeploymentAdapter> = {
   [awsEcsAdapter.profileId]: awsEcsAdapter,
+  [awsLambdaAdapter.profileId]: awsLambdaAdapter,
   [onpremDockerAdapter.profileId]: onpremDockerAdapter,
 };
 

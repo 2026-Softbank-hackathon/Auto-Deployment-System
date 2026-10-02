@@ -87,6 +87,22 @@ export type AwsEcsDeploymentPlan = CommonDeploymentPlan & {
   };
 };
 
+/** 서버리스 배포 형태 — 같은 이미지를 Lambda(+ Lambda Web Adapter)로, 공개 origin 은 ALB */
+export type AwsLambdaDeploymentPlan = CommonDeploymentPlan & {
+  target: "aws";
+  runtime: {
+    type: "lambda";
+    region: string;
+    memoryMiB: number;
+    timeoutSeconds: number;
+  };
+  provisioning: {
+    engine: "terraform";
+    moduleRef: string;
+    variables: Record<string, string | number | boolean>;
+  };
+};
+
 export type OnpremDockerDeploymentPlan = CommonDeploymentPlan & {
   target: "onprem";
   runtime: {
@@ -103,4 +119,5 @@ export type OnpremDockerDeploymentPlan = CommonDeploymentPlan & {
 
 export type DeploymentPlan =
   | AwsEcsDeploymentPlan
+  | AwsLambdaDeploymentPlan
   | OnpremDockerDeploymentPlan;

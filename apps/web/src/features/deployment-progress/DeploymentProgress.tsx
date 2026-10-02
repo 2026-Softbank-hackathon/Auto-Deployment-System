@@ -11,6 +11,7 @@ import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/f
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene, sceneTarget } from './DeployScene';
+import { localizeLogLine } from './log-line-i18n';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
@@ -67,6 +68,10 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
 /** 로그 줄 앞의 "[ISO 시각]"으로 가장 최근 줄을 고른다. */
 /** 진행 탭의 "지금" 자리에 보여 주는 최근 로그 줄 수 (좁은 화면에서는 마지막 한 줄만 보인다) */
 const RECENT_LINES = 3;
+/** "지금" 자리에 보여 줄 줄: 시각을 떼고 화면 언어로 옮긴다. 옮길 수 없는 줄은 뺀다. */
+function nowLines(lines: string[], locale: string): string[] {
+  return lines.flatMap((line) => localizeLogLine(line.replace(/^\[[^\]]+\]\s*/, ''), locale) ?? []);
+}
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
 
 /** 진행 중일 때만 1초마다 다시 그린다. 경과 시간은 서버의 createdAt 기준 실제 값이다. */
@@ -311,10 +316,10 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
 
         <figure className="run-scene"><DeployScene view={view} target={sceneTarget(text(status?.targetProfile))} /></figure>
 
-        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 최근 로그 몇 줄(시각은 뗀다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
-        {view.outcome === 'active' && !view.waiting && recentLines.length > 0 && <div className="run-now" aria-live="polite">
+        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 최근 로그 몇 줄(시각은 떼고 화면 언어로 옮긴다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
+        {view.outcome === 'active' && !view.waiting && nowLines(recentLines, t.locale).length > 0 && <div className="run-now" aria-live="polite">
           <span>{t.run.nowLabel}</span>
-          <ol>{recentLines.map((line, index) => <li key={`${index}-${line}`}><code>{line.replace(/^\[[^\]]+\]\s*/, '')}</code></li>)}</ol>
+          <ol>{nowLines(recentLines, t.locale).map((line, index) => <li key={`${index}-${line}`}><code>{line}</code></li>)}</ol>
         </div>}
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />

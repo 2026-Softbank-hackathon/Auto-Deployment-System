@@ -44,15 +44,15 @@ export function koroLine(stage: number, stepSeconds: number, facts: AnalysisFact
 /** 재배포 · 롤백 · 환경 전환일 때 먼저 하는 말 */
 function storyLines(stage: number, story: DeployStory | null, talk: Messages['run']['talk'], target: SceneTarget): string[] {
   if (!story) return [];
-  // AWS의 같은 환경 배포는 서비스 하나를 제자리에서 새 버전으로 바꾼다 (인프라 준비 단계에서 일어난다).
+  // AWS의 같은 환경 배포는 서비스 하나를 제자리에서 새 버전으로 바꾼다 (배포 단계의 ECS 롤아웃에서 일어난다, #253).
   const inPlace = story.prev !== null && story.kind !== 'switch' && target !== 'onprem';
   // "같은 이미지, 장소만 바꾼다"는 지금 서비스 중인 버전과 이름표가 같을 때만 말한다 (환경을 바꾸면서 예전 이미지로 되돌리는 경우도 있다).
   const sameImage = story.prev !== null && story.prev.label === story.label;
   if (stage === 1 && story.kind === 'update') return [talk.update];
   if (stage === 1 && story.reused) return [talk.reuse, ...(story.kind === 'switch' && sameImage ? [talk.reuseSwitch] : story.kind === 'rollback' ? [talk.rollback(story.label)] : [])];
   if (stage >= 2 && stage <= 4 && story.kind === 'switch') return [talk.switchKeeps];
-  if (stage >= 2 && stage <= 4 && story.kind === 'rollback') return [talk.rollback(story.label), ...(inPlace && stage === 2 ? [talk.awsInPlace] : [])];
-  if (stage === 2 && inPlace) return [talk.awsInPlace];
+  if (stage >= 2 && stage <= 4 && story.kind === 'rollback') return [talk.rollback(story.label), ...(inPlace && stage === 3 ? [talk.awsInPlace] : [])];
+  if (stage === 3 && inPlace) return [talk.awsInPlace];
   return [];
 }
 

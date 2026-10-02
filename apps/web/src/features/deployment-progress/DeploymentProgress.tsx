@@ -11,7 +11,7 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { awsSceneStage, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { isAwsStaticSiteProfile, koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -241,7 +241,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const currentStep = status?.currentStep && typeof status.currentStep === 'object' ? status.currentStep as { startedAt?: unknown } : null;
   const stepStartedAt = text(currentStep?.startedAt);
   // 코로의 말과 몸짓에 쓰는 "이 단계에서 흐른 시간". 서버가 준 단계 시작 시각과, 이 화면이 본 마지막 상태 변화 중 늦은 쪽부터 센다.
-  // (서버는 인프라 준비와 배포를 한 단계로 기록하므로, 상태가 바뀐 순간을 화면에서도 기억한다.)
+  // (서버는 인프라 준비와 배포를 한 단계로 기록하므로, 상태가 바뀐 순간을 화면에서도 기억한다 — 배포로 넘어가면 0부터 다시 센다.)
   const [changedAt, setChangedAt] = useState<{ status: string; at: number } | null>(null);
   useEffect(() => {
     if (!currentStatus) return;
@@ -264,14 +264,14 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const staticSite = isAwsStaticSiteProfile(text(status?.targetProfile)) || facts?.staticSite === true;
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
-  // 장면에 쓰는 단계: AWS는 인프라 준비 도중에 비행 장면으로 넘어간다(서버의 "배포" 상태가 순식간이라서). 코로의 말은 실제 단계를 따른다.
-  const sceneView = awsSceneStage(view, target, stepSeconds);
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
   const box = sceneBox(target, story);
-  const [koroX, koroY] = koroSpot(sceneView, target, story);
+  const [koroX, koroY] = koroSpot(view, target, story);
+  // 환경 전환(AWS → 온프레미스)의 배포 단계: 코로 오른쪽 위로 집이 낙하산을 타고 내려오므로 풍선은 왼쪽으로 펼친다.
+  const parachuting = target === 'onprem' && view.stage === 3 && story?.kind === 'switch' && story.reused && story.prev !== null;
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
-  const cue = rolling ? sceneCue(sceneView.stage, target, story) : null;
+  const cue = rolling ? sceneCue(view.stage, target, story) : null;
   const cueSeen = useRef(false);
   useEffect(() => {
     if (!cueSeen.current) { cueSeen.current = true; return; }
@@ -371,11 +371,11 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
-          <DeployScene view={sceneView} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
-              풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
+              풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
-          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''}`}
+          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 || parachuting ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''}`}
             style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>

@@ -30,6 +30,7 @@ import { FinalUrlVerifier } from "./final-url-verifier.js";
 import { S3TerraformStateStore } from "./terraform-state-store.js";
 import { EcsRolloutWaiter } from "./ecs-rollout.js";
 import { LambdaRolloutWaiter } from "./lambda-rollout.js";
+import { StaticSitePublisher, resolveEgressIp } from "./static-site-publisher.js";
 
 const log = pino({ name: "worker" });
 
@@ -94,6 +95,10 @@ async function main(): Promise<void> {
     terraformStateStore: new S3TerraformStateStore(),
     ecsRolloutWaiter: new EcsRolloutWaiter(),
     lambdaRolloutWaiter: new LambdaRolloutWaiter(),
+    // 정적 사이트 (#274)
+    platformDomain: process.env["DEMO_PLATFORM_DOMAIN"]?.trim() || undefined,
+    staticSitePublisher: new StaticSitePublisher(),
+    egressIpResolver: () => resolveEgressIp(),
   };
 
   boss.on("error", (err: unknown) => {

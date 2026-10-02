@@ -123,6 +123,35 @@ describe("DeploymentOriginActivator", () => {
     });
   });
 
+  it("정적 사이트 — 검증한 S3 웹사이트 endpoint 를 고정 서비스 CNAME 에 연결한다 (#274)", async () => {
+    for (const website of [
+      "service-4.example.com.s3-website.ap-northeast-2.amazonaws.com",
+      "service-4.example.com.s3-website-us-east-1.amazonaws.com",
+    ]) {
+      const payload = { ...awsPayload, targetUrl: `http://${website}`, health: { ...awsPayload.health, path: "/" } };
+      const query = vi.fn().mockResolvedValueOnce({ rows: [context(payload)] })
+        .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });
+      const cf = cloudflare();
+      await new DeploymentOriginActivator({ query } as unknown as Pool, {
+        cloudflare: cf, zoneId: "zone-1", platformDomain: "example.com",
+      }).activate(payload);
+
+      expect(cf.switchServiceOrigin).toHaveBeenCalledWith({
+        zoneId: "zone-1", serviceHostname: "service-4.example.com", originHostname: website,
+      });
+    }
+  });
+
+  it("AWS 배포의 origin 이 ALB · S3 웹사이트 endpoint 가 아니면 거부한다", async () => {
+    const payload = { ...awsPayload, targetUrl: "http://attacker.example.net" };
+    const query = vi.fn().mockResolvedValueOnce({ rows: [context(payload)] });
+    const cf = cloudflare();
+    await expect(new DeploymentOriginActivator({ query } as unknown as Pool, {
+      cloudflare: cf, zoneId: "zone-1", platformDomain: "example.com",
+    }).activate(payload)).rejects.toMatchObject({ code: "ORIGIN_ALB_INVALID" });
+    expect(cf.switchServiceOrigin).not.toHaveBeenCalled();
+  });
+
   it("최종 URL 실패 시 직전 CNAME target으로 복구한다", async () => {
     const query = vi.fn().mockResolvedValueOnce({ rows: [context()] })
       .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });

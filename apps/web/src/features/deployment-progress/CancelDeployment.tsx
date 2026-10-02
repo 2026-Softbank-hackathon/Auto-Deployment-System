@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { cancelDeployment } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
-import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
+import { useI18n } from '../../i18n/I18nProvider';
+import { ServerReason } from './ServerReason';
 
 /**
  * 진행 중인 배포 취소. 되돌릴 수 없어서 한 번 더 확인받는다.
@@ -36,6 +37,6 @@ export function CancelDeployment({ deploymentId, onCancelled }: { deploymentId: 
         <Keycap variant="ghost" disabled={busy} onClick={() => setConfirming(false)}>{t.cancel.keep}</Keycap>
       </div>
       : <Keycap variant="ghost" onClick={() => { setError(null); setConfirming(true); }}>{t.cancel.button}</Keycap>}
-    {error !== null && <p className="run-cancel__error" role="alert"><strong>{t.cancel.failed}</strong> {serverReasonText(error, t, t.cancel.failed)}</p>}
+    {error !== null && <div className="run-cancel__error" role="alert"><strong>{t.cancel.failed}</strong> <ServerReason error={error} fallback={t.cancel.failed} /></div>}
   </div>;
 }

@@ -5,7 +5,8 @@ import { cancelDeployment, listEnvironments, listSharedEnvironments, redeployDep
 const AWS_COMPUTE_PROFILES = new Set(['aws-ecs-basic', SERVERLESS_PROFILE]);
 import type { Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
-import { redeployReasonText, serverReasonText, useI18n } from '../../i18n/I18nProvider';
+import { useI18n } from '../../i18n/I18nProvider';
+import { ServerReason } from '../deployment-progress/ServerReason';
 import { deploymentStatusView } from '../deployment-status/status-view';
 import { DeploymentRow } from './DeploymentRow';
 import { CONNECTIONS_PATH, EnvironmentChooser } from './EnvironmentChooser';
@@ -84,7 +85,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     && !finished(other) && (LOCKING_STATUSES.has(other.status) || !isStalled(true, other.createdAt, now)));
 
   const [starting, setStarting] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ id: string; title: string; reason: string } | null>(null);
+  const [failure, setFailure] = useState<{ id: string; title: string; error: unknown; known?: Partial<Record<string, string>> } | null>(null);
   // 취소는 되돌릴 수 없어서 한 번 더 확인받는다.
   const [cancelTarget, setCancelTarget] = useState<DeploymentListItem | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -123,7 +124,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
       setCancelTarget(null);
       onChanged?.();
     } catch (error) {
-      setFailure({ id: item.id, title: t.cancel.failed, reason: serverReasonText(error, t, t.cancel.failed) });
+      setFailure({ id: item.id, title: t.cancel.failed, error });
       setCancelTarget(null);
     } finally {
       setCancelling(false);
@@ -138,7 +139,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
       const created = await redeployDeployment(item.id, targetEnvironmentId, mode);
       onNavigate(`/deployments/${encodeURIComponent(created.deploymentId)}`);
     } catch (error) {
-      setFailure({ id: item.id, title: failedTitle, reason: redeployReasonText(error, t, failedTitle) });
+      setFailure({ id: item.id, title: failedTitle, error, known: t.redeploy.errors });
       setStarting(null);
       setRollbackTarget(null);
       setSwitchSource(null);
@@ -224,7 +225,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
       environments={switchSource ? switchTargets(switchSource) : []} starting={starting !== null}
       onChoose={(environment) => { if (switchSource) void redeploy(switchSource, t.versions.switchFailed, environment.id); }}
       onClose={() => setSwitchSource(null)} onNavigate={onNavigate} />}
-    {failure && <div className="notice error" role="alert"><strong>{t.dashboard.deploymentNo(failure.id)} — {failure.title}</strong><br />{failure.reason}</div>}
+    {failure && <div className="notice error" role="alert"><strong>{t.dashboard.deploymentNo(failure.id)} — {failure.title}</strong><br /><ServerReason error={failure.error} fallback={failure.title} known={failure.known} /></div>}
 
     <p className="dashboard-status" role="status" aria-live="polite">
       {filtered.length === 0 ? t.dashboard.noMatches : t.dashboard.showing(filtered.length, first + 1, first + visible.length)}

@@ -16,6 +16,7 @@ import {
 import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
+import { logMessage, type LogText } from "../log-messages.js";
 import { transitionTo, type Status } from "../state-machine.js";
 import { TerraformCliError, type TerraformOutputs, type TerraformVariable } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
@@ -125,7 +126,7 @@ export async function handleProvision(
         deploymentId,
         projectId,
       });
-      await stepLog.line("검증용 DNS 사전 준비 완료");
+      await stepLog.line(logMessage("provision.dnsPrepared"));
       await createOrGetOnpremAgentJob(deps, {
         jobId: String(deploymentId),
         attempt: 1,
@@ -150,7 +151,7 @@ export async function handleProvision(
           status: "deploying",
         });
       }
-      await stepLog.line("On-Prem Agent Job 저장 완료, Agent 실행을 기다립니다.");
+      await stepLog.line(logMessage("provision.agentJobSaved"));
       return;
     }
 
@@ -205,9 +206,7 @@ export async function handleProvision(
     if (plan.runtime.type === "s3-website") {
       // 같은 state 에 이 환경의 PostgreSQL(RDS)이 있으면 정적 사이트 모듈이 DB 를 지우게 된다 — 데이터를 지키려고 멈춘다
       if (await databaseProvisionedBefore(deps, projectId, environmentId, deploymentId)) {
-        await stepLog.line(
-          "이 환경에는 이전 배포 때 만든 PostgreSQL(RDS)이 있어 정적 사이트(S3)로 바꾸면 DB 가 지워집니다. 앱을 삭제한 뒤 다시 배포하세요.",
-        );
+        await stepLog.line(logMessage("provision.staticHasDatabase"));
         throw new Error("STATIC_SITE_ENVIRONMENT_HAS_DATABASE");
       }
       await provisionStaticSite({
@@ -234,17 +233,15 @@ export async function handleProvision(
     // (수정안을 거절한 새 버전 등으로 DB 와 데이터가 같이 사라지는 것을 막는다).
     let databaseEnabled = plan.provisioning.variables["database_enabled"] === true;
     if (databaseEnabled) {
-      await stepLog.line("PostgreSQL(RDS) 추가 모듈 사용 — 처음 만들 때는 DB 생성에 5~10분 걸립니다.");
+      await stepLog.line(logMessage("provision.databaseCreate"));
     } else if (await databaseProvisionedBefore(deps, projectId, environmentId, deploymentId)) {
       if (serverless) {
         // 서버리스 프로필은 같은 state 에 DB 모듈이 없어 apply 하면 RDS 와 데이터가 지워진다
-        await stepLog.line(
-          "이 환경에는 컨테이너 배포 때 만든 PostgreSQL(RDS)이 있어 서버리스로 바꾸면 DB 가 지워집니다. 컨테이너로 배포하세요.",
-        );
+        await stepLog.line(logMessage("provision.serverlessHasDatabase"));
         throw new Error("SERVERLESS_DATABASE_PRESENT");
       }
       databaseEnabled = true;
-      await stepLog.line("이 환경에 만든 PostgreSQL(RDS)을 유지합니다 (이번 버전은 DB 를 쓰지 않음).");
+      await stepLog.line(logMessage("provision.databaseKeep"));
     }
     const terraformVariables = {
       ...plan.provisioning.variables,
@@ -265,7 +262,7 @@ export async function handleProvision(
       region: awsConfig.region,
       credentials: { accessKeyId, secretAccessKey },
       variables: terraformVariables,
-      log: (line: string) => stepLog.line(line),
+      log: (line: LogText) => stepLog.line(line),
     };
     const applied = context.status === "deploying" && context.origin_url
       ? {
@@ -332,11 +329,7 @@ export async function handleProvision(
     await deps.notifier?.notify(deploymentId, "state_changed", {
       status: "verifying",
     });
-    await stepLog.line(
-      serverless
-        ? "Lambda 배포 완료, 헬스체크 검증을 시작합니다."
-        : "ECS 롤아웃 완료, 헬스체크 검증을 시작합니다.",
-    );
+    await stepLog.line(logMessage(serverless ? "provision.lambdaDone" : "provision.ecsDone"));
     await deps.boss.send("verify", {
       jobId: `verify-deployment-${deploymentId}`,
       attempt: 1,
@@ -365,7 +358,7 @@ export async function handleProvision(
       { deployment_id: deploymentId, error_code: errorCode },
       "provision job failed",
     );
-    await stepLog.line(`프로비저닝 실패: ${errorCode}`);
+    await stepLog.line(logMessage("provision.failed", { code: errorCode }));
     if (errorDetail) {
       await stepLog.line(errorDetail);
     }
@@ -420,7 +413,7 @@ async function provisionStaticSite(input: {
   // 버킷 정책은 Cloudflare 에서 오는 요청만 받는다 — 공개 주소를 바꾸기 전 직접 검증하려고 워커 IP 도 연다
   const egressIp = await deps.egressIpResolver?.();
   if (!egressIp) {
-    await stepLog.line("워커 공인 IP 를 확인하지 못했습니다. S3 직접 검증이 거부될 수 있습니다.");
+    await stepLog.line(logMessage("provision.egressIpUnknown"));
   }
   const variables: Record<string, TerraformVariable> = {
     ...plan.provisioning.variables,
@@ -430,7 +423,7 @@ async function provisionStaticSite(input: {
     verifier_cidrs: egressIp ? [`${egressIp}/32`] : [],
   };
 
-  await stepLog.line(`정적 사이트 — 서버 없이 S3 웹사이트 호스팅 (버킷 ${bucket})`);
+  await stepLog.line(logMessage("provision.staticSite", { bucket }));
   let applied: { originUrl: string; outputs: TerraformOutputs };
   if (context.status === "deploying" && context.origin_url) {
     applied = {
@@ -441,7 +434,7 @@ async function provisionStaticSite(input: {
         region,
         credentials,
         variables,
-        log: (line: string) => stepLog.line(line),
+        log: (line: LogText) => stepLog.line(line),
       }),
     };
   } else {
@@ -461,9 +454,7 @@ async function provisionStaticSite(input: {
     const history = await recordTerraformInputs(terraformInput);
     const reused = reusableStaticOutputs(history);
     if (reused) {
-      await stepLog.line(
-        `인프라 변경 없음 — Terraform 생략 (직전 성공 배포 #${history.last!.id} 출력값 재사용)`,
-      );
+      await stepLog.line(logMessage("provision.staticReuse", { deployment: String(history.last!.id) }));
       applied = reused;
     } else {
       applied = await applyTerraform({ ...terraformInput, history });
@@ -490,7 +481,7 @@ async function provisionStaticSite(input: {
     credentials,
   });
   const authorization = await registry.getAuthorization();
-  await stepLog.line(`이미지 ${context.image_digest} 에서 정적 파일을 꺼내 S3 에 올립니다.`);
+  await stepLog.line(logMessage("provision.staticExtract", { digest: context.image_digest ?? "" }));
   await deps.registrySession.withAuthorization(authorization, (commandEnvironment) =>
     deps.staticSitePublisher!.publish({
       imageRef: context.immutable_ref!,
@@ -506,7 +497,7 @@ async function provisionStaticSite(input: {
   await transitionTo(deps.pool, deploymentId, "verifying");
   input.onStatus("verifying");
   await deps.notifier?.notify(deploymentId, "state_changed", { status: "verifying" });
-  await stepLog.line("정적 파일 동기화 완료, S3 웹사이트 endpoint 검증을 시작합니다.");
+  await stepLog.line(logMessage("provision.staticSynced"));
   await deps.boss.send("verify", {
     jobId: `verify-deployment-${deploymentId}`,
     attempt: 1,
@@ -622,7 +613,7 @@ async function applyTerraform(input: {
     input.stepLog,
     input.history ?? (await recordTerraformInputs(input)),
   );
-  await input.stepLog.line("Terraform 실행 시작");
+  await input.stepLog.line(logMessage("provision.terraformStart"));
   try {
     const outputs = await deps.terraformCli!.apply({
       moduleDirectory: input.moduleDirectory,
@@ -640,7 +631,7 @@ async function applyTerraform(input: {
     if (typeof originUrl !== "string") {
       throw new Error("TERRAFORM_OUTPUT_MISSING");
     }
-    await input.stepLog.line("Terraform apply 완료, origin endpoint를 수집했습니다.");
+    await input.stepLog.line(logMessage("provision.terraformApplied"));
     return { originUrl, outputs };
   } catch (error) {
     if (error instanceof TerraformCliError) throw error;
@@ -717,17 +708,16 @@ async function decideStateRefresh(
   { inputsHash, last }: TerraformInputsHistory,
 ): Promise<boolean> {
   if (last?.status === "succeeded" && last.terraform_inputs_hash === inputsHash) {
-    await stepLog.line(
-      `이미지만 바뀌어 상태 재조회 생략 — 직전 성공 배포 #${last.id} 와 인프라 입력이 같아 -refresh=false 로 plan·apply 를 한 번에 실행합니다.`,
-    );
+    await stepLog.line(logMessage("provision.refreshSkipped", { deployment: String(last.id) }));
     return false;
   }
-  const reason = !last
-    ? "이 환경의 첫 Terraform 배포"
-    : last.status !== "succeeded"
-      ? `직전 배포 #${last.id} 가 성공하지 않음`
-      : "인프라 입력 변경";
-  await stepLog.line(`전체 상태 재조회로 plan → apply 를 실행합니다 (${reason}).`);
+  await stepLog.line(
+    !last
+      ? logMessage("provision.refreshFirst")
+      : last.status !== "succeeded"
+        ? logMessage("provision.refreshLastFailed", { deployment: String(last.id) })
+        : logMessage("provision.refreshInputsChanged"),
+  );
   return true;
 }
 

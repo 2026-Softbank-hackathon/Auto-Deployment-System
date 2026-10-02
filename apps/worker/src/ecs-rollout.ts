@@ -28,6 +28,7 @@ import {
   type TargetHealthDescription,
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import type { TerraformAwsCredentials } from "./terraform-cli.js";
+import { formatLogText, logMessage, renderLogText, type LogMessage, type LogText } from "./log-messages.js";
 
 export type EcsRolloutErrorCode =
   | "ECS_SERVICE_NOT_FOUND"
@@ -53,7 +54,7 @@ export type EcsRolloutInput = {
   serviceName: string;
   /** 이번 Terraform apply가 생성한 정확한 task definition ARN */
   expectedTaskDefinition: string;
-  log: (line: string) => Promise<void>;
+  log: (line: LogText) => Promise<void>;
 };
 
 type SendClient = { send(command: unknown): Promise<unknown> };
@@ -111,9 +112,10 @@ export class EcsRolloutWaiter {
     let trackedId: string | undefined;
     let lastUnhealthy: string | undefined;
 
-    const write = async (slot: string, line: string) => {
-      if (lastLines.get(slot) === line) return;
-      lastLines.set(slot, line);
+    const write = async (slot: string, line: LogMessage) => {
+      const text = formatLogText(line);
+      if (lastLines.get(slot) === text) return;
+      lastLines.set(slot, text);
       lastWriteAt = this.now();
       await input.log(line);
     };
@@ -131,7 +133,9 @@ export class EcsRolloutWaiter {
       return (described.tasks ?? []).filter((task) => belongsTo(task, deployment));
     };
 
-    await input.log(`ECS 롤아웃 확인 시작 (서비스 ${input.serviceName}, ${this.pollIntervalMs / 1000}초 간격)`);
+    await input.log(
+      logMessage("ecs.start", { service: input.serviceName, interval: this.pollIntervalMs / 1000 }),
+    );
 
     for (;;) {
       const described = (await ecs.send(
@@ -176,7 +180,7 @@ export class EcsRolloutWaiter {
       }
 
       if (deployment.rolloutState === "COMPLETED") {
-        await input.log(`롤아웃 완료 (${elapsed()}초) — ECS 배포 완료`);
+        await input.log(logMessage("ecs.doneDeployment", { seconds: elapsed() }));
         return;
       }
 
@@ -201,24 +205,28 @@ export class EcsRolloutWaiter {
 
       const runningCount = running.filter((task) => task.lastStatus === "RUNNING").length;
       const taskLine = running.length === 0
-        ? `새 태스크 배치 대기 (0/${desired})`
+        ? logMessage("ecs.taskPlacing", { desired })
         : runningCount < running.length
-          ? `새 태스크 시작 중 — ${running.map((task) => task.lastStatus ?? "?").join(", ")} (${runningCount}/${desired})`
-          : `새 태스크 실행 (${runningCount}/${desired})`;
+          ? logMessage("ecs.taskStarting", {
+              states: running.map((task) => task.lastStatus ?? "?").join(", "),
+              running: runningCount,
+              desired,
+            })
+          : logMessage("ecs.taskRunning", { running: runningCount, desired });
       await write("task", taskLine);
 
-      let targetLine: string | undefined;
+      let targetLine: LogMessage | undefined;
       if (targetGroupArn && ownTargets.length > 0) {
         targetLine = unhealthy
-          ? `헬스체크 실패 중: ${lastUnhealthy ?? "unhealthy"} (${healthy}/${desired} 통과)`
+          ? logMessage("ecs.healthFailing", { reason: lastUnhealthy ?? "unhealthy", healthy, desired })
           : healthy >= desired && desired > 0
-            ? `헬스체크 통과 (${healthy}/${desired})`
-            : `타깃 등록, 헬스체크 진행 중 (${healthy}/${desired} 통과)`;
+            ? logMessage("ecs.healthPassed", { healthy, desired })
+            : logMessage("ecs.healthChecking", { healthy, desired });
         await write("target", targetLine);
       }
 
       if (targetGroupArn && desired > 0 && runningCount >= desired && healthy >= desired) {
-        await input.log(`롤아웃 완료 (${elapsed()}초) — 새 태스크가 타깃 그룹에서 healthy`);
+        await input.log(logMessage("ecs.doneHealthy", { seconds: elapsed() }));
         return;
       }
 
@@ -233,7 +241,9 @@ export class EcsRolloutWaiter {
       }
 
       if (this.now() - startedAt >= this.timeoutMs) {
-        const lastState = [taskLine, targetLine].filter(Boolean).join(" · ");
+        const lastState = [taskLine, targetLine]
+          .flatMap((line) => (line ? [renderLogText(line)] : []))
+          .join(" · ");
         throw new EcsRolloutError(
           "ECS_ROLLOUT_TIMEOUT",
           withEvent(
@@ -246,7 +256,7 @@ export class EcsRolloutWaiter {
 
       if (this.now() - lastWriteAt >= HEARTBEAT_MS) {
         lastWriteAt = this.now();
-        await input.log(`롤아웃 대기 중 (${elapsed()}초 경과)`);
+        await input.log(logMessage("ecs.waiting", { seconds: elapsed() }));
       }
       await this.sleep(this.pollIntervalMs);
     }

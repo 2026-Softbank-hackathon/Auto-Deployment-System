@@ -6,7 +6,8 @@
  */
 export type FailureKind = 'awsKey' | 'awsKeyStored' | 'awsPermission' | 'registry' | 'source' | 'build' | 'buildTool'
   | 'setup' | 'appSecret' | 'envVar' | 'infra' | 'agent' | 'server'
-  | 'multiService' | 'resources' | 'port' | 'profile' | 'appStart';
+  | 'multiService' | 'resources' | 'port' | 'profile' | 'appStart'
+  | 'staticSite' | 'database' | 'lambda' | 'address' | 'healthCheck' | 'agentImage' | 'tunnel';
 
 const kinds: Record<string, FailureKind> = {
   AWS_ECR_AUTHENTICATION_FAILED: 'awsKey',
@@ -70,6 +71,64 @@ const kinds: Record<string, FailureKind> = {
   PROVISION_TARGET_UNSUPPORTED: 'server',
   PROVISION_STATE_INVALID: 'server',
   AUTO_APPROVE_STATE_INVALID: 'server',
+  // 빌드 요청 · 결과 (packages/build-handler · aws-registry)
+  INVALID_AWS_REGISTRY_REQUEST: 'registry',
+  INVALID_BUILD_REQUEST: 'source',
+  BUILD_PATH_OUTSIDE_WORKSPACE: 'source',
+  SOURCE_ARTIFACT_MISSING: 'source',
+  IMAGE_DIGEST_MISSING: 'build',
+  IMAGE_DIGEST_INVALID: 'build',
+  IMAGE_LAMBDA_ADAPTER_MISSING: 'build',
+  TARGET_PROFILE_MISSING: 'profile',
+  BUILD_STATE_INVALID: 'server',
+  BUILD_QUEUE_FAILED: 'server',
+  PROVISION_CONTEXT_NOT_FOUND: 'server',
+  PROJECT_ID_INVALID: 'server',
+  APP_NAME_INVALID: 'server',
+  // 정적 사이트 (#274) · DB 가 있는 환경을 바꾸는 배포
+  STATIC_SITE_EXTRACT_FAILED: 'staticSite',
+  STATIC_SITE_INDEX_MISSING: 'staticSite',
+  STATIC_SITE_SYNC_FAILED: 'staticSite',
+  STATIC_SITE_DEPENDENCY_MISSING: 'server',
+  STATIC_SITE_DOMAIN_MISSING: 'server',
+  STATIC_SITE_ENVIRONMENT_HAS_DATABASE: 'database',
+  SERVERLESS_DATABASE_PRESENT: 'database',
+  // 서버리스 (apps/worker lambda-rollout.ts)
+  LAMBDA_UPDATE_FAILED: 'lambda',
+  LAMBDA_IMAGE_MISMATCH: 'lambda',
+  LAMBDA_ROLLOUT_TIMEOUT: 'lambda',
+  LAMBDA_ROLLOUT_CHECK_FAILED: 'infra',
+  // 공개 주소 연결 (apps/worker origin-activation.ts)
+  ORIGIN_CLOUDFLARE_FAILED: 'address',
+  ORIGIN_DEPLOYMENT_INVALID: 'server',
+  ORIGIN_PROJECT_INVALID: 'server',
+  ORIGIN_CONFIGURATION_MISSING: 'server',
+  ORIGIN_DOMAIN_INVALID: 'server',
+  // 검증 (apps/worker handlers/verify.ts · final-url-verifier.ts) — 소문자 토큰
+  timeout: 'healthCheck',
+  dns_error: 'healthCheck',
+  connection_refused: 'healthCheck',
+  tls_error: 'healthCheck',
+  network_error: 'healthCheck',
+  unexpected_status: 'healthCheck',
+  max_attempts_exceeded: 'healthCheck',
+  final_url_verification_failed: 'healthCheck',
+  dns_activation_unavailable: 'address',
+  dns_activation_timeout: 'address',
+  validation_error: 'server',
+  invalid_health_url: 'server',
+  deployment_not_verifying: 'server',
+  verify_internal_error: 'server',
+  // 온프레미스 Agent 결과 (apps/api routes/agent-jobs.ts) — 소문자 토큰
+  health_check_failed: 'healthCheck',
+  ecr_auth_failed: 'agentImage',
+  image_pull_failed: 'agentImage',
+  digest_mismatch: 'agentImage',
+  compose_failed: 'appStart',
+  tunnel_not_configured: 'tunnel',
+  tunnel_failed: 'tunnel',
+  invalid_job: 'agent',
+  internal_error: 'agent',
 };
 
 /**
@@ -77,12 +136,13 @@ const kinds: Record<string, FailureKind> = {
  *   "TERRAFORM_APPLY_FAILED"                         코드만
  *   "TERRAFORM_APPLY_FAILED\n<Terraform 오류 원문>"   코드 + 줄바꿈 + 상세 (apps/worker handlers/provision.ts failProvisionStage)
  *   "PROJECT_ENV_VAR_NOT_FOUND: A,B"                  코드 + 콜론 + 설명
- * 첫머리가 코드 모양(대문자 · 숫자 · 밑줄)이 아니면 전체를 상세로 본다.
+ *   "unexpected_status: expected 200, received 404"  검증 · Agent 의 소문자 토큰
+ * 첫머리가 코드 모양(대문자 또는 소문자 · 숫자 · 밑줄)이 아니면 전체를 상세로 본다.
  */
 export function parseFailure(raw: string | null): { code: string | null; detail: string | null } {
   const text = raw?.trim() ?? '';
   if (!text) return { code: null, detail: null };
-  const match = /^([A-Z][A-Z0-9_]*)(?:\s*:\s*|\s*\n|$)([\s\S]*)$/.exec(text);
+  const match = /^([A-Z][A-Z0-9_]*|[a-z][a-z0-9_]*)(?:\s*:\s*|\s*\n|$)([\s\S]*)$/.exec(text);
   if (!match) return { code: null, detail: text };
   return { code: match[1], detail: match[2].trim() || null };
 }

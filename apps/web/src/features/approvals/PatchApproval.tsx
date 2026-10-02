@@ -37,7 +37,7 @@ function lineClass(line: string): string {
  * 승인하면 수정된 소스로, 거절하면 원래 소스(SQLite 그대로)로 배포가 이어진다 — 어느 쪽이든 실패가 아니다.
  */
 export function PatchApproval({ deploymentId, onDecided }: { deploymentId: string; onDecided: () => void }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const copy = t.run.patch;
   const titleId = useId();
   const [patch, setPatch] = useState<DeploymentSourcePatch | null>(null);
@@ -79,7 +79,7 @@ export function PatchApproval({ deploymentId, onDecided }: { deploymentId: strin
     {loadError !== null && <div className="notice error" role="alert"><strong>{copy.loadFailed}</strong><br />{errorMessage(loadError, t, copy.loadFailed)}</div>}
 
     {patch && <>
-      <p className="patch-approval__summary">{patch.summary}</p>
+      <p className="patch-approval__summary">{patch.summary[language]}</p>
       <div className="patch-approval__files">
         <small>{copy.filesTitle(patch.files.length)}</small>
         <ul>
@@ -92,7 +92,7 @@ export function PatchApproval({ deploymentId, onDecided }: { deploymentId: strin
           </li>)}
         </ul>
       </div>
-      {patch.notes.length > 0 && <div className="patch-approval__notes"><small>{copy.notesTitle}</small><ul>{patch.notes.map((note, index) => <li key={index}>{note}</li>)}</ul></div>}
+      {patch.notes.length > 0 && <div className="patch-approval__notes"><small>{copy.notesTitle}</small><ul>{patch.notes.map((note, index) => <li key={index}>{note[language]}</li>)}</ul></div>}
       <details className="technical-details patch-approval__diff" open>
         <summary>{copy.diffToggle}</summary>
         {diffFiles.map((file) => <details key={file.path} className="diff-file" open>

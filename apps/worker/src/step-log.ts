@@ -6,15 +6,19 @@
  * "log.line" 이벤트를 발행해 기존 SSE(/deployments/:id/events)로 실시간 전달한다.
  * 로그 저장·발행 실패는 배포 작업을 멈추지 않는다.
  *
+ * 고정 문구는 키로 쓴다 — 웹이 현재 언어로 다시 그린다 (#147, log-messages.ts).
+ *
  * 사용:
  *   const logger = createStepLogger(deps, deployment_id, "build");
- *   await logger.line("docker build 시작");
+ *   await logger.line(logMessage("build.ready"));
+ *   await logger.line(errorDetail); // 오류 상세 · 도구 출력은 원문 그대로
  */
 
 import type { WorkerDeps } from "./deps.js";
+import { formatLogText, type LogText } from "./log-messages.js";
 
 export type StepLogger = {
-  line(text: string): Promise<void>;
+  line(text: LogText): Promise<void>;
 };
 
 export function stepLogKey(deploymentId: number, step: string): string {
@@ -34,7 +38,7 @@ export function createStepLogger(
 
   return {
     async line(text) {
-      const line = `[${now().toISOString()}] ${text}`;
+      const line = `[${now().toISOString()}] ${formatLogText(text)}`;
 
       try {
         // 재시도로 새 로거가 만들어져도 이전 로그를 잃지 않도록 처음 한 번 기존 파일을 읽는다

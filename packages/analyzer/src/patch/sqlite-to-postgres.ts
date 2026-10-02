@@ -51,11 +51,14 @@ export type PatchFile = {
   generated?: boolean;
 };
 
+/** 한국어 · 일본어 문구 (#147) — 화면이 현재 언어 쪽을 쓴다 */
+export type LocalizedText = { ko: string; ja: string };
+
 export type SqlitePatch = {
   status: "ready";
-  /** 사용자에게 보여 줄 한두 문장 요약 (한국어) */
-  summary: string;
-  notes: string[];
+  /** 사용자에게 보여 줄 한두 문장 요약 */
+  summary: LocalizedText;
+  notes: LocalizedText[];
   files: PatchFile[];
   /** generated 파일을 뺀 unified diff */
   diff: string;
@@ -116,13 +119,24 @@ Rewrite the app's data-access code in "dual mode":
 9. Change as little as possible. Do not modify package.json, lock files, Dockerfile, build scripts, ports or routes; the platform adds the dependencies listed in "platform_dependencies". Do not add any other dependency. TypeScript must still compile in strict mode: type query results explicitly (e.g. pool.query<Row>(...)).
 10. Only edit files listed in "files" or create new source files. Return each changed or new file with its COMPLETE new content and its path exactly as given (relative to the app root). Do not return unchanged files.
 
-Write "summary" in Korean: one or two plain sentences for the person approving the change (what changes and what happens on AWS and on-premises). "notes": short Korean notes about anything they should know; may be empty.`;
+The approver may read the console in Korean or Japanese, so every explanation is written in both languages: each text field is an object with "ko" (Korean) and "ja" (Japanese) saying the same thing.
+"summary": one or two plain sentences for the person approving the change (what changes and what happens on AWS and on-premises). "notes": short notes about anything they should know; may be empty. Keep code, file names, identifiers and commands as they are in both languages.`;
+
+const LOCALIZED_TEXT_SCHEMA = {
+  type: "object",
+  properties: {
+    ko: { type: "string", description: "Korean." },
+    ja: { type: "string", description: "Japanese, same meaning as ko." },
+  },
+  required: ["ko", "ja"],
+  additionalProperties: false,
+} as const;
 
 export const SQLITE_PATCH_SCHEMA = {
   type: "object",
   properties: {
-    summary: { type: "string", description: "1-2 Korean sentences describing the change for the approver." },
-    notes: { type: "array", items: { type: "string" }, description: "Short Korean notes; may be empty." },
+    summary: { ...LOCALIZED_TEXT_SCHEMA, description: "1-2 sentences describing the change for the approver." },
+    notes: { type: "array", items: LOCALIZED_TEXT_SCHEMA, description: "Short notes; may be empty." },
     files: {
       type: "array",
       description: "Changed or new files with their complete new content.",
@@ -142,8 +156,8 @@ export const SQLITE_PATCH_SCHEMA = {
 } as const;
 
 type AiPatchResponse = {
-  summary: string;
-  notes: string[];
+  summary: LocalizedText;
+  notes: LocalizedText[];
   files: Array<{ path: string; content: string }>;
 };
 
@@ -264,7 +278,7 @@ export async function createSqlitePatch(
     }
 
     const files = [...checked.files];
-    const notes = parsed.notes.filter((note) => note.trim() !== "");
+    const notes = parsed.notes.filter((note) => note.ko.trim() !== "" || note.ja.trim() !== "");
     try {
       const dependencyFiles = await updateDependencies(serviceDir, context, {
         isNode,
@@ -283,7 +297,7 @@ export async function createSqlitePatch(
 
     return {
       status: "ready",
-      summary: parsed.summary.trim(),
+      summary: { ko: parsed.summary.ko.trim(), ja: parsed.summary.ja.trim() },
       notes,
       files,
       diff: files
@@ -318,9 +332,9 @@ function isAiPatchResponse(value: unknown): value is AiPatchResponse {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    typeof record["summary"] === "string" &&
+    isLocalizedText(record["summary"]) &&
     Array.isArray(record["notes"]) &&
-    record["notes"].every((note) => typeof note === "string") &&
+    record["notes"].every(isLocalizedText) &&
     Array.isArray(record["files"]) &&
     record["files"].every(
       (file) =>
@@ -330,6 +344,12 @@ function isAiPatchResponse(value: unknown): value is AiPatchResponse {
         typeof (file as Record<string, unknown>)["content"] === "string",
     )
   );
+}
+
+function isLocalizedText(value: unknown): value is LocalizedText {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record["ko"] === "string" && typeof record["ja"] === "string";
 }
 
 /** 고칠 수 있는 코드 파일. SQLite 를 쓰는 파일이 먼저, 나머지는 예산 안에서. SQLite 파일만으로 넘치면 null */
@@ -437,9 +457,9 @@ async function updateDependencies(
     isTypeScript: boolean;
     updateLockfile: (directory: string) => Promise<void>;
   },
-): Promise<{ files: PatchFile[]; notes: string[] }> {
+): Promise<{ files: PatchFile[]; notes: LocalizedText[] }> {
   const files: PatchFile[] = [];
-  const notes: string[] = [];
+  const notes: LocalizedText[] = [];
   if (options.isNode) {
     const before = await readFile(join(serviceDir, "package.json"), "utf8");
     const updated = addNodePostgresDependencies(before, { typescript: options.isTypeScript });
@@ -451,7 +471,10 @@ async function updateDependencies(
         const lockAfter = await regenerateLockfile(updated.text, lockBefore, options.updateLockfile);
         files.push({ path: "package-lock.json", before: lockBefore, after: lockAfter, generated: true });
       } else if (await exists(join(serviceDir, "pnpm-lock.yaml")) || await exists(join(serviceDir, "yarn.lock"))) {
-        notes.push("pnpm · yarn lock 파일은 자동으로 갱신하지 않습니다. 빌드가 frozen lockfile 이면 실패할 수 있습니다.");
+        notes.push({
+          ko: "pnpm · yarn lock 파일은 자동으로 갱신하지 않습니다. 빌드가 frozen lockfile 이면 실패할 수 있습니다.",
+          ja: "pnpm · yarn の lock ファイルは自動で更新しません。ビルドが frozen lockfile の場合は失敗する可能性があります。",
+        });
       }
     }
   } else if (options.isPython && context.has("requirements.txt")) {

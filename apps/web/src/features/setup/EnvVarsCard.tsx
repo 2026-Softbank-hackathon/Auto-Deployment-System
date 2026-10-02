@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { DeploymentApiError, listProjectEnv, patchProjectEnv, type ProjectEnvVar } from '../../api/deployment-api';
+import { listProjectEnv, patchProjectEnv, type ProjectEnvVar } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
+import { ServerReason } from '../deployment-progress/ServerReason';
 import { relativeTime } from '../dashboard/format';
 import { envSource, loadEnvPlan, looksSecret, parseDotEnv, type EnvPlan, type EnvSource } from './env-plan';
 
@@ -179,7 +180,7 @@ export function EnvVarsCard({ projectId, awsRegion }: { projectId: string | null
       </div>
     </form>}
     {saveError !== null && <div className="notice error" role="alert"><strong>{copy.saveError}</strong><br />
-      {saveError instanceof DeploymentApiError && saveError.serverMessage ? saveError.serverMessage : errorMessage(saveError, t, copy.saveError)}</div>}
+      <ServerReason error={saveError} fallback={copy.saveError} /></div>}
 
     {items !== null && sections.length === 0 && <p>{copy.empty}</p>}
     {items !== null && plan === null && <p className="aws-key-form__note">{copy.noAnalysis}</p>}

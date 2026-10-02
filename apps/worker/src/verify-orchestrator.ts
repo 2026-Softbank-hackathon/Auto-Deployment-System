@@ -3,6 +3,7 @@ import { enqueueOnpremCleanup, type Pool } from "@camellia/db";
 import type { WorkerDeps } from "./deps.js";
 import { transitionTo } from "./state-machine.js";
 import type { OriginActivationReceipt } from "./origin-activation.js";
+import { formatLogText, logMessage, renderLogText } from "./log-messages.js";
 import {
   buildHealthUrl,
   handleVerify,
@@ -144,15 +145,15 @@ export async function runVerifyJob(
   if (!activation) return targetResult;
   if (activation.reused) {
     // 공개 주소 레코드가 이미 이번 origin 이라 DNS 갱신 · 권한 DNS 대기 없이 공개 주소 검증으로 간다 (#299)
-    const line = "주소 연결 그대로 — 갱신 생략";
+    const line = logMessage("verify.originReused");
     deps.log?.info(
       { deployment_id: validJob.data.deploymentId, origin: activation.activatedOrigin },
-      line,
+      renderLogText(line),
     );
     try {
       await deps.notifier?.notify(validJob.data.deploymentId, "log.line", {
         step: "verify",
-        line: `[${new Date().toISOString()}] ${line}`,
+        line: `[${new Date().toISOString()}] ${formatLogText(line)}`,
       });
     } catch {
       // 진행 로그 발행 실패는 검증을 멈추지 않는다

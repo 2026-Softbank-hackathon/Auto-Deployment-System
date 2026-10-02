@@ -28,5 +28,6 @@ export const MIGRATION_FILES = [
   "021_terraform_outputs.sql",
   "022_project_subdomain.sql",
   "023_project_address_change.sql",
+  "024_source_patch_i18n.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

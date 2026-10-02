@@ -96,6 +96,10 @@ describe("의존성 규칙", () => {
       `--banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"`,
     );
     expect(result.notes).toHaveLength(1);
+    expect(result.notes[0]).toEqual({
+      ko: expect.stringContaining("createRequire"),
+      ja: expect.stringContaining("createRequire"),
+    });
   });
 
   it("requirements.txt 에 psycopg 를 한 번만 더한다", () => {

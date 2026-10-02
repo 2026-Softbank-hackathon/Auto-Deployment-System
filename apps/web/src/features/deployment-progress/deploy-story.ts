@@ -1,4 +1,5 @@
 import type { ProjectDeploymentSummary } from '../../api/deployment-api';
+import { readLogTag } from '../../i18n/log-lines';
 import { sceneTarget, type SceneTarget } from './DeployScene';
 
 /**
@@ -24,8 +25,10 @@ export interface DeployStory {
   label: string;
 }
 
-/** 빌드 로그 한 줄에서 재사용한 원본 배포 번호를 읽는다. 해당 줄이 아니면 null */
+/** 빌드 로그 한 줄에서 재사용한 원본 배포 번호를 읽는다. 해당 줄이 아니면 null (키가 붙기 전 로그는 한국어 문구로) */
 export function readReusedFrom(line: string): string | null {
+  const tag = readLogTag(line);
+  if (tag) return tag.key === 'build.reuseImage' && tag.params.deployment !== undefined ? String(tag.params.deployment) : null;
   return /빌드 생략 — 배포 #(\d+)의 이미지 재사용/.exec(line)?.[1] ?? null;
 }
 

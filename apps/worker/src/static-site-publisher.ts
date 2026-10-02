@@ -25,6 +25,7 @@ import {
   STATIC_SITE_ROOT,
   type CommandRunner,
 } from "@camellia/build-handler";
+import { logMessage, type LogText } from "./log-messages.js";
 
 type S3ClientLike = Pick<S3Client, "send">;
 
@@ -46,7 +47,7 @@ export type StaticSitePublishInput = {
   bucket: string;
   region: string;
   credentials: { accessKeyId: string; secretAccessKey: string };
-  log?: (line: string) => Promise<void>;
+  log?: (line: LogText) => Promise<void>;
 };
 
 export type StaticSitePublishResult = {
@@ -91,7 +92,7 @@ export class StaticSitePublisher {
       if (!files.includes("index.html")) {
         throw new StaticSitePublishError("STATIC_SITE_INDEX_MISSING");
       }
-      await input.log?.(`이미지에서 정적 파일 ${files.length}개를 꺼냈습니다.`);
+      await input.log?.(logMessage("static.extracted", { count: files.length }));
       return await this.sync(input, siteDirectory, files);
     } finally {
       await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
@@ -182,7 +183,7 @@ export class StaticSitePublisher {
       }
 
       await input.log?.(
-        `S3 동기화 완료 — 올림 ${uploaded} · 그대로 ${unchanged} · 지움 ${stale.length}`,
+        logMessage("static.synced", { uploaded, unchanged, deleted: stale.length }),
       );
       return { uploaded, unchanged, deleted: stale.length };
     } catch (error) {

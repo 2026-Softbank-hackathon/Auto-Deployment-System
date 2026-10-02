@@ -51,7 +51,7 @@ export type { TokenUsage } from "./ai/tokens.js";
 
 // SQLite → PostgreSQL 코드 수정안 (#277)
 export { createSqlitePatch, applyPatch } from "./patch/sqlite-to-postgres.js";
-export type { PatchFile, SqlitePatch, SqlitePatchSkipped, SqlitePatchOptions } from "./patch/sqlite-to-postgres.js";
+export type { LocalizedText, PatchFile, SqlitePatch, SqlitePatchSkipped, SqlitePatchOptions } from "./patch/sqlite-to-postgres.js";
 export { zipDirectory } from "./patch/zip.js";
 export { countDiffLines, createUnifiedDiff } from "./patch/unified-diff.js";
 

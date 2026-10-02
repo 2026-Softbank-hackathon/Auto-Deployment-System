@@ -15,6 +15,7 @@ import {
   contentTypeFor,
   resolveEgressIp,
 } from "../src/static-site-publisher.js";
+import { renderLogText } from "../src/log-messages.js";
 
 const IMAGE = `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/1@sha256:${"c".repeat(64)}`;
 
@@ -80,7 +81,7 @@ describe("StaticSitePublisher (#274)", () => {
       region: "ap-northeast-2",
       credentials,
       log: async (line) => {
-        lines.push(line);
+        lines.push(renderLogText(line));
       },
     });
 

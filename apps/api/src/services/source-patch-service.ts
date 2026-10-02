@@ -8,7 +8,7 @@
 
 import type { Pool } from "@camellia/db";
 import type { PoolClient } from "pg";
-import type { SourcePatch } from "@camellia/contracts";
+import type { LocalizedText, SourcePatch } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 type SourcePatchRow = {
@@ -17,6 +17,9 @@ type SourcePatchRow = {
   status: SourcePatch["status"];
   summary: string;
   notes: string[];
+  /** 024 마이그레이션 전에 만든 수정안은 NULL */
+  summary_i18n: LocalizedText | null;
+  notes_i18n: LocalizedText[] | null;
   diff: string;
   files: SourcePatch["files"];
   generator: string;
@@ -30,7 +33,8 @@ export class SourcePatchService {
 
   async get(deploymentId: number): Promise<SourcePatch> {
     const result = await this.pool.query<SourcePatchRow>(
-      `SELECT deployment_id, kind, status, summary, notes, diff, files, generator, model, created_at, decided_at
+      `SELECT deployment_id, kind, status, summary, notes, summary_i18n, notes_i18n, diff, files, generator, model,
+              created_at, decided_at
        FROM source_patches WHERE deployment_id = $1`,
       [deploymentId],
     );
@@ -44,6 +48,8 @@ export class SourcePatchService {
       status: row.status,
       summary: row.summary,
       notes: row.notes,
+      ...(row.summary_i18n ? { summaryI18n: row.summary_i18n } : {}),
+      ...(row.notes_i18n ? { notesI18n: row.notes_i18n } : {}),
       diff: row.diff,
       files: row.files,
       generator: row.generator,

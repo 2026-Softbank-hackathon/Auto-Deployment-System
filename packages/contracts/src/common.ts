@@ -21,6 +21,13 @@ export const IdStringSchema = z.string().regex(/^\d+$/);
  */
 export const PgBigIntSchema = z.union([z.number().int(), z.string().regex(/^\d+$/)]);
 
+/**
+ * 한국어 · 일본어 문구 (#147). AI 가 한 번에 두 언어로 쓴 설명(진단 요약 · 수정안 요약 등)에 쓴다.
+ * 화면은 현재 언어 쪽을 쓰고, 이 값이 없는 예전 데이터는 같은 이름의 문자열 필드(한국어)를 쓴다.
+ */
+export const LocalizedTextSchema = z.object({ ko: z.string(), ja: z.string() }).strict();
+export type LocalizedText = z.infer<typeof LocalizedTextSchema>;
+
 // ── 에러 ──────────────────────────────────────────────────────────────────────
 
 /** 모든 4xx/5xx 응답 바디: `{ error: { code, message, hint? }, requestId }` */

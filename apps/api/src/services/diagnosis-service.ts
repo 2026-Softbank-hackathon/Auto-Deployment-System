@@ -4,15 +4,17 @@
  */
 
 import type { Pool } from "@camellia/db";
-import type { Diagnosis, PatchCandidate } from "@camellia/contracts";
+import type { Diagnosis, LocalizedText, PatchCandidate } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export type { PatchCandidate };
 export type DiagnosisResponse = Diagnosis;
 
+/** 워커가 저장한 형식. *I18n 은 #147 이후 진단에만 있다 */
 type StoredDiagnosis = {
   failedStep: string | null;
   summary: string;
+  summaryI18n?: LocalizedText;
   patchCandidates: PatchCandidate[];
   generatedAt: string;
 };
@@ -46,6 +48,7 @@ export class DiagnosisService {
       deploymentId,
       failedStep: d.failedStep ?? null,
       summary: d.summary ?? "",
+      ...(d.summaryI18n ? { summaryI18n: d.summaryI18n } : {}),
       patchCandidates: Array.isArray(d.patchCandidates) ? d.patchCandidates : [],
       generatedAt: d.generatedAt,
     };

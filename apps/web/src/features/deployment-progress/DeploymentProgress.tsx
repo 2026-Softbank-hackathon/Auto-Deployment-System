@@ -6,6 +6,7 @@ import { Keycap } from '../../components/ui/Keycap';
 import { StatusTape } from '../../components/ui/StatusTape';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 import type { Messages } from '../../i18n/ko';
+import { localizeLogLine, localizeLogText } from '../../i18n/log-lines';
 import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
@@ -412,14 +413,14 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     {shownTab === 'logs' && <section className="work-note" aria-label={t.run.workNote}>
       <div className="work-note__bar">
         <h2>{t.run.workNote}</h2>
-        <p className="work-note__line">{recentLines[recentLines.length - 1] ?? t.run.noNote}</p>
+        <p className="work-note__line">{recentLines.length ? localizeLogLine(recentLines[recentLines.length - 1]!, t.logLines) : t.run.noNote}</p>
         <div className="work-note__actions">
           <Keycap variant="ghost" onClick={() => { void refresh(); void loadLogs(); }}>{t.progress.refresh}</Keycap>
         </div>
       </div>
       <div className="work-note__logs">
         {logs === null ? <p>{t.progress.stepLoading}</p>
-          : logs.length ? logs.map((entry) => <div key={entry.step} className="step-log"><strong>{t.progress.logSteps[entry.step]}</strong><pre>{entry.text}</pre></div>)
+          : logs.length ? logs.map((entry) => <div key={entry.step} className="step-log"><strong>{t.progress.logSteps[entry.step]}</strong><pre>{localizeLogText(entry.text, t.logLines)}</pre></div>)
             : <p>{t.progress.noLogs}</p>}
       </div>
     </section>}

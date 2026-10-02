@@ -8,6 +8,7 @@ import {
   TerraformProcessError,
   type TerraformCommandExecutor,
 } from "../src/terraform-cli.js";
+import { renderLogText, type LogText } from "../src/log-messages.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 const tempDirectories: string[] = [];
@@ -225,7 +226,7 @@ describe("TerraformCli", () => {
       }
       return args[0] === "output" ? "{}" : "";
     });
-    const log = vi.fn(async () => undefined);
+    const log = vi.fn(async (_line: LogText) => undefined);
 
     await new TerraformCli({
       execute,
@@ -236,7 +237,9 @@ describe("TerraformCli", () => {
       "init", "validate", "plan", "force-unlock", "plan", "apply", "output",
     ]);
     expect(commands[3]).toEqual(["force-unlock", "-force", "8f0c2a51-6d2e-4f7a-9c1b-2b8d3e4f5a6b"]);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("8f0c2a51-6d2e-4f7a-9c1b-2b8d3e4f5a6b"));
+    expect(log.mock.calls.map(([line]) => renderLogText(line))).toContainEqual(
+      expect.stringContaining("8f0c2a51-6d2e-4f7a-9c1b-2b8d3e4f5a6b"),
+    );
   });
 
   it("워커 프로세스 시작 뒤에 만들어진 state 락은 해제하지 않고 plan 실패로 끝낸다", async () => {
@@ -364,7 +367,7 @@ describe("TerraformCli", () => {
       }
       return args[0] === "output" ? "{}" : "";
     });
-    const log = vi.fn(async (_line: string) => undefined);
+    const log = vi.fn(async (_line: LogText) => undefined);
     const cli = new TerraformCli({ execute });
 
     await cli.apply({ ...makeRequest(moduleDirectory), refresh: false, log });
@@ -382,7 +385,7 @@ describe("TerraformCli", () => {
       "-var-file=terraform.tfvars.json",
     ]);
     expect(variablesAtApply).toContain(`repo/demo@${DIGEST}`);
-    expect(log.mock.calls.map(([line]) => line)).toContain("plan·apply 한 번에 (이미지만 바뀐 재배포, -refresh=false)");
+    expect(log.mock.calls.map(([line]) => renderLogText(line))).toContain("plan·apply 한 번에 (이미지만 바뀐 재배포, -refresh=false)");
     expect(runs[1]!.map((args) => args[0])).toEqual(["init", "validate", "plan", "apply", "output"]);
     expect(runs[1]![2]).not.toContain("-refresh=false");
   });
@@ -416,12 +419,12 @@ describe("TerraformCli", () => {
       clock += { init: 2_400, validate: 300, plan: 7_060, apply: 31_000, output: 100 }[args[0]!] ?? 0;
       return args[0] === "output" ? "{}" : "";
     });
-    const log = vi.fn(async (_line: string) => undefined);
+    const log = vi.fn(async (_line: LogText) => undefined);
 
     await new TerraformCli({ execute, now: () => clock })
       .apply({ ...makeRequest(moduleDirectory), log });
 
-    const lines = log.mock.calls.map(([line]) => line);
+    const lines = log.mock.calls.map(([line]) => renderLogText(line));
     expect(lines).toEqual(expect.arrayContaining([
       "terraform init 완료 (2.4초)",
       "terraform plan 완료 (7.1초)",
@@ -507,8 +510,8 @@ describe("TerraformCli 작업 폴더 재사용 (#260)", () => {
   }
 
   function logger() {
-    const log = vi.fn(async (_line: string) => undefined);
-    return { log, lines: () => log.mock.calls.map(([line]) => line) };
+    const log = vi.fn(async (_line: LogText) => undefined);
+    return { log, lines: () => log.mock.calls.map(([line]) => renderLogText(line)) };
   }
 
   const WORK_DIR_NAME = "projects%2F12%2Fenvironments%2F34%2Fterraform.tfstate";

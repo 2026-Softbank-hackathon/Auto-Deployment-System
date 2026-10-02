@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { DeploymentApiError } from '../api/deployment-api';
+import { DeploymentApiError, ResponseFormatError } from '../api/deployment-api';
 import { ja } from './ja';
 import { ko, type Messages } from './ko';
 import { preloadLanguageFonts, runLanguageTransition } from './language-transition';
@@ -73,16 +73,24 @@ export function useI18n(): I18nContextValue { return useContext(I18nContext); }
 export function errorMessage(error: unknown, t: Messages, fallback: string): string {
   if (error instanceof DeploymentApiError) return t.errors.requestFailed(error.status);
   if (error instanceof TypeError) return t.errors.network;
+  if (error instanceof ResponseFormatError) return t.errors.responseInvalid;
   return error instanceof Error ? error.message : fallback;
 }
 
-/** 서버가 거절한 사유. 서버가 준 설명이 있으면 그대로, 없으면 현재 언어의 일반 문구. */
-export function serverReasonText(error: unknown, t: Messages, fallback: string): string {
-  return error instanceof DeploymentApiError && error.serverMessage ? error.serverMessage : errorMessage(error, t, fallback);
-}
-
-/** 재배포(다른 환경으로 배포 · 롤백 포함)를 서버가 거절한 사유. 아는 오류 코드는 현재 언어 문구로, 모르는 코드는 서버 설명 그대로. */
-export function redeployReasonText(error: unknown, t: Messages, fallback: string): string {
-  const known = error instanceof DeploymentApiError && error.code ? t.redeploy.errors[error.code] : undefined;
-  return known ?? serverReasonText(error, t, fallback);
+/**
+ * 서버가 거절한 사유를 화면 문구(text)와 서버 원문(detail)으로 나눈다 (#147).
+ * text: 화면이 아는 코드(known → t.apiErrors)는 현재 언어 문구. 한국어 화면은 서버 설명이 더 자세하므로
+ *   화면별 문구(known)가 없으면 서버 설명을 먼저 쓴다. 일본어 화면은 서버 설명(한국어)을 본문에 쓰지 않는다.
+ * detail: 본문과 다른 서버 원문 — "자세한 오류 보기" 안에만 보여 준다.
+ */
+export function serverReason(error: unknown, t: Messages, fallback: string, known?: Partial<Record<string, string>>): { text: string; detail: string | null } {
+  if (!(error instanceof DeploymentApiError)) return { text: errorMessage(error, t, fallback), detail: null };
+  const code = error.code;
+  const server = error.serverMessage ?? null;
+  const korean = t.locale === 'ko-KR';
+  const text = (code ? known?.[code] : undefined)
+    ?? (korean ? server : null)
+    ?? (code ? t.apiErrors[code] : undefined)
+    ?? t.errors.requestFailed(error.status);
+  return { text, detail: server && server !== text ? server : null };
 }

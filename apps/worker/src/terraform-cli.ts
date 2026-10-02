@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { logMessage, type LogText } from "./log-messages.js";
 
 const MAX_CAPTURED_OUTPUT = 1024 * 1024;
 
@@ -34,7 +35,7 @@ export type TerraformCliRequest = {
   credentials: TerraformAwsCredentials;
   variables: Record<string, TerraformVariable>;
   /** 사용자에게 보여줄 진행 로그 (예: 남은 state 락 해제, 단계별 소요 시간) */
-  log?: (line: string) => Promise<void>;
+  log?: (line: LogText) => Promise<void>;
   /**
    * false 면 기존 리소스를 다시 조회하지 않는다 — 이미지만 바뀐 재배포 (#252).
    * 이때는 plan 파일을 따로 만들지 않고 apply -refresh=false -auto-approve 한 번으로 끝낸다 (#260). 기본 true
@@ -173,7 +174,7 @@ export class TerraformCli {
   async apply(request: TerraformCliRequest): Promise<TerraformOutputs> {
     return this.inWorkspace(request, true, async ({ directory, env, validated, markValidated }) => {
       if (validated) {
-        await request.log?.("validate 생략 (profile 파일이 직전 성공 때와 같음)");
+        await request.log?.(logMessage("terraform.validateSkipped"));
       } else {
         await this.timed(request, "validate", () =>
           this.run("TERRAFORM_VALIDATE_FAILED", ["validate", "-no-color"], directory, env),
@@ -184,7 +185,7 @@ export class TerraformCli {
       if (request.refresh === false) {
         // 이미지만 바뀐 재배포: 저장한 plan 을 쓰는 곳(승인 · 화면 표시)이 없으므로 plan 과 apply 를
         // 한 프로세스로 합친다. 같은 계산을 state 락 · provider 기동 한 번으로 끝낸다 (#260)
-        await request.log?.("plan·apply 한 번에 (이미지만 바뀐 재배포, -refresh=false)");
+        await request.log?.(logMessage("terraform.combinedApply"));
         await this.timed(request, "plan·apply", () =>
           this.runReleasingStaleLock("TERRAFORM_APPLY_FAILED", [
             "apply",
@@ -287,7 +288,7 @@ export class TerraformCli {
       }
     }
     if (workDir) {
-      await request.log?.("같은 작업 폴더를 다른 작업이 쓰고 있어 임시 폴더에서 실행합니다.");
+      await request.log?.(logMessage("terraform.tempWorkspace"));
     }
 
     const directory = await fs.mkdtemp(path.join(this.tempRoot, "camellia-terraform-"));
@@ -341,24 +342,24 @@ export class TerraformCli {
       const usable = marker !== null && (await isTerraformDirUsable(directory));
       if (!marker || !usable || marker.initHash !== initHash) {
         const reason = !marker
-          ? "첫 실행"
+          ? "terraform.initFirst"
           : !usable
-            ? "작업 폴더 손상"
-            : "profile · backend 설정 변경";
+            ? "terraform.initCorrupted"
+            : "terraform.initConfigChanged";
         // 손상된 폴더는 provider 도 믿지 않고 validate 부터 다시 한다
         const validatedFilesHash = usable ? marker?.validatedFilesHash : undefined;
-        await request.log?.(`작업 폴더 init (${reason})`);
+        await request.log?.(logMessage(reason));
         await freshInit(validatedFilesHash);
         return await work(workspace(validatedFilesHash === filesHash));
       }
 
-      await request.log?.("작업 폴더 재사용, init 생략");
+      await request.log?.(logMessage("terraform.workspaceReused"));
       try {
         return await work(workspace(marker.validatedFilesHash === filesHash));
       } catch (error) {
         // 검사로 못 잡은 어긋남 — Terraform 이 init 을 요구하면 아무것도 바꾸기 전이므로 한 번만 새로 init
         if (!requiresInit(error)) throw error;
-        await request.log?.("작업 폴더가 Terraform 과 맞지 않아 다시 init 합니다.");
+        await request.log?.(logMessage("terraform.reinit"));
         await freshInit();
         return await work(workspace(false));
       }
@@ -413,7 +414,7 @@ export class TerraformCli {
     const started = this.now();
     const result = await work();
     const seconds = (this.now() - started) / 1000;
-    await request.log?.(`terraform ${step} 완료 (${seconds.toFixed(1)}초)`);
+    await request.log?.(logMessage("terraform.stepDone", { step, seconds: seconds.toFixed(1) }));
     return result;
   }
 
@@ -431,7 +432,7 @@ export class TerraformCli {
       const lock = error instanceof TerraformCliError ? parseStateLock(error.detail) : null;
       if (!lock || lock.created >= this.staleLockBefore) throw error;
       await request.log?.(
-        `이전 워커가 남긴 Terraform state 락(${lock.id}, ${lock.created.toISOString()})을 해제합니다.`,
+        logMessage("terraform.staleLock", { lock: lock.id, created: lock.created.toISOString() }),
       );
       await this.run(failureCode, ["force-unlock", "-force", lock.id], workspace, env);
       return this.run(failureCode, args, workspace, env);

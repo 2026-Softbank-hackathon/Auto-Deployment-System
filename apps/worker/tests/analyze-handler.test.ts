@@ -245,8 +245,8 @@ describe("handleAnalyze", () => {
       vi.mocked(analyzeWithAI).mockResolvedValue(sqliteAnalysis() as any);
       vi.mocked(createSqlitePatch).mockResolvedValue({
         status: "ready",
-        summary: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.",
-        notes: [],
+        summary: { ko: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.", ja: "SQLite のコードを PostgreSQL 兼用にします。" },
+        notes: [{ ko: "처음 시작할 때 데이터를 옮깁니다.", ja: "初回起動時にデータを移します。" }],
         files: [
           { path: "src/db.ts", before: "old", after: "new" },
           { path: "package-lock.json", before: "{}", after: "{ }", generated: true },
@@ -273,6 +273,15 @@ describe("handleAnalyze", () => {
         { path: "package-lock.json", change: "modified", additions: 0, deletions: 0, generated: true },
       ]);
       expect(row.params[7]).toBe(key);
+      // summary · notes 는 한국어, 두 언어 값은 summary_i18n · notes_i18n (#147)
+      expect(JSON.parse(row.params[2] as string)).toEqual(["처음 시작할 때 데이터를 옮깁니다."]);
+      expect(JSON.parse(row.params[10] as string)).toEqual({
+        ko: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.",
+        ja: "SQLite のコードを PostgreSQL 兼用にします。",
+      });
+      expect(JSON.parse(row.params[11] as string)).toEqual([
+        { ko: "처음 시작할 때 데이터를 옮깁니다.", ja: "初回起動時にデータを移します。" },
+      ]);
 
       // IR 에 DB 가 남아 있고, 상태는 patch 승인 대기
       const ir = JSON.parse(pool.insertedRows.find((r) => r.table === "ir_versions")!.params[1] as string);

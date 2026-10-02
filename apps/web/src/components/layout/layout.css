@@ -67,27 +67,27 @@
 /* 왼쪽 바 접기 — 넓은 화면에서만. 접으면 아이콘 띠만 남고, 마우스를 올리거나 키보드로 들어오면 내용 위로 잠깐 펼쳐진다. */
 .sidebar__toggle { display: none; }
 @media (min-width: 761px) {
+  /* 접기 버튼은 바 맨 아래 */
   .sidebar__toggle {
-    display: inline-flex; align-items: center; justify-content: center; position: absolute; top: 34px; right: 14px; width: 32px; height: 32px; padding: 0;
-    color: var(--ink-soft); background: transparent; border: 0; border-radius: var(--radius-input); cursor: pointer;
+    display: flex; align-items: center; gap: 10px; margin-top: auto; min-height: 40px; padding: 0 7px; white-space: nowrap;
+    font: inherit; font-size: 13px; color: var(--ink-soft); background: transparent; border: 0; border-radius: var(--radius-input); cursor: pointer;
   }
   .sidebar__toggle:hover { color: var(--ink); background: var(--paper); }
-  .sidebar__toggle svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .sidebar__toggle svg { flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   .sidebar { transition: width var(--dur-roll) var(--ease-roll), padding var(--dur-roll) var(--ease-roll), box-shadow var(--dur-roll); }
 
   .shell.is-collapsed { grid-template-columns: 72px minmax(0, 1fr); }
   .sidebar.is-collapsed { width: 72px; padding-inline: 18px; overflow: hidden; z-index: 40; }
   .sidebar.is-collapsed .sidebar__name, .sidebar.is-collapsed .sidebar__version, .sidebar.is-collapsed .sidebar__tagline,
-  .sidebar.is-collapsed .sidebar__label, .sidebar.is-collapsed .sidebar__toggle { opacity: 0; pointer-events: none; }
-  .sidebar.is-collapsed .sidebar__link { white-space: nowrap; }
-  .sidebar.is-collapsed .sidebar__brand-row { white-space: nowrap; }
-  /* 잠깐 펼치기: 자리를 밀지 않고 내용 위에 겹친다 */
-  .sidebar.is-collapsed:hover, .sidebar.is-collapsed:focus-within { width: 260px; padding-inline: 28px; box-shadow: 8px 0 24px rgba(42, 38, 34, 0.12); }
-  .sidebar.is-collapsed:hover .sidebar__name, .sidebar.is-collapsed:hover .sidebar__version, .sidebar.is-collapsed:hover .sidebar__tagline,
-  .sidebar.is-collapsed:hover .sidebar__label, .sidebar.is-collapsed:hover .sidebar__toggle,
-  .sidebar.is-collapsed:focus-within .sidebar__name, .sidebar.is-collapsed:focus-within .sidebar__version, .sidebar.is-collapsed:focus-within .sidebar__tagline,
-  .sidebar.is-collapsed:focus-within .sidebar__label, .sidebar.is-collapsed:focus-within .sidebar__toggle { opacity: 1; pointer-events: auto; }
-  .sidebar__name, .sidebar__version, .sidebar__tagline, .sidebar__label, .sidebar__toggle { transition: opacity var(--dur-roll); }
+  .sidebar.is-collapsed .sidebar__label { opacity: 0; pointer-events: none; }
+  .sidebar.is-collapsed .sidebar__link, .sidebar.is-collapsed .sidebar__brand-row { white-space: nowrap; }
+  /* 잠깐 펼치기: 자리를 밀지 않고 내용 위에 겹친다. 방금 접은 직후에는 마우스가 한 번 벗어날 때까지 펼치지 않는다(can-peek). */
+  .sidebar.is-collapsed.can-peek:hover, .sidebar.is-collapsed:has(:focus-visible) { width: 260px; padding-inline: 28px; box-shadow: 8px 0 24px rgba(42, 38, 34, 0.12); }
+  .sidebar.is-collapsed.can-peek:hover .sidebar__name, .sidebar.is-collapsed.can-peek:hover .sidebar__version, .sidebar.is-collapsed.can-peek:hover .sidebar__tagline,
+  .sidebar.is-collapsed.can-peek:hover .sidebar__label,
+  .sidebar.is-collapsed:has(:focus-visible) .sidebar__name, .sidebar.is-collapsed:has(:focus-visible) .sidebar__version, .sidebar.is-collapsed:has(:focus-visible) .sidebar__tagline,
+  .sidebar.is-collapsed:has(:focus-visible) .sidebar__label { opacity: 1; pointer-events: auto; }
+  .sidebar__name, .sidebar__version, .sidebar__tagline, .sidebar__label { transition: opacity var(--dur-roll); }
 }
 @media (prefers-reduced-motion: reduce) { .shell, .sidebar { transition: none; } }
 

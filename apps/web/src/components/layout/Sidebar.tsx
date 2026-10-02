@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { Route } from '../../app/routes';
 import { followAppLink, type Navigate } from '../../app/navigation';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -29,10 +30,11 @@ function BrandMark() {
 
 export function Sidebar({ activePage, onNavigate, collapsed, onToggle }: SidebarProps) {
   const { t } = useI18n();
-  return <aside className={`sidebar ${collapsed ? 'is-collapsed' : ''}`}>
-    <button type="button" className="sidebar__toggle" onClick={onToggle} aria-pressed={!collapsed} aria-label={collapsed ? t.nav.pin : t.nav.collapse} title={collapsed ? t.nav.pin : t.nav.collapse}>
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="12" rx="2.5" /><path d="M7 3 V15" />{collapsed ? <path d="M10 7 L12.5 9 L10 11" /> : <path d="M12.5 7 L10 9 L12.5 11" />}</svg>
-    </button>
+  // 접힌 바는 마우스를 올리면 잠깐 펼쳐진다. 그런데 방금 접은 순간에는 마우스가 아직 바 위에 있어서, 그대로 두면 접히지 않은 것처럼 보인다.
+  // 그래서 접힌 직후에는 마우스가 한 번 바를 벗어날 때까지 펼치지 않는다. (키보드로 들어온 포커스는 CSS 가 :focus-visible 로 따로 다룬다.)
+  const [peekReady, setPeekReady] = useState(!collapsed);
+  useEffect(() => { setPeekReady(!collapsed); }, [collapsed]);
+  return <aside className={`sidebar ${collapsed ? 'is-collapsed' : ''} ${collapsed && peekReady ? 'can-peek' : ''}`} onMouseLeave={() => setPeekReady(true)}>
     <div className="sidebar__brand">
       <div className="sidebar__brand-row">
         <BrandMark />
@@ -53,5 +55,10 @@ export function Sidebar({ activePage, onNavigate, collapsed, onToggle }: Sidebar
         })}
       </Rail>
     </nav>
+    {/* 접기 · 펼치기 — 바 맨 아래. 접힌 상태에서도 아이콘이 보여서 바로 펼칠 수 있다 */}
+    <button type="button" className="sidebar__toggle" onClick={onToggle} aria-pressed={!collapsed} aria-label={collapsed ? t.nav.pin : t.nav.collapse} title={collapsed ? t.nav.pin : t.nav.collapse}>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="12" rx="2.5" /><path d="M7 3 V15" />{collapsed ? <path d="M10 7 L12.5 9 L10 11" /> : <path d="M12.5 7 L10 9 L12.5 11" />}</svg>
+      <span className="sidebar__label">{collapsed ? t.nav.pin : t.nav.collapse}</span>
+    </button>
   </aside>;
 }

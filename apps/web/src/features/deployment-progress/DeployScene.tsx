@@ -243,15 +243,6 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </>}
     <line className="scene-floor" x1={box.left + 20} y1={GROUND} x2="1180" y2={GROUND} />
 
-    {/* 바닥 그림자 — 깊이감. 떠 있는 것은 그림자가 작고 옅다. 구름 위에 올라간 뒤에는 땅에 그림자를 두지 않는다 */}
-    <g className="jr-shadows" aria-hidden="true">
-      {showCloud && <ellipse className="jr-shadow is-lifted" style={place([1030, GROUND + 6])} rx="130" ry="9" />}
-      {!onGround && (stage === 2 || stage === 3) && <ellipse className={`jr-shadow ${stage === 3 ? 'is-lifted' : ''}`} style={place([(stage === 3 ? PLANE_AIR : PLANE_GROUND)[0], GROUND + 6])} rx="104" ry="9" />}
-      {onGround && <ellipse className="jr-shadow" style={place([(moving || stage === null || stage < 2 || stage >= 4 ? ROBOT_DOCK : stage === 2 ? ROBOT_PICKUP : ROBOT_CARRY)[0], GROUND + 6])} rx="30" ry="6" />}
-      {floors > 0 && !(moving && !loaded && stage !== null && stage <= 2) && <ellipse className={`jr-shadow ${house[1] < GROUND - 30 ? (house[1] < 200 ? 'is-gone' : 'is-lifted') : ''}`} style={place([house[0], GROUND + 6])} rx="52" ry="8" />}
-      <ellipse className={`jr-shadow ${cy < KORO_Y - 5 ? (cy < 200 ? 'is-gone' : 'is-lifted') : ''}`} style={place([cx, GROUND + 6])} rx="30" ry="6" />
-    </g>
-
     {/* 배포할 곳 — AWS: 구름 위 세계 · 온프레미스: 내 서버 옆 자리. 환경 전환이면 둘 다 그린다(집터는 이번에 갈 곳에만) */}
     {showLot && <g className="jr-dest">
       <rect className="jr-paper" x="1132" y="330" width="50" height="110" rx="5" />

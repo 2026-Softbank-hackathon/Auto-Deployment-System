@@ -914,12 +914,3 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 }
 @keyframes burst-out { 0% { opacity: 1; scale: .4; } 100% { opacity: 0; scale: 1.25; } }
 @keyframes firework-out { 0% { opacity: 0; scale: .15; } 25% { opacity: 1; } 100% { opacity: 0; scale: 1.5; } }
-
-/* ── 입체감 (DeployScene) — 바닥 그림자와 마우스에 따라 기우는 무대 ─────────────── */
-.jr-shadow { fill: var(--ink); opacity: .1; transition: transform var(--dur-scene) var(--ease-roll), opacity var(--dur-scene), scale var(--dur-scene); transform-box: fill-box; transform-origin: center; }
-.jr-shadow.is-lifted { opacity: .05; scale: .7; }
-.jr-shadow.is-gone { opacity: 0; scale: .4; }
-@media (prefers-reduced-motion: no-preference) and (hover: hover) {
-  .run-stage { perspective: 1400px; }
-  .run-scene { transform: rotateX(calc(var(--tilt-y, 0) * -3deg)) rotateY(calc(var(--tilt-x, 0) * 5deg)); transition: transform .3s ease-out; will-change: transform; }
-}

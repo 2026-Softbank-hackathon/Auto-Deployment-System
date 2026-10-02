@@ -7,7 +7,7 @@
  * healthy 가 되면 바로 끝낸다 (그 시점부터 ALB 가 새 버전으로 보낸다). 순서는 그대로
  * "롤아웃 완료 → 최종 검증(Verify)".
  *
- * 완료: 새 이미지의 배포가 rolloutState COMPLETED, 또는 그 배포의 running 수가 desired 에
+ * 완료: 이번 task definition의 배포가 rolloutState COMPLETED, 또는 그 배포의 running 수가 desired 에
  *       닿고 그 태스크들이 모두 타깃 그룹에서 healthy.
  * 실패: 배포 rolloutState FAILED(회로 차단기 롤백) · 새 태스크 중지(stoppedReason) · 제한 시간.
  * Provision 이 쓰는 자격 증명(대상 연결의 AWS 키)을 그대로 쓴다.
@@ -15,7 +15,6 @@
 
 import {
   DescribeServicesCommand,
-  DescribeTaskDefinitionCommand,
   DescribeTasksCommand,
   ECSClient,
   ListTasksCommand,
@@ -52,8 +51,8 @@ export type EcsRolloutInput = {
   credentials: TerraformAwsCredentials;
   clusterName: string;
   serviceName: string;
-  /** 이번 배포의 이미지(repository@sha256:...) — 이 이미지를 쓰는 ECS 배포를 기다린다 */
-  expectedImage: string;
+  /** 이번 Terraform apply가 생성한 정확한 task definition ARN */
+  expectedTaskDefinition: string;
   log: (line: string) => Promise<void>;
 };
 
@@ -107,7 +106,6 @@ export class EcsRolloutWaiter {
     const { ecs, elb } = this.createClients(input.region, input.credentials);
     const cluster = input.clusterName;
     const startedAt = this.now();
-    const imageByTaskDefinition = new Map<string, string[]>();
     const lastLines = new Map<string, string>();
     let lastWriteAt = startedAt;
     let trackedId: string | undefined;
@@ -120,19 +118,6 @@ export class EcsRolloutWaiter {
       await input.log(line);
     };
     const elapsed = () => Math.round((this.now() - startedAt) / 1000);
-
-    const imagesOf = async (taskDefinition: string): Promise<string[]> => {
-      const cached = imageByTaskDefinition.get(taskDefinition);
-      if (cached) return cached;
-      const result = (await ecs.send(
-        new DescribeTaskDefinitionCommand({ taskDefinition }),
-      )) as { taskDefinition?: { containerDefinitions?: Array<{ image?: string }> } };
-      const images = (result.taskDefinition?.containerDefinitions ?? [])
-        .map((container) => container.image)
-        .filter((image): image is string => typeof image === "string");
-      imageByTaskDefinition.set(taskDefinition, images);
-      return images;
-    };
 
     const tasksOf = async (deployment: Deployment, desiredStatus: "RUNNING" | "STOPPED"): Promise<Task[]> => {
       const listed = (await ecs.send(
@@ -162,12 +147,12 @@ export class EcsRolloutWaiter {
       const deployments = service.deployments ?? [];
 
       if (!trackedId) {
-        trackedId = await findDeployment(deployments, input.expectedImage, imagesOf);
+        trackedId = findDeployment(deployments, input.expectedTaskDefinition);
         if (!trackedId) {
           throw new EcsRolloutError(
             "ECS_ROLLOUT_FAILED",
             withEvent(
-              "새 이미지로 시작한 ECS 배포를 찾지 못했습니다. 이미 이전 버전으로 롤백된 것으로 보입니다.",
+              "이번 task definition으로 시작한 ECS 배포를 찾지 못했습니다. 이미 이전 버전으로 롤백된 것으로 보입니다.",
               service,
             ),
           );
@@ -268,18 +253,17 @@ export class EcsRolloutWaiter {
   }
 }
 
-/** PRIMARY 배포부터 보고, 이번 이미지를 쓰는 배포의 id 를 찾는다 */
-async function findDeployment(
+/** PRIMARY 배포부터 보고, 이번 Terraform apply가 만든 task definition의 배포 id를 찾는다 */
+function findDeployment(
   deployments: Deployment[],
-  expectedImage: string,
-  imagesOf: (taskDefinition: string) => Promise<string[]>,
-): Promise<string | undefined> {
+  expectedTaskDefinition: string,
+): string | undefined {
   const ordered = [...deployments].sort(
     (a, b) => Number(b.status === "PRIMARY") - Number(a.status === "PRIMARY"),
   );
   for (const deployment of ordered) {
     if (!deployment.id || !deployment.taskDefinition) continue;
-    if ((await imagesOf(deployment.taskDefinition)).includes(expectedImage)) return deployment.id;
+    if (deployment.taskDefinition === expectedTaskDefinition) return deployment.id;
   }
   return undefined;
 }

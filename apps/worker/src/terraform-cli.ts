@@ -229,6 +229,19 @@ export class TerraformCli {
     });
   }
 
+  /** 재시도 시 plan/apply 없이 기존 remote state의 출력값만 복구한다. */
+  async output(request: TerraformCliRequest): Promise<TerraformOutputs> {
+    return this.inWorkspace(request, true, async ({ directory, env }) => {
+      const outputText = await this.run(
+        "TERRAFORM_OUTPUT_FAILED",
+        ["output", "-json"],
+        directory,
+        env,
+      );
+      return parseTerraformOutputs(outputText);
+    });
+  }
+
   /**
    * 앱 삭제 (#247) — apply 와 같은 backend(state key) · 자격 증명으로 state 의 리소스를 모두 지운다.
    * destroy 는 state 에 있는 리소스를 지우므로 변수 값은 provider region 외에는 결과에 영향이 없다.

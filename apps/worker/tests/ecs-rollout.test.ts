@@ -1,6 +1,5 @@
 import {
   DescribeServicesCommand,
-  DescribeTaskDefinitionCommand,
   DescribeTasksCommand,
   ListTasksCommand,
 } from "@aws-sdk/client-ecs";
@@ -8,8 +7,6 @@ import { DescribeTargetHealthCommand } from "@aws-sdk/client-elastic-load-balanc
 import { describe, expect, it, vi } from "vitest";
 import { EcsRolloutError, EcsRolloutWaiter } from "../src/ecs-rollout.js";
 
-const NEW_IMAGE = `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo@sha256:${"b".repeat(64)}`;
-const OLD_IMAGE = `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo@sha256:${"a".repeat(64)}`;
 const NEW_TD = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/cam-x:8";
 const OLD_TD = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/cam-x:7";
 const TG = "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/cam-x-tg/abc";
@@ -120,15 +117,6 @@ function fakeAws(snapshots: Snapshot[]) {
         }],
       };
     }
-    if (command instanceof DescribeTaskDefinitionCommand) {
-      const arn = command.input.taskDefinition;
-      return {
-        taskDefinition: {
-          taskDefinitionArn: arn,
-          containerDefinitions: [{ name: "demo", image: arn === NEW_TD ? NEW_IMAGE : OLD_IMAGE }],
-        },
-      };
-    }
     if (command instanceof ListTasksCommand) {
       const wanted = command.input.desiredStatus;
       return {
@@ -160,7 +148,12 @@ function fakeAws(snapshots: Snapshot[]) {
   return { ecsSend, elbSend, polls: () => index + 1 };
 }
 
-function makeWaiter(snapshots: Snapshot[], options: { timeoutMs?: number } = {}) {
+function makeWaiter(
+  snapshots: Snapshot[],
+  options: {
+    timeoutMs?: number;
+  } = {},
+) {
   const aws = fakeAws(snapshots);
   let clock = 0;
   const sleep = vi.fn(async (ms: number) => {
@@ -182,7 +175,7 @@ function makeWaiter(snapshots: Snapshot[], options: { timeoutMs?: number } = {})
     credentials: { accessKeyId: "AKIA", secretAccessKey: "secret" },
     clusterName: "cam-x",
     serviceName: "cam-x",
-    expectedImage: NEW_IMAGE,
+    expectedTaskDefinition: NEW_TD,
     log: vi.fn(async (line: string) => {
       lines.push(line);
     }),
@@ -335,7 +328,7 @@ describe("EcsRolloutWaiter (#253)", () => {
     expect(error.detail).toContain("rolling back to deployment ecs-svc/rollback");
   });
 
-  it("재시도 때 새 이미지의 배포가 이미 롤백돼 없으면 실패한다", async () => {
+  it("동일 이미지의 이전 task definition으로 롤백된 재시도를 성공으로 오판하지 않는다", async () => {
     const { waiter, input } = makeWaiter([
       { deployments: [oldDeployment({ status: "PRIMARY" })] },
     ]);
@@ -343,7 +336,7 @@ describe("EcsRolloutWaiter (#253)", () => {
     const error = await captureError(waiter.wait(input));
 
     expect(error.code).toBe("ECS_ROLLOUT_FAILED");
-    expect(error.detail).toContain("새 이미지");
+    expect(error.detail).toContain("task definition");
   });
 
   it("제한 시간 안에 끝나지 않으면 마지막 상태와 함께 실패한다", async () => {

@@ -182,8 +182,31 @@ export async function handleProvision(
 
     const stateKey = terraformStateKey(projectId, environmentId);
     const resourceName = resourceNameFor(projectId, environmentId);
+    const terraformVariables = {
+      ...plan.provisioning.variables,
+      app_name: safeContainerName(plan.application.name),
+      region: awsConfig.region,
+      resource_name: resourceName,
+      container_image: context.immutable_ref,
+      environment_variables: environmentVariables,
+      secret_references: {},
+    };
+    const terraformRequest = {
+      moduleDirectory,
+      backend: {
+        ...deps.terraformBackend,
+        stateKey,
+      },
+      region: awsConfig.region,
+      credentials: { accessKeyId, secretAccessKey },
+      variables: terraformVariables,
+      log: (line: string) => stepLog.line(line),
+    };
     const applied = context.status === "deploying" && context.origin_url
-      ? { originUrl: context.origin_url, outputs: {} as TerraformOutputs }
+      ? {
+          originUrl: context.origin_url,
+          outputs: await deps.terraformCli.output(terraformRequest),
+        }
       : await applyTerraform({
           deps,
           stepLog,
@@ -193,15 +216,7 @@ export async function handleProvision(
           moduleDirectory,
           stateKey,
           resourceName,
-          variables: {
-            ...plan.provisioning.variables,
-            app_name: safeContainerName(plan.application.name),
-            region: awsConfig.region,
-            resource_name: resourceName,
-            container_image: context.immutable_ref,
-            environment_variables: environmentVariables,
-            secret_references: {},
-          },
+          variables: terraformVariables,
           credentials: { accessKeyId, secretAccessKey },
           region: awsConfig.region,
         });
@@ -221,6 +236,9 @@ export async function handleProvision(
       });
     }
 
+    const expectedTaskDefinition = stringOutput(applied.outputs, "task_definition_arn");
+    if (!expectedTaskDefinition) throw new Error("TERRAFORM_OUTPUT_MISSING");
+
     // Terraform 은 서비스 갱신만 하고 돌아온다 (wait_for_steady_state = false, #253).
     // 롤아웃 완료를 여기서 기다린 뒤 최종 검증으로 넘긴다. 재시도로 apply 를 건너뛴 경우에도 다시 확인한다.
     await deps.ecsRolloutWaiter.wait({
@@ -228,7 +246,7 @@ export async function handleProvision(
       credentials: { accessKeyId, secretAccessKey },
       clusterName: stringOutput(applied.outputs, "cluster_name") ?? resourceName,
       serviceName: stringOutput(applied.outputs, "service_name") ?? resourceName,
-      expectedImage: context.immutable_ref,
+      expectedTaskDefinition,
       log: (line) => stepLog.line(line),
     });
 

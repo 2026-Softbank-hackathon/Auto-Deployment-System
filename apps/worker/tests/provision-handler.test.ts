@@ -6,6 +6,8 @@ import { EcsRolloutError } from "../src/ecs-rollout.js";
 
 
 const IMAGE_DIGEST = `sha256:${"a".repeat(64)}`;
+const TASK_DEFINITION_ARN =
+  "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/cam-demo:8";
 const IR = {
   $ir_version: "0.1.0",
   metadata: { name: "demo.app", version: "1.0.0" },
@@ -39,6 +41,7 @@ function makeHarness(overrides: Partial<{
   targetOwnerProjectId: string | null;
   previousApply: { status: string; terraform_inputs_hash: string } | null;
   rolloutFailure: Error;
+  taskDefinitionArn: string | null;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
@@ -128,6 +131,17 @@ function makeHarness(overrides: Partial<{
   };
   const terraformCli = {
     fingerprint: vi.fn(async () => "inputs-hash-current"),
+    output: vi.fn(async () => ({
+      origin_url: { value: "http://alb.example.test", sensitive: false },
+      cluster_name: { value: "cluster-from-output", sensitive: false },
+      service_name: { value: "service-from-output", sensitive: false },
+      task_definition_arn: {
+        value: overrides.taskDefinitionArn === undefined
+          ? TASK_DEFINITION_ARN
+          : overrides.taskDefinitionArn,
+        sensitive: false,
+      },
+    })),
     apply: overrides.terraformFailure
       ? vi.fn(async () => {
           if (overrides.statusAfterApplyFailure) status = overrides.statusAfterApplyFailure;
@@ -139,6 +153,12 @@ function makeHarness(overrides: Partial<{
             origin_url: { value: "http://alb.example.test", sensitive: false },
             cluster_name: { value: "cluster-from-output", sensitive: false },
             service_name: { value: "service-from-output", sensitive: false },
+            task_definition_arn: {
+              value: overrides.taskDefinitionArn === undefined
+                ? TASK_DEFINITION_ARN
+                : overrides.taskDefinitionArn,
+              sensitive: false,
+            },
           };
         }),
   };
@@ -380,7 +400,7 @@ describe("handleProvision", () => {
       credentials: { accessKeyId: "access-key-value", secretAccessKey: "secret-key-value" },
       clusterName: "cluster-from-output",
       serviceName: "service-from-output",
-      expectedImage: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo@${IMAGE_DIGEST}`,
+      expectedTaskDefinition: TASK_DEFINITION_ARN,
     }));
     // 롤아웃 대기는 deploying 상태에서, Verify 큐잉보다 먼저
     expect(harness.order).toEqual(["apply", "rollout:deploying", "send:verify"]);
@@ -400,14 +420,27 @@ describe("handleProvision", () => {
     await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
 
     expect(harness.terraformCli.apply).not.toHaveBeenCalled();
-    // outputs 가 없으면 프로필의 고정 리소스 이름(클러스터 = 서비스 = resource_name)을 쓴다
+    expect(harness.terraformCli.output).toHaveBeenCalledTimes(1);
     expect(harness.ecsRolloutWaiter.wait).toHaveBeenCalledWith(expect.objectContaining({
-      clusterName: expect.stringMatching(/^cam-[0-9a-f]{16}$/),
-      serviceName: expect.stringMatching(/^cam-[0-9a-f]{16}$/),
+      clusterName: "cluster-from-output",
+      serviceName: "service-from-output",
+      expectedTaskDefinition: TASK_DEFINITION_ARN,
     }));
-    const call = harness.ecsRolloutWaiter.wait.mock.calls[0]![0] as unknown as { clusterName: string; serviceName: string };
-    expect(call.clusterName).toBe(call.serviceName);
     expect(harness.order).toEqual(["rollout:deploying", "send:verify"]);
+  });
+
+  it("재시도 state에 task definition ARN이 없으면 이전 배포를 추측하지 않고 실패한다", async () => {
+    const harness = makeHarness({
+      status: "deploying",
+      originUrl: "http://alb.example.test",
+      taskDefinitionArn: null,
+    });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.getStatus()).toBe("failed");
+    expect(harness.ecsRolloutWaiter.wait).not.toHaveBeenCalled();
+    expect(harness.boss.send).not.toHaveBeenCalledWith("verify", expect.anything());
   });
 
   it("ECS 롤아웃 실패는 코드와 ECS 사유를 남기고 Verify 없이 실패 처리한다 (#253)", async () => {

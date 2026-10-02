@@ -114,6 +114,29 @@ describe("TerraformCli", () => {
     await expect(fs.access(commands[0]!.cwd)).rejects.toThrow();
   });
 
+  it("기존 state의 출력값만 읽을 때 plan과 apply를 다시 실행하지 않는다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const commands: string[][] = [];
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      commands.push(args);
+      return args[0] === "output"
+        ? JSON.stringify({
+            task_definition_arn: {
+              value: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/cam-demo:8",
+              type: "string",
+            },
+          })
+        : "";
+    });
+
+    const outputs = await new TerraformCli({ execute }).output(
+      makeRequest(moduleDirectory),
+    );
+
+    expect(commands.map((args) => args[0])).toEqual(["init", "output"]);
+    expect(outputs.task_definition_arn?.value).toContain("task-definition/cam-demo:8");
+  });
+
   it("Terraform 오류 상세를 숨기고 단계 오류 코드만 반환하며 임시 파일을 제거한다", async () => {
     const moduleDirectory = await createModuleDirectory();
     let workspace = "";

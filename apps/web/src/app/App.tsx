@@ -5,6 +5,7 @@ import { DeploymentProgress } from '../features/deployment-progress/DeploymentPr
 import { DeploymentResult } from '../features/deployment-progress/DeploymentResult';
 import { DashboardPage } from '../pages/DashboardPage';
 import { ConnectionsPage } from '../pages/ConnectionsPage';
+import { OpsPage } from '../pages/OpsPage';
 import { ProjectDetailPage } from '../pages/ProjectDetailPage';
 import { SimpleDeployPage } from '../pages/SimpleDeployPage';
 import { DeploymentNotifier } from '../features/notifications/DeploymentNotifier';
@@ -34,6 +35,7 @@ export function App() {
       <main className="content">
         {route.page === 'dashboard' && <DashboardPage onNavigate={navigate} />}
         {route.page === 'connections' && <ConnectionsPage />}
+        {route.page === 'ops' && <OpsPage onNavigate={navigate} />}
         {route.page === 'project' && <ProjectDetailPage projectId={route.projectId} tab={route.tab} onNavigate={navigate} />}
         {route.page === 'deploy' && <SimpleDeployPage onNavigate={navigate} onStarted={(deploymentId) => navigate(`/deployments/${encodeURIComponent(deploymentId)}`)} />}
         {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} tab={route.tab} onNavigate={navigate} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={() => navigate('/connections')} />}

@@ -4,11 +4,11 @@ import { logLinesKo } from './log-lines';
 export const ko = {
   locale: 'ko-KR',
   header: {
-    titles: { dashboard: '대시보드', deploy: '간단 배포', progress: '배포 진행', result: '배포 결과', project: '프로젝트', connections: '연결' },
+    titles: { dashboard: '대시보드', deploy: '간단 배포', progress: '배포 진행', result: '배포 결과', project: '프로젝트', connections: '연결', ops: '운영' },
     language: '언어',
     sound: { label: '사운드', on: '켬', off: '끔' },
   },
-  nav: { label: '메인 메뉴', dashboard: '대시보드', deploy: '간단 배포!', connections: '연결' },
+  nav: { label: '메인 메뉴', dashboard: '대시보드', deploy: '간단 배포!', connections: '연결', ops: '운영' },
   stages: { source: '소스 업로드', analyze: 'AI 분석', build: '빌드', provision: '인프라 준비', deploy: '배포', verify: '검증', done: '완료' },
   gadgets: { source: '출발대', analyze: '도미노', build: '깔때기', provision: '나선', deploy: '도약대', verify: '저울', done: '컵' },
   status: {
@@ -734,6 +734,106 @@ export const ko = {
     timelineTitle: '단계별 걸린 시간',
     factFinished: '완료 시각',
     targets: { aws: 'AWS', onprem: '온프레미스' },
+  },
+  /** 운영 화면 (#308) — 사용자 앱이 아니라 플랫폼 자체의 상태 */
+  ops: {
+    title: '플랫폼 운영',
+    description: '배포 시스템 자체의 상태예요. 10초마다 새로 고치고, 이 탭을 보고 있지 않을 때는 멈춰요.',
+    loading: '불러오고 있어요…',
+    loadError: '불러오지 못했어요.',
+    refreshError: '새로 고치지 못해서 마지막으로 받은 값을 보여 주고 있어요.',
+    retry: '다시 불러오기',
+    updated: (time: string) => `${time} 기준`,
+    /** 초 → "3분 20초" · "2시간 5분" · "1일 3시간" */
+    duration: (seconds: number) => {
+      const s = Math.max(0, Math.floor(seconds));
+      if (s < 60) return `${s}초`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return s % 60 ? `${m}분 ${s % 60}초` : `${m}분`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return m % 60 ? `${h}시간 ${m % 60}분` : `${h}시간`;
+      const d = Math.floor(h / 24);
+      return h % 24 ? `${d}일 ${h % 24}시간` : `${d}일`;
+    },
+    queue: {
+      title: '작업 큐와 워커 상태',
+      description: '배포 단계마다 하나씩 있는 작업 큐(pg-boss)와 작업을 처리하는 워커예요.',
+      tableLabel: '큐별 작업 수',
+      columns: { name: '큐', created: '대기', retry: '재시도 대기', active: '진행', completed: '24시간 완료', failed: '24시간 실패', oldest: '가장 오래 기다린 작업' },
+      names: {
+        analyze: '분석', build: '빌드', provision: '인프라 준비', verify: '검증', diagnose: '실패 진단', teardown: '앱 삭제', 'address-change': '주소 변경',
+      } as Record<string, string>,
+      noQueues: '아직 만든 큐가 없어요. 워커가 처음 뜰 때 만들어요.',
+      activeTitle: '진행 중인 작업',
+      noActive: '지금 진행 중인 작업이 없어요.',
+      deployment: (id: string) => `배포 #${id}`,
+      project: (id: string) => `앱 #${id}`,
+      running: (time: string) => `${time}째`,
+      retryCount: (n: number) => `재시도 ${n}번째`,
+      workersTitle: '워커',
+      noWorkers: '최근 10분 동안 응답한 워커가 없어요. 작업이 처리되지 않고 있을 수 있어요.',
+      noOnlineWorker: '지금 응답하는 워커가 없어요. 작업이 처리되지 않고 있을 수 있어요.',
+      online: '온라인',
+      offline: '응답 없음',
+      draining: '종료 준비 중',
+      drainingHint: '새 작업은 받지 않고 진행 중인 작업만 마치는 중이에요.',
+      uptime: (time: string) => `가동 ${time}`,
+      lastSeen: (time: string) => `마지막 응답 ${time} 전`,
+      jobs: (n: number) => `작업 ${n}개 처리 중`,
+      commit: '커밋',
+      unknownCommit: '커밋 모름',
+    },
+    server: {
+      title: '플랫폼 서버 상태',
+      description: '콘솔 · API · 워커가 함께 도는 EC2 한 대예요. 워커가 30초마다 재요.',
+      cpu: 'CPU',
+      memory: '메모리',
+      load: '부하 평균',
+      loadHint: '1분 · 5분 · 15분',
+      disk: '루트 디스크',
+      buildCache: 'Docker 빌드 캐시',
+      buildCacheHint: '5분마다 재요',
+      noBuildCache: '아직 재지 않았어요',
+      cpuPending: '재는 중',
+      trend: '24시간',
+      sparkLabel: (name: string) => `${name} 최근 24시간 추이`,
+      empty: '아직 수집한 지표가 없어요. 워커가 뜨면 30초마다 남겨요.',
+      measured: (time: string) => `${time} 전에 잼`,
+      stale: (time: string) => `수집 지연 — 마지막 측정이 ${time} 전이에요. 워커 상태를 확인해 주세요.`,
+      warnings: {
+        DISK_HIGH: (percent: number, threshold: number) => `디스크를 ${percent}% 쓰고 있어요 (기준 ${threshold}%). 빌드 캐시나 안 쓰는 이미지를 정리해 주세요.`,
+        MEMORY_HIGH: (percent: number, threshold: number) => `메모리를 ${percent}% 쓰고 있어요 (기준 ${threshold}%). 빌드가 느려지거나 멈출 수 있어요.`,
+      },
+    },
+    ai: {
+      title: 'AI 사용량과 비용 추정',
+      description: '분석 · 수정안 · 실패 진단에 쓴 AI 호출이에요.',
+      estimateNote: '비용은 호출할 때 모델별 공시 단가로 계산한 추정치라 실제 청구액과 다를 수 있어요. "오늘"은 한국 시간(KST) 0시부터예요.',
+      today: '오늘',
+      last7d: '최근 7일',
+      calls: (n: number) => `${n}회 호출`,
+      tokens: (input: string, output: string) => `입력 ${input} · 출력 ${output} 토큰`,
+      byModel: '모델별 (최근 7일)',
+      byPurpose: '목적별 (최근 7일)',
+      purposes: { analysis_fill: '분석 빈칸 채우기', sqlite_patch: 'SQLite 수정안', diagnosis: '실패 진단', unknown: '구분 없음' },
+      columns: { model: '모델', purpose: '목적', calls: '호출', input: '입력 토큰', output: '출력 토큰', cost: '추정 비용', time: '시각', deployment: '배포' },
+      recent: '최근 호출',
+      noUsage: '최근 7일 동안 AI 호출이 없어요.',
+      noRecent: '아직 AI 호출 기록이 없어요.',
+    },
+    deploys: {
+      title: '자동 배포 기록 (CD)',
+      description: 'main 에 머지되면 GitHub Actions 가 플랫폼 서버에서 배포 스크립트를 실행해요. 최근 20건이에요.',
+      empty: '아직 기록이 없어요. 배포 스크립트가 기록을 남기도록 바뀐 뒤의 배포부터 여기에 쌓여요.',
+      tableLabel: '플랫폼 배포 기록',
+      status: { running: '진행 중', success: '성공', failed: '실패', interrupted: '중단됨' },
+      interruptedHint: '75분이 지나도 끝 기록이 없어요. 배포 스크립트가 중간에 멈췄을 수 있어요.',
+      columns: { status: '결과', commit: '커밋', duration: '걸린 시간', disk: '디스크 (정리 전 → 후)', run: 'Actions', started: '시작' },
+      noSubject: '(커밋 정보 없음)',
+      run: (id: string) => `실행 #${id}`,
+      noRun: '수동 실행',
+      diskAfter: (after: string, total: string) => `${after} / ${total}`,
+    },
   },
   /** 서버 단계 로그의 고정 문구 (#147) — 키로 고른다 */
   logLines: logLinesKo,

@@ -72,8 +72,9 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
 const RECENT_LINES = 3;
 /** 방금 온 로그를 말풍선에 보여 주는 시간 */
 const LOG_TALK_MS = 9000;
-/** 생각 풍선을 코로 머리에 붙이는 최소 축척 (장면 1 단위가 이만큼의 픽셀 이상일 때). 이보다 작으면 장면 아래에 둔다 */
-const THINK_ATTACH_SCALE = 0.75;
+/** 말풍선의 기본 폭(px)과, 장면이 작을 때 줄이는 한계 (이보다 작으면 글자를 읽기 어렵다) */
+const THINK_WIDTH = 220;
+const THINK_MIN_SCALE = 0.72;
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
 
 /** 진행 중일 때만 1초마다 다시 그린다. 경과 시간은 서버의 createdAt 기준 실제 값이다. */
@@ -293,7 +294,15 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     observer.observe(sceneElement);
     return () => observer.disconnect();
   }, [sceneElement]);
-  const thinkAttached = sceneWidth !== null && sceneWidth / box.width >= THINK_ATTACH_SCALE;
+  // 말풍선은 항상 코로 머리에 붙인다. 장면이 작게 그려지면 말풍선도 같이 줄인다(읽을 수 있는 크기까지만).
+  const sceneScale = sceneWidth !== null ? sceneWidth / box.width : 1;
+  const thinkScale = Math.min(1, Math.max(THINK_MIN_SCALE, sceneScale / 0.9));
+  // 펼치는 쪽에 자리가 모자라면(좁은 화면) 반대쪽으로 펼친다. 둘 다 모자라면 더 넓은 쪽으로.
+  const koroPx = (koroX - box.left) * sceneScale;
+  const bubblePx = THINK_WIDTH * thinkScale;
+  const roomRight = (sceneWidth ?? Infinity) - koroPx;
+  const fitsPreferred = thinkLeft ? koroPx >= bubblePx : roomRight >= bubblePx;
+  const openLeft = fitsPreferred ? thinkLeft : koroPx > roomRight;
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
   const cue = rolling ? sceneCue(view.stage, target, story) : null;
@@ -392,13 +401,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure ref={setSceneElement} className={`run-scene ${thinkAttached ? 'is-attached' : ''}`} style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
+        <figure ref={setSceneElement} className="run-scene is-attached" style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
           <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} eventTick={liveLog?.tick ?? 0} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
-              장면이 작게 그려질 때는 머리에 붙이지 않고 장면 아래에 둔다(is-caption). */}
-          {talk && <div className={`koro-think ${thinkAttached ? (thinkLeft ? 'is-left' : 'is-right') : 'is-caption'} ${logTalk ? 'is-log' : ''}`}
-            style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
+              장면이 작게 그려질 때는 말풍선도 같이 줄이고, 자리가 모자란 쪽은 피해서 펼친다. */}
+          {talk && <div className={`koro-think ${openLeft ? 'is-left' : 'is-right'} ${logTalk ? 'is-log' : ''}`}
+            style={{ '--think-scale': thinkScale, '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}

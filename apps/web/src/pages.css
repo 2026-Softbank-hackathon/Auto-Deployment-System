@@ -191,11 +191,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .koro-think__bubble { position: absolute; bottom: 28px; margin: 0; width: max-content; max-width: 220px; padding: 9px 16px; font-size: 14px; line-height: 1.45; text-align: center; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: 22px; box-shadow: 0 3px 0 var(--koro-tint); }
 .koro-think.is-right .koro-think__bubble { left: -22px; }
 .koro-think.is-left .koro-think__bubble { right: -22px; }
-/* 장면이 작게 그려질 때(좁은 화면)는 풍선이 그림에 비해 너무 커서 다른 그림을 덮는다.
-   그때는 머리에 붙이지 않고 장면 바로 아래에 한 줄로 둔다 (is-caption — 진행 화면이 장면의 실제 축척을 재서 붙인다). */
-.koro-think.is-caption { position: static; width: auto; height: auto; display: flex; justify-content: center; margin-top: 10px; }
-.koro-think.is-caption .koro-think__dot { display: none; }
-.koro-think.is-caption .koro-think__bubble { position: static; max-width: 100%; padding: 7px 14px; font-size: 13px; border-radius: 16px; box-shadow: none; }
+/* 장면이 작게 그려질 때는 말풍선과 방울도 같이 줄인다 (--think-scale, 진행 화면이 장면의 실제 축척에서 정한다). 머리에 붙은 점을 기준으로 줄인다. */
+.koro-think { scale: var(--think-scale, 1); }
 .koro-prop__line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .koro-prop__line--thick { stroke-width: 4.5; }
 .koro-prop__glass { fill: color-mix(in srgb, var(--surface) 70%, transparent); stroke: var(--ink); stroke-width: 4; }

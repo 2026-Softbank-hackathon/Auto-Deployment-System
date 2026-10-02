@@ -7,7 +7,12 @@
  */
 
 import { z } from "zod";
-import { DeploymentStatusSchema, IdStringSchema, IsoDateTimeSchema } from "./common.js";
+import {
+  DeploymentStatusSchema,
+  IdStringSchema,
+  IsoDateTimeSchema,
+  TargetVendorSchema,
+} from "./common.js";
 
 // ── 요청 ──────────────────────────────────────────────────────────────────────
 
@@ -32,6 +37,37 @@ export type ListProjectDeploymentsQuery = z.input<typeof ListProjectDeploymentsQ
 
 // ── 응답 ──────────────────────────────────────────────────────────────────────
 
+/** 배포 대상 환경의 종류. 환경 없이 만든 옛 배포는 null */
+const DeploymentEnvironmentTypeSchema = TargetVendorSchema.nullable();
+
+/**
+ * 지금 프로젝트 주소(service-{projectId}.{domain})로 서비스 중인 배포.
+ * 가장 최근에 성공(succeeded)한 배포 하나 — 성공한 배포가 없으면 Project.live 가 null.
+ */
+export const ProjectLiveDeploymentSchema = z
+  .object({
+    deploymentId: IdStringSchema,
+    environmentId: IdStringSchema.nullable(),
+    environmentType: DeploymentEnvironmentTypeSchema,
+    environmentName: z.string().nullable(),
+    /** 프로젝트 공유 주소. 서버에 플랫폼 도메인 설정이 없으면 null */
+    publicUrl: z.string().nullable(),
+    succeededAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
+export type ProjectLiveDeployment = z.infer<typeof ProjectLiveDeploymentSchema>;
+
+/** 상태와 상관없이 가장 최근에 만든 배포. 배포가 없으면 Project.latest 가 null */
+export const ProjectLatestDeploymentSchema = z
+  .object({
+    deploymentId: IdStringSchema,
+    status: DeploymentStatusSchema,
+    environmentType: DeploymentEnvironmentTypeSchema,
+    createdAt: IsoDateTimeSchema,
+  })
+  .strict();
+export type ProjectLatestDeployment = z.infer<typeof ProjectLatestDeploymentSchema>;
+
 export const ProjectSchema = z
   .object({
     id: IdStringSchema,
@@ -40,6 +76,10 @@ export const ProjectSchema = z
     description: z.string().optional(),
     createdAt: IsoDateTimeSchema,
     updatedAt: IsoDateTimeSchema,
+    /** 지금 서비스 중인 배포 (POST /projects 응답은 항상 null) */
+    live: ProjectLiveDeploymentSchema.nullable(),
+    /** 가장 최근 배포 (POST /projects 응답은 항상 null) */
+    latest: ProjectLatestDeploymentSchema.nullable(),
   })
   .strict();
 export type Project = z.infer<typeof ProjectSchema>;
@@ -67,6 +107,12 @@ export const ProjectDeploymentSchema = z
     createdAt: IsoDateTimeSchema,
     succeededAt: IsoDateTimeSchema.nullable(),
     failedAt: IsoDateTimeSchema.nullable(),
+    /** 배포 대상 환경. 환경 없이 만든 옛 배포는 셋 다 null */
+    environmentId: IdStringSchema.nullable(),
+    environmentType: DeploymentEnvironmentTypeSchema,
+    environmentName: z.string().nullable(),
+    /** 지금 프로젝트 주소로 서비스 중인 배포(Project.live)면 true — 이력에서 하나만 true */
+    isLive: z.boolean(),
   })
   .strict();
 export type ProjectDeployment = z.infer<typeof ProjectDeploymentSchema>;

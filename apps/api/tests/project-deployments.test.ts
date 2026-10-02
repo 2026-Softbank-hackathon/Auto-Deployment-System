@@ -44,6 +44,10 @@ function deploymentRow(id: number, overrides: Record<string, unknown> = {}) {
     failed_at: null,
     source_version_id: id * 10,
     source_sha256: `sha-${id}`,
+    environment_id: "5",
+    environment_type: "aws",
+    environment_name: "prod-aws",
+    is_live: false,
     ...overrides,
   };
 }
@@ -74,12 +78,15 @@ describe("GET /api/v1/projects/:id/deployments", () => {
 
   it("최신 배포부터 이력을 반환함", async () => {
     givenProject([
-      deploymentRow(1),
+      deploymentRow(1, { is_live: true }),
       deploymentRow(2, {
         status: "failed",
         public_url: null,
         succeeded_at: null,
         failed_at: new Date("2026-09-30T02:03:00.000Z"),
+        environment_id: "6",
+        environment_type: "onprem",
+        environment_name: "home-mac",
       }),
     ]);
 
@@ -97,6 +104,10 @@ describe("GET /api/v1/projects/:id/deployments", () => {
           createdAt: "2026-09-30T02:00:00.000Z",
           succeededAt: null,
           failedAt: "2026-09-30T02:03:00.000Z",
+          environmentId: "6",
+          environmentType: "onprem",
+          environmentName: "home-mac",
+          isLive: false,
         },
         {
           id: "1",
@@ -107,9 +118,28 @@ describe("GET /api/v1/projects/:id/deployments", () => {
           createdAt: "2026-09-30T01:00:00.000Z",
           succeededAt: "2026-09-30T01:05:00.000Z",
           failedAt: null,
+          environmentId: "5",
+          environmentType: "aws",
+          environmentName: "prod-aws",
+          isLive: true,
         },
       ],
       nextCursor: null,
+    });
+  });
+
+  it("환경 없이 만든 옛 배포는 환경 필드 null", async () => {
+    givenProject([
+      deploymentRow(1, { environment_id: null, environment_type: null, environment_name: null }),
+    ]);
+
+    const res = await server.inject({ method: "GET", url: "/api/v1/projects/1/deployments" });
+
+    expect(res.json().items[0]).toMatchObject({
+      environmentId: null,
+      environmentType: null,
+      environmentName: null,
+      isLive: false,
     });
   });
 

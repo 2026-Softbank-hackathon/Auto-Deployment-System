@@ -52,7 +52,7 @@
   .shell { grid-template-columns: 1fr; }
   .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px; border-right: 0; border-bottom: var(--border); }
   .sidebar__tagline { display: none; }
-  .sidebar__rail { flex-direction: row; gap: 16px; }
+  .sidebar__rail { flex-direction: row; flex-wrap: wrap; gap: 0 16px; }
   .sidebar__rail .rail__track, .sidebar__rail .rail__fill { display: none; }
   .sidebar__link { min-height: 44px; gap: 8px; font-size: 15px; }
   .app-header { padding: 0 16px; }

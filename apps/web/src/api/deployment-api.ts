@@ -70,7 +70,7 @@ export interface DeploymentHealthResponse {
   requiredPasses: number;
 }
 
-function endpoint(path: string): string {
+export function endpoint(path: string): string {
   const suffix = path.replace(/^\/api\/v1(?=\/|$)/, '');
   return `${apiBaseUrl}${suffix}`;
 }
@@ -84,7 +84,7 @@ async function assertOk(response: Response): Promise<void> {
   throw new DeploymentApiError(response.status, `요청을 완료하지 못했습니다. (${response.status})`, code, serverMessage);
 }
 
-async function readJson(response: Response): Promise<unknown> {
+export async function readJson(response: Response): Promise<unknown> {
   await assertOk(response);
   return response.json();
 }

@@ -5,11 +5,11 @@ import type { Messages } from './ko';
 export const ja: Messages = {
   locale: 'ja-JP',
   header: {
-    titles: { dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ', progress: 'デプロイ進行状況', result: 'デプロイ結果', project: 'プロジェクト', connections: '接続' },
+    titles: { dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ', progress: 'デプロイ進行状況', result: 'デプロイ結果', project: 'プロジェクト', connections: '接続', ops: '運用' },
     language: '言語',
     sound: { label: 'サウンド', on: 'オン', off: 'オフ' },
   },
-  nav: { label: 'メインメニュー', dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ！', connections: '接続' },
+  nav: { label: 'メインメニュー', dashboard: 'ダッシュボード', deploy: 'かんたんデプロイ！', connections: '接続', ops: '運用' },
   stages: { source: 'ソースアップロード', analyze: 'AI分析', build: 'ビルド', provision: 'インフラ準備', deploy: 'デプロイ', verify: '検証', done: '完了' },
   gadgets: { source: 'スタート台', analyze: 'ドミノ', build: 'じょうご', provision: 'らせん', deploy: 'ジャンプ台', verify: '天びん', done: 'カップ' },
   status: {
@@ -727,6 +727,106 @@ export const ja: Messages = {
     timelineTitle: '段階別の所要時間',
     factFinished: '完了時刻',
     targets: { aws: 'AWS', onprem: 'オンプレミス' },
+  },
+  /** 運用画面 (#308) — ユーザーのアプリではなくプラットフォーム自体の状態 */
+  ops: {
+    title: 'プラットフォーム運用',
+    description: 'デプロイシステム自体の状態です。10秒ごとに更新し、このタブを見ていない間は止まります。',
+    loading: '読み込んでいます…',
+    loadError: '読み込めませんでした。',
+    refreshError: '更新できなかったため、最後に取得した値を表示しています。',
+    retry: '再読み込み',
+    updated: (time: string) => `${time} 時点`,
+    /** 秒 → 「3分20秒」・「2時間5分」・「1日3時間」 */
+    duration: (seconds: number) => {
+      const s = Math.max(0, Math.floor(seconds));
+      if (s < 60) return `${s}秒`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return s % 60 ? `${m}分${s % 60}秒` : `${m}分`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return m % 60 ? `${h}時間${m % 60}分` : `${h}時間`;
+      const d = Math.floor(h / 24);
+      return h % 24 ? `${d}日${h % 24}時間` : `${d}日`;
+    },
+    queue: {
+      title: 'ジョブキューとワーカー',
+      description: 'デプロイの段階ごとにあるジョブキュー（pg-boss）と、ジョブを処理するワーカーです。',
+      tableLabel: 'キューごとのジョブ数',
+      columns: { name: 'キュー', created: '待機', retry: 'リトライ待ち', active: '実行中', completed: '24時間の完了', failed: '24時間の失敗', oldest: '最も長く待っているジョブ' },
+      names: {
+        analyze: '分析', build: 'ビルド', provision: 'インフラ準備', verify: '検証', diagnose: '失敗診断', teardown: 'アプリ削除', 'address-change': 'アドレス変更',
+      } as Record<string, string>,
+      noQueues: 'まだキューがありません。ワーカーの初回起動時に作られます。',
+      activeTitle: '実行中のジョブ',
+      noActive: '今実行中のジョブはありません。',
+      deployment: (id: string) => `デプロイ #${id}`,
+      project: (id: string) => `アプリ #${id}`,
+      running: (time: string) => `${time}経過`,
+      retryCount: (n: number) => `リトライ${n}回目`,
+      workersTitle: 'ワーカー',
+      noWorkers: '直近10分間に応答したワーカーがありません。ジョブが処理されていない可能性があります。',
+      noOnlineWorker: '今応答しているワーカーがありません。ジョブが処理されていない可能性があります。',
+      online: 'オンライン',
+      offline: '応答なし',
+      draining: '終了準備中',
+      drainingHint: '新しいジョブは受け付けず、実行中のジョブだけを終わらせています。',
+      uptime: (time: string) => `稼働 ${time}`,
+      lastSeen: (time: string) => `最終応答 ${time}前`,
+      jobs: (n: number) => `ジョブ ${n}件を処理中`,
+      commit: 'コミット',
+      unknownCommit: 'コミット不明',
+    },
+    server: {
+      title: 'プラットフォームサーバー',
+      description: 'コンソール・API・ワーカーが一緒に動いている EC2 1台です。ワーカーが30秒ごとに計測します。',
+      cpu: 'CPU',
+      memory: 'メモリ',
+      load: 'ロードアベレージ',
+      loadHint: '1分・5分・15分',
+      disk: 'ルートディスク',
+      buildCache: 'Docker ビルドキャッシュ',
+      buildCacheHint: '5分ごとに計測',
+      noBuildCache: 'まだ計測していません',
+      cpuPending: '計測中',
+      trend: '24時間',
+      sparkLabel: (name: string) => `${name}の直近24時間の推移`,
+      empty: 'まだ収集した指標がありません。ワーカーが起動すると30秒ごとに記録します。',
+      measured: (time: string) => `${time}前に計測`,
+      stale: (time: string) => `収集が遅れています — 最後の計測は${time}前です。ワーカーの状態を確認してください。`,
+      warnings: {
+        DISK_HIGH: (percent: number, threshold: number) => `ディスク使用率が${percent}%です（基準 ${threshold}%）。ビルドキャッシュや使っていないイメージを整理してください。`,
+        MEMORY_HIGH: (percent: number, threshold: number) => `メモリ使用率が${percent}%です（基準 ${threshold}%）。ビルドが遅くなったり止まったりする可能性があります。`,
+      },
+    },
+    ai: {
+      title: 'AI 使用量と推定コスト',
+      description: '分析・修正案・失敗診断で使った AI の呼び出しです。',
+      estimateNote: 'コストは呼び出し時にモデルごとの公表単価で計算した推定値のため、実際の請求額とは異なる場合があります。「今日」は韓国時間（KST）0時からです。',
+      today: '今日',
+      last7d: '直近7日間',
+      calls: (n: number) => `${n}回呼び出し`,
+      tokens: (input: string, output: string) => `入力 ${input}・出力 ${output} トークン`,
+      byModel: 'モデル別（直近7日間）',
+      byPurpose: '用途別（直近7日間）',
+      purposes: { analysis_fill: '分析の空欄補完', sqlite_patch: 'SQLite 修正案', diagnosis: '失敗診断', unknown: '区分なし' },
+      columns: { model: 'モデル', purpose: '用途', calls: '呼び出し', input: '入力トークン', output: '出力トークン', cost: '推定コスト', time: '時刻', deployment: 'デプロイ' },
+      recent: '最近の呼び出し',
+      noUsage: '直近7日間に AI の呼び出しはありません。',
+      noRecent: 'まだ AI の呼び出し記録がありません。',
+    },
+    deploys: {
+      title: '自動デプロイ履歴（CD）',
+      description: 'main にマージされると、GitHub Actions がプラットフォームサーバーでデプロイスクリプトを実行します。直近20件です。',
+      empty: 'まだ記録がありません。デプロイスクリプトが記録を残すようになった後のデプロイから、ここに表示されます。',
+      tableLabel: 'プラットフォームのデプロイ履歴',
+      status: { running: '実行中', success: '成功', failed: '失敗', interrupted: '中断' },
+      interruptedHint: '75分経っても終了の記録がありません。デプロイスクリプトが途中で止まった可能性があります。',
+      columns: { status: '結果', commit: 'コミット', duration: '所要時間', disk: 'ディスク（整理前 → 後）', run: 'Actions', started: '開始' },
+      noSubject: '（コミット情報なし）',
+      run: (id: string) => `実行 #${id}`,
+      noRun: '手動実行',
+      diskAfter: (after: string, total: string) => `${after} / ${total}`,
+    },
   },
   /** サーバーのステップログの固定文言 (#147) — キーで選ぶ */
   logLines: logLinesJa,

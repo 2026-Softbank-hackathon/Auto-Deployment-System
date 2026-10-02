@@ -1,9 +1,10 @@
 import { useEffect, useId, useState } from 'react';
-import { changeProjectSubdomain, DeploymentApiError, getProject, STATIC_SITE_PROFILE, type ProjectSummary } from '../../api/deployment-api';
+import { changeProjectSubdomain, getProject, STATIC_SITE_PROFILE, type ProjectSummary } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
 import { Marble } from '../../components/ui/Marble';
 import { elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
-import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
+import { useI18n } from '../../i18n/I18nProvider';
+import { ServerReason } from '../deployment-progress/ServerReason';
 import type { Messages } from '../../i18n/ko';
 import { AddressField } from './AddressField';
 import { PLATFORM_DOMAIN, useSubdomainCheck } from './subdomain';
@@ -89,7 +90,7 @@ export function AddressCard({ projectId, onChanged }: { projectId: string; onCha
   let body;
   if (project === null) {
     body = loadError !== null
-      ? <div className="notice error" role="alert">{serverReasonText(loadError, t, copy.loadError)}</div>
+      ? <div className="notice error" role="alert"><ServerReason error={loadError} fallback={copy.loadError} /></div>
       : <p className="dashboard-status" role="status">{t.projects.loading}</p>;
   } else {
     const currentUrl = safeHttpUrl(project.publicUrl);
@@ -141,9 +142,7 @@ export function AddressCard({ projectId, onChanged }: { projectId: string; onCha
 
       {requestError !== null && <div className="notice error" role="alert">
         <strong>{copy.requestFailed}</strong>{' '}
-        {requestError instanceof DeploymentApiError && requestError.code && copy.errors[requestError.code]
-          ? copy.errors[requestError.code]
-          : serverReasonText(requestError, t, copy.requestFailed)}
+        <ServerReason error={requestError} fallback={copy.requestFailed} known={copy.errors} />
       </div>}
     </>;
   }

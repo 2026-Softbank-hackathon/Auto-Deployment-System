@@ -751,6 +751,6 @@ export async function changeProjectSubdomain(projectId: string, subdomain: strin
     credentials: 'include',
   });
   const project = parseProject(asRecord(await readJson(response), '주소 변경'));
-  if (!project) throw new Error('주소 변경 응답 형식이 올바르지 않습니다.');
+  if (!project) throw new ResponseFormatError('주소 변경 응답 형식이 올바르지 않습니다.');
   return project;
 }

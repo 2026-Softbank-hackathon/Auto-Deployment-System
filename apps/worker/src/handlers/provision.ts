@@ -182,8 +182,18 @@ export async function handleProvision(
 
     const stateKey = terraformStateKey(projectId, environmentId);
     const resourceName = resourceNameFor(projectId, environmentId);
+    // PostgreSQL 추가 모듈 (#278). 이번 IR 에 DB 가 없어도 이 환경에 만든 DB 는 앱 삭제 전까지 지우지 않는다
+    // (수정안을 거절한 새 버전 등으로 DB 와 데이터가 같이 사라지는 것을 막는다).
+    let databaseEnabled = plan.provisioning.variables["database_enabled"] === true;
+    if (databaseEnabled) {
+      await stepLog.line("PostgreSQL(RDS) 추가 모듈 사용 — 처음 만들 때는 DB 생성에 5~10분 걸립니다.");
+    } else if (await databaseProvisionedBefore(deps, projectId, environmentId, deploymentId)) {
+      databaseEnabled = true;
+      await stepLog.line("이 환경에 만든 PostgreSQL(RDS)을 유지합니다 (이번 버전은 DB 를 쓰지 않음).");
+    }
     const terraformVariables = {
       ...plan.provisioning.variables,
+      database_enabled: databaseEnabled,
       app_name: safeContainerName(plan.application.name),
       region: awsConfig.region,
       resource_name: resourceName,
@@ -440,6 +450,33 @@ async function decideStateRefresh(input: {
       : "인프라 입력 변경";
   await input.stepLog.line(`전체 상태 재조회로 plan → apply 를 실행합니다 (${reason}).`);
   return true;
+}
+
+/** 같은 프로젝트 · 환경에서 postgres 리소스가 있는 IR 로 Terraform 을 실행한 적이 있는지 */
+async function databaseProvisionedBefore(
+  deps: WorkerDeps,
+  projectId: number,
+  environmentId: number,
+  deploymentId: number,
+): Promise<boolean> {
+  const result = await deps.pool.query<{ id: number | string }>(
+    `SELECT d.id
+     FROM deployments d
+     JOIN LATERAL (
+       SELECT ir_json FROM ir_versions
+       WHERE deployment_id = d.id
+       ORDER BY id DESC LIMIT 1
+     ) ir ON TRUE
+     WHERE d.project_id = $1 AND d.target_environment_id = $2 AND d.id <> $3
+       AND d.terraform_inputs_hash IS NOT NULL
+       AND EXISTS (
+         SELECT 1 FROM jsonb_each(COALESCE(ir.ir_json -> 'resources', '{}'::jsonb)) resource
+         WHERE resource.value ->> 'type' = 'postgres'
+       )
+     LIMIT 1`,
+    [projectId, environmentId, deploymentId],
+  );
+  return result.rows.length > 0;
 }
 
 async function loadProvisionContext(

@@ -25,7 +25,7 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
 }
 
 resource "aws_iam_role_policy" "read_secrets" {
-  count = length(var.secret_references) > 0 ? 1 : 0
+  count = length(var.secret_references) > 0 || var.database_enabled ? 1 : 0
 
   name_prefix = "${var.resource_name}-secrets-"
   role        = aws_iam_role.task_execution.id
@@ -34,7 +34,7 @@ resource "aws_iam_role_policy" "read_secrets" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
-      Resource = values(var.secret_references)
+      Resource = concat(values(var.secret_references), local.database_secret_arns)
     }]
   })
 }
@@ -66,13 +66,13 @@ resource "aws_ecs_task_definition" "app" {
       protocol      = "tcp"
     }]
     environment = [
-      for name, value in var.environment_variables : {
+      for name, value in merge(var.environment_variables, local.database_environment) : {
         name  = name
         value = value
       }
     ]
     secrets = [
-      for name, value_from in var.secret_references : {
+      for name, value_from in merge(var.secret_references, local.database_secrets) : {
         name      = name
         valueFrom = value_from
       }

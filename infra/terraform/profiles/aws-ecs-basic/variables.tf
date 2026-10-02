@@ -115,6 +115,23 @@ variable "environment_variables" {
   default     = {}
 }
 
+variable "database_enabled" {
+  type        = bool
+  description = "Create the private RDS PostgreSQL add-on and inject its connection (IR resources of type postgres)."
+  default     = false
+}
+
+variable "database_env_name" {
+  type        = string
+  description = "Environment variable that receives the password-less PostgreSQL URL (IR resources.*.connection_env). The password is injected as PGPASSWORD."
+  default     = "DATABASE_URL"
+
+  validation {
+    condition     = can(regex("^[A-Z_][A-Z0-9_]*$", var.database_env_name)) && var.database_env_name != "PGPASSWORD"
+    error_message = "database_env_name must be an upper-case environment variable name other than PGPASSWORD."
+  }
+}
+
 variable "vpc_cidr" {
   type        = string
   description = "CIDR used for the P0 two-AZ public VPC."

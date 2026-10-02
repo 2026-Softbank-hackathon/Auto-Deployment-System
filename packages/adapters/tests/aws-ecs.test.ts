@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IrSchema } from "@camellia/ir-schema";
 import { AdapterError, createDeploymentPlan } from "../src/index.js";
 import { createSimpleHttpIr } from "./fixtures/simple-http-ir.js";
 
@@ -84,5 +85,65 @@ describe("aws-ecs-basic Adapter", () => {
         code: "PROFILE_MISMATCH",
       }),
     );
+  });
+
+  describe("PostgreSQL 추가 모듈 (#278)", () => {
+    function irWith(resources: Record<string, unknown>, env = ["NODE_ENV"]) {
+      const base = createSimpleHttpIr("aws-ecs-basic");
+      return IrSchema.parse({
+        ...base,
+        services: { web: { ...base.services["web"], env } },
+        resources,
+      });
+    }
+
+    it("enables the RDS module without a database by default", () => {
+      const plan = createDeploymentPlan(createSimpleHttpIr("aws-ecs-basic"), "aws-ecs-basic");
+      if (plan.target !== "aws") throw new Error("expected AWS plan");
+
+      expect(plan.provisioning.variables).toMatchObject({ database_enabled: false });
+    });
+
+    it("maps a postgres resource to the module variables and injects its connection env", () => {
+      const plan = createDeploymentPlan(
+        irWith(
+          { db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" } },
+          ["NODE_ENV", "DATABASE_URL"],
+        ),
+        "aws-ecs-basic",
+      );
+      if (plan.target !== "aws") throw new Error("expected AWS plan");
+
+      expect(plan.provisioning.variables).toMatchObject({
+        database_enabled: true,
+        database_env_name: "DATABASE_URL",
+      });
+      expect(plan.service.environmentNames).toEqual(["NODE_ENV"]);
+    });
+
+    it("defaults the connection env to DATABASE_URL for an app that already uses PostgreSQL", () => {
+      const plan = createDeploymentPlan(
+        irWith({ db: { type: "postgres" } }, ["DATABASE_URL", "PORT"]),
+        "aws-ecs-basic",
+      );
+      if (plan.target !== "aws") throw new Error("expected AWS plan");
+
+      expect(plan.provisioning.variables).toMatchObject({
+        database_enabled: true,
+        database_env_name: "DATABASE_URL",
+      });
+      expect(plan.service.environmentNames).toEqual(["PORT"]);
+    });
+
+    it("rejects more than one postgres resource", () => {
+      expect(() =>
+        createDeploymentPlan(
+          irWith({ db: { type: "postgres" }, analytics: { type: "postgres", connection_env: "ANALYTICS_URL" } }),
+          "aws-ecs-basic",
+        ),
+      ).toThrowError(
+        expect.objectContaining<Partial<AdapterError>>({ code: "P0_RESOURCES_UNSUPPORTED" }),
+      );
+    });
   });
 });

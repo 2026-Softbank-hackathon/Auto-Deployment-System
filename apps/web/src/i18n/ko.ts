@@ -360,9 +360,10 @@ export const ko = {
     sceneFailed: '코로가 레일 밖으로 떨어졌다',
     sceneStopped: '코로가 출발대에서 멈춰 있다',
     workNote: '작업 노트',
+    tabsLabel: '배포 화면 메뉴',
+    tabs: { progress: '진행', failure: '실패 원인', logs: '로그', analysis: '분석', attention: '(확인 필요)' },
+    viewFailure: '실패 원인 보기',
     noNote: '아직 기록된 작업이 없어요.',
-    expand: '펼치기',
-    collapse: '접기',
     failedCause: '실패 원인',
     failureReasons: {
       awsKey: 'AWS 키로 로그인하지 못했어요. 키가 맞는지, 만료되지 않았는지 확인해 주세요.',

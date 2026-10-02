@@ -362,9 +362,10 @@ export const ja: Messages = {
     sceneFailed: 'コロがレールから落ちてしまった',
     sceneStopped: 'コロがスタート台で止まっている',
     workNote: '作業ノート',
+    tabsLabel: 'デプロイ画面のメニュー',
+    tabs: { progress: '進行', failure: '失敗の原因', logs: 'ログ', analysis: '分析', attention: '(要確認)' },
+    viewFailure: '失敗の原因を見る',
     noNote: 'まだ作業の記録はありません。',
-    expand: '開く',
-    collapse: '閉じる',
     failedCause: '失敗の原因',
     failureReasons: {
       awsKey: 'AWSキーでログインできませんでした。キーが正しいか、期限切れでないか確認してください。',

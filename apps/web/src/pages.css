@@ -545,3 +545,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .failure-detail__copy:hover { border-color: var(--koro); color: var(--koro-text); }
 .failure-detail__copy:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
 .failure-detail__copy.is-copied { color: var(--moss-text); border-color: var(--moss-text); }
+
+/* 배포 화면 탭 */
+.run-tabs { align-self: stretch; justify-content: center; }
+.tabs__dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--brick-text); vertical-align: middle; }
+.work-note__logs { border-top: var(--border); padding-top: 16px; }

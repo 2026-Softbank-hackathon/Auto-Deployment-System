@@ -15,6 +15,8 @@ import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDe
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
 import { failureKind, fixableByAwsKey, parseFailure } from './failure-reason';
+import { followAppLink, type Navigate } from '../../app/navigation';
+import type { DeploymentTab } from '../../app/routes';
 import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { CancelDeployment } from './CancelDeployment';
@@ -94,15 +96,14 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
   </ol>;
 }
 
-interface DeploymentProgressProps { deploymentId: string; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
+interface DeploymentProgressProps { deploymentId: string; /** 주소가 고른 탭 */ tab: DeploymentTab; onNavigate: Navigate; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
 
-export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment, onFixSettings, onRedeployed }: DeploymentProgressProps) {
+export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded, onNewDeployment, onFixSettings, onRedeployed }: DeploymentProgressProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [latestLine, setLatestLine] = useState<string | null>(null);
   const [logs, setLogs] = useState<StepLog[] | null>(null);
-  const [logsOpen, setLogsOpen] = useState(false);
   const [error, setError] = useState<ErrorState>(null);
   const [loading, setLoading] = useState(true);
 
@@ -235,11 +236,10 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
     setLogs(results.flatMap((result) => (result.status === 'fulfilled' && result.value.text !== null ? [{ step: result.value.step, text: result.value.text }] : [])));
   }
 
-  function toggleLogs() {
-    const next = !logsOpen;
-    setLogsOpen(next);
-    if (next && logs === null) void loadLogs();
-  }
+
+  // 로그 탭을 처음 열 때 전체 로그를 읽는다. 그 뒤로는 실시간 이벤트가 줄을 덧붙인다.
+  const logsWanted = tab === 'logs' && logs === null && !loading && status !== null;
+  useEffect(() => { if (logsWanted) void loadLogs(); });
 
   if (loading) return <section className="panel"><h2>{t.progress.heading}</h2><p>{t.progress.checking}</p></section>;
   // 상태를 한 번도 받지 못했으면(없는 배포 · 서버 오류) 진행 중인 것처럼 그리지 않는다.
@@ -251,6 +251,19 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
       {onNewDeployment && <Keycap variant="ghost" onClick={onNewDeployment}>{t.run.newDeploy}</Keycap>}
     </div>
   </section>;
+
+  // 탭: 주소에 탭이 없으면 실패한 배포는 실패 원인, 그 밖은 진행을 보여 준다. 실패 원인 탭은 실패했을 때만 있다.
+  const failed = view.outcome === 'failed';
+  const shownTab: Exclude<DeploymentTab, 'auto'> = tab === 'auto' || (tab === 'failure' && !failed) ? (failed ? 'failure' : 'progress') : tab;
+  const base = `/deployments/${encodeURIComponent(deploymentId)}`;
+  const tabs: Array<{ tab: Exclude<DeploymentTab, 'auto'>; label: string }> = [
+    { tab: 'progress', label: t.run.tabs.progress },
+    ...(failed ? [{ tab: 'failure' as const, label: t.run.tabs.failure }] : []),
+    { tab: 'logs', label: t.run.tabs.logs },
+    { tab: 'analysis', label: t.run.tabs.analysis },
+  ];
+  // 진행 탭에 사용자가 해야 할 일이 있는데 다른 탭을 보고 있으면 탭에 점으로 알린다.
+  const needsAttention = waitingForEnv || approvalError !== null;
 
   return <>
     <section className={`run-stage is-${view.outcome}`} aria-labelledby="run-title">
@@ -273,22 +286,40 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
 
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
-      {waitingForEnv && projectId && review && <PreDeployPanel deploymentId={deploymentId} projectId={projectId} review={review}
-        onDone={() => { setReview(null); clearReview(deploymentId); void approveGate('target'); }} />}
+      <nav className="tabs run-tabs" aria-label={t.run.tabsLabel}>
+        {tabs.map((item) => <a key={item.tab} href={`${base}/${item.tab}`} className="tabs__tab" aria-current={item.tab === shownTab ? 'page' : undefined}
+          onClick={(event) => followAppLink(event, onNavigate)}>
+          {item.label}
+          {item.tab === 'progress' && needsAttention && shownTab !== 'progress' && <><span className="tabs__dot" aria-hidden="true" /><span className="visually-hidden"> {t.run.tabs.attention}</span></>}
+        </a>)}
+      </nav>
 
-      {approvalError !== null && <div className="notice error run-failure" role="alert">
-        <strong>{t.run.approveFailed}</strong>
-        <p>{approvalError.cause instanceof DeploymentApiError && approvalError.cause.code === 'DEPLOYMENT_LOCKED' ? t.run.approveLocked : errorMessage(approvalError.cause, t, t.run.approveFailed)}</p>
-        <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
-      </div>}
+      {shownTab === 'progress' && <>
+        {waitingForEnv && projectId && review && <PreDeployPanel deploymentId={deploymentId} projectId={projectId} review={review}
+          onDone={() => { setReview(null); clearReview(deploymentId); void approveGate('target'); }} />}
 
-      <figure className="run-scene"><DeployScene view={view} /></figure>
+        {approvalError !== null && <div className="notice error run-failure" role="alert">
+          <strong>{t.run.approveFailed}</strong>
+          <p>{approvalError.cause instanceof DeploymentApiError && approvalError.cause.code === 'DEPLOYMENT_LOCKED' ? t.run.approveLocked : errorMessage(approvalError.cause, t, t.run.approveFailed)}</p>
+          <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
+        </div>}
 
-      <HealthProgress deploymentId={deploymentId} status={currentStatus} />
+        <figure className="run-scene"><DeployScene view={view} /></figure>
 
-      {view.outcome === 'active' && <CancelDeployment deploymentId={deploymentId} onCancelled={() => void refresh()} />}
+        <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 
-      {view.outcome === 'failed' && <div className="notice error run-failure" role="alert">
+        {view.outcome === 'active' && <CancelDeployment deploymentId={deploymentId} onCancelled={() => void refresh()} />}
+
+        {failed && <a className="setup-summary__link" href={`${base}/failure`} onClick={(event) => followAppLink(event, onNavigate)}>{t.run.viewFailure}</a>}
+
+        {view.outcome === 'success' && <div className="run-success">
+          {publicUrl && <a className="run-success__url" href={publicUrl} target="_blank" rel="noreferrer">{hostOf(publicUrl)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
+          {publicUrl && <Keycap href={publicUrl} target="_blank" rel="noreferrer">{t.progress.openApp}</Keycap>}
+          {onSucceeded && <Keycap variant="secondary" onClick={onSucceeded}>{t.run.viewResult}</Keycap>}
+        </div>}
+      </>}
+
+      {shownTab === 'failure' && <div className="notice error run-failure" role="alert">
         <strong>{t.run.failedCause}</strong>
         {/* 분류하지 못한 코드도 코드만 덩그러니 보이지 않게, 일반 안내 문구 아래에 작게 둔다. */}
         <p>{failure ? (failureParts.detail ? t.run.failureReasonsWithDetail[failure] : undefined) ?? t.run.failureReasons[failure] : failureMessage ? t.run.failureUnknown : t.progress.failedCopy}</p>
@@ -301,29 +332,23 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
           {onRedeployed && <RedeployButton variant={fixableByAwsKey(failure) ? 'secondary' : 'primary'} deploymentId={deploymentId} onStarted={onRedeployed} onUploadAgain={onNewDeployment} />}
         </div>
       </div>}
-      {view.outcome === 'success' && <div className="run-success">
-        {publicUrl && <a className="run-success__url" href={publicUrl} target="_blank" rel="noreferrer">{hostOf(publicUrl)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
-        {publicUrl && <Keycap href={publicUrl} target="_blank" rel="noreferrer">{t.progress.openApp}</Keycap>}
-        {onSucceeded && <Keycap variant="secondary" onClick={onSucceeded}>{t.run.viewResult}</Keycap>}
-      </div>}
     </section>
 
-    <section className="work-note" aria-label={t.run.workNote}>
+    {shownTab === 'logs' && <section className="work-note" aria-label={t.run.workNote}>
       <div className="work-note__bar">
         <h2>{t.run.workNote}</h2>
         <p className="work-note__line">{latestLine ?? t.run.noNote}</p>
         <div className="work-note__actions">
-          <Keycap variant="ghost" onClick={() => void refresh()}>{t.progress.refresh}</Keycap>
-          <Keycap variant="secondary" aria-expanded={logsOpen} aria-controls="work-note-logs" onClick={toggleLogs}>{logsOpen ? t.run.collapse : t.run.expand}</Keycap>
+          <Keycap variant="ghost" onClick={() => { void refresh(); void loadLogs(); }}>{t.progress.refresh}</Keycap>
         </div>
       </div>
-      {logsOpen && <div id="work-note-logs" className="work-note__logs">
+      <div className="work-note__logs">
         {logs === null ? <p>{t.progress.stepLoading}</p>
           : logs.length ? logs.map((entry) => <div key={entry.step} className="step-log"><strong>{t.progress.logSteps[entry.step]}</strong><pre>{entry.text}</pre></div>)
             : <p>{t.progress.noLogs}</p>}
-      </div>}
-    </section>
+      </div>
+    </section>}
 
-    <DeploymentAnalysis deploymentId={deploymentId} deploymentStatus={currentStatus} />
+    {shownTab === 'analysis' && <DeploymentAnalysis deploymentId={deploymentId} deploymentStatus={currentStatus} />}
   </>;
 }

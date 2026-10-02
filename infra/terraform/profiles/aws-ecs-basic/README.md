@@ -6,7 +6,8 @@ This module provisions the P0 AWS runtime: a two-AZ VPC with public subnets, an 
 
 - Two public subnets and an Internet Gateway; no NAT Gateway is created.
 - Fargate tasks receive public IPs but accept inbound application traffic only from the ALB security group.
-- Terraform waits for the ECS service to reach steady state before returning the ALB origin to Verify.
+- Terraform does not wait for ECS steady state (`wait_for_steady_state = false`). The worker waits for the rollout itself after apply: it polls the ECS service until the new deployment completes or its tasks are healthy in the target group, logs progress and stopped-task reasons, and only then starts Verify.
+- Fast rollout settings: target group health check every 5s (timeout 4s, healthy 2, unhealthy 3), `deregistration_delay = 5`, and a 10s `health_check_grace_period_seconds`. An app must answer its health check within roughly 25s of starting, or ECS replaces the task.
 - The ALB accepts HTTP on port 80. Public HTTPS is expected at the platform Cloudflare edge; `tls_enabled` is retained as an Adapter contract flag and does not create an ALB certificate.
 - ECS deployment circuit breaker rollback is enabled. CloudWatch logs are retained for seven days.
 - `environment_variables` carries non-sensitive project env vars into the ECS task definition. Keep sensitive values in `secret_references`, which accepts pre-existing Secrets Manager ARNs only; it never accepts values. Connecting the project Secret Store to AWS-side secret provisioning is a separate integration and is not implemented by this module.

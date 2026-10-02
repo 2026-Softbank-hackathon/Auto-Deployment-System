@@ -171,7 +171,9 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .stage-chip.is-skipped { background: transparent; border-style: dotted; border-color: var(--line); color: var(--ink-soft); opacity: .7; }
 .stage-chip.is-pending { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--ink-soft); }
 
-.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 44px auto 0; }
+.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 12px auto 0; }
+/* 풍선을 머리에 붙일 때는 장면 위로 풍선이 올라올 자리를 비워 둔다 */
+.run-scene.is-attached { margin-top: 44px; }
 /* 코로의 생각 풍선. 코로 머리 위 한 점(--koro-x, --koro-y)에 붙어서 코로와 같이 움직인다. */
 .koro-think { position: absolute; left: var(--koro-x); top: var(--koro-y); width: 0; height: 0; pointer-events: none; transition: left var(--dur-scene) var(--ease-roll), top var(--dur-scene) var(--ease-roll); }
 .koro-think__dot { position: absolute; border-radius: 50%; background: var(--surface); border: 2px solid var(--koro); }
@@ -181,18 +183,14 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .koro-think.is-right .koro-think__dot:nth-child(2) { left: 10px; }
 .koro-think.is-left .koro-think__dot:nth-child(1) { right: 2px; }
 .koro-think.is-left .koro-think__dot:nth-child(2) { right: 10px; }
-.koro-think__bubble { position: absolute; bottom: 28px; margin: 0; width: max-content; max-width: 230px; padding: 9px 16px; font-size: 14px; line-height: 1.45; text-align: center; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: 22px; box-shadow: 0 3px 0 var(--koro-tint); }
+.koro-think__bubble { position: absolute; bottom: 28px; margin: 0; width: max-content; max-width: 220px; padding: 9px 16px; font-size: 14px; line-height: 1.45; text-align: center; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: 22px; box-shadow: 0 3px 0 var(--koro-tint); }
 .koro-think.is-right .koro-think__bubble { left: -22px; }
 .koro-think.is-left .koro-think__bubble { right: -22px; }
-/* 좁은 화면에서는 장면이 작아 풍선이 장면 위로 올라가므로, 풍선이 있을 때 위쪽 자리를 비워 둔다 */
-@media (max-width: 719px) {
-  .run-scene { margin-top: 56px; }
-  .koro-think.is-near-edge .koro-think__dot:nth-child(1) { left: auto; right: 2px; }
-  .koro-think.is-near-edge .koro-think__dot:nth-child(2) { left: auto; right: 10px; }
-  .koro-think.is-near-edge .koro-think__bubble { left: auto; right: -22px; }
-  .koro-think__bubble { max-width: 180px; padding: 6px 11px; font-size: 12px; border-radius: 16px; bottom: 22px; }
-  .koro-think__dot:nth-child(1) { width: 6px; height: 6px; }
-  .koro-think__dot:nth-child(2) { width: 10px; height: 10px; bottom: 9px; }
+/* 장면이 작게 그려질 때(좁은 화면)는 풍선이 그림에 비해 너무 커서 다른 그림을 덮는다.
+   그때는 머리에 붙이지 않고 장면 바로 아래에 한 줄로 둔다 (is-caption — 진행 화면이 장면의 실제 축척을 재서 붙인다). */
+.koro-think.is-caption { position: static; width: auto; height: auto; display: flex; justify-content: center; margin-top: 10px; }
+.koro-think.is-caption .koro-think__dot { display: none; }
+.koro-think.is-caption .koro-think__bubble { position: static; max-width: 100%; padding: 7px 14px; font-size: 13px; border-radius: 16px; box-shadow: none; }
 }
 .koro-prop__line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .koro-prop__line--thick { stroke-width: 4.5; }

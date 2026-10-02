@@ -48,12 +48,13 @@ export function sceneTarget(profile: string | null): SceneTarget {
 type Spot = readonly [number, number];
 /** 비행기의 바닥 중심 좌표: 조립하는 곳(땅) → 날아가는 중(하늘). 집과 코로는 비행기 등(PLANE_TOP 높이)에 탄다 */
 const PLANE_GROUND: Spot = [800, GROUND];
-const PLANE_AIR: Spot = [900, 340];
+// 날아가는 자리는 장면 가운데 왼쪽이다 — 코로의 생각 풍선이 구름 위 세계와 겹치지 않게 떨어뜨려 놓았다.
+const PLANE_AIR: Spot = [560, 350];
 const PLANE_TOP = 64;
 /** 단계별 코로 중심 좌표 (0 설계도 · 1 집 짓는 곳 · 2 탈것 준비 · 3 이동 중 · 4 도착 · 5 완료) */
-const skySpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [640, KORO_Y], [PLANE_AIR[0] + 55, PLANE_AIR[1] - PLANE_TOP - KORO_SIZE / 2], [950, 114], [950, 114]];
+const skySpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [640, KORO_Y], [PLANE_AIR[0] + 55, PLANE_AIR[1] - PLANE_TOP - KORO_SIZE / 2], [950, 114], [950, 114]];
 // 온프레미스: 집을 지은 뒤에는 에이전트 로봇이 알아서 옮긴다. 코로는 집 짓는 곳에서 넘겨주고 지켜보다가, 검증 때 서버 옆으로 간다.
-const groundSpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [415, KORO_Y], [415, KORO_Y], [880, KORO_Y], [880, KORO_Y]];
+const groundSpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [415, KORO_Y], [415, KORO_Y], [880, KORO_Y], [880, KORO_Y]];
 /** 에이전트 로봇의 바닥 중심: 서버 옆 대기 자리 → 집 옆(넘겨받기) → 집을 이고 가는 중 */
 const ROBOT_DOCK: Spot = [950, GROUND];
 const ROBOT_PICKUP: Spot = [600, GROUND];
@@ -101,7 +102,8 @@ export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const
  */
 export function sceneBox(target: SceneTarget, story: DeployStory | null = null): { left: number; top: number; width: number; height: number } {
   const sky = target !== 'onprem' || (story?.prev != null && story.prev.target === 'aws');
-  const left = !story?.reused ? 0 : isMoving(story) ? 580 : 360;
+  // 같은 환경 재배포 · 롤백은 창고 왼쪽에 코로의 생각 풍선이 들어갈 자리를 남긴다.
+  const left = !story?.reused ? 0 : isMoving(story) ? 580 : 190;
   return { left, width: SCENE_SIZE.width - left, ...(sky ? { top: 0, height: SCENE_SIZE.height } : { top: 190, height: SCENE_SIZE.height - 190 }) };
 }
 
@@ -233,16 +235,17 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
         <rect className="jr-sky__tint" x={box.left} y={box.top - 70} width={box.width} height={GROUND - box.top + 70} rx="18" />
         <g className="jr-sky__night">
           <path className="jr-sky__moon" d="M250 70 a26 26 0 1 0 26 34 a20 20 0 0 1 -26 -34 z" />
-          {[[420, 60], [690, 40], [820, 120], [330, 170], [560, 150], [1120, 60], [760, 230]].map(([x, y], index) => <circle key={x} className="jr-sky__star" cx={x} cy={y} r={index % 2 ? 2.5 : 3.5} />)}
+          {/* 별과 흘러가는 것들은 비행기 · 생각 풍선이 있는 가운데를 피해서 둔다 (위쪽 띠와 양옆) */}
+          {[[420, 50], [690, 30], [1000, 80], [330, 170], [250, 230], [1120, 50], [400, 250]].map(([x, y], index) => <circle key={x} className="jr-sky__star" cx={x} cy={y} r={index % 2 ? 2.5 : 3.5} />)}
         </g>
         {traveling && <g className="jr-passing">
-          {[[60, 0, 16], [150, 5, 22], [240, 11, 19], [110, 15, 26]].map(([y, delay, duration]) => <path key={y} className="jr-pass jr-cloudlet"
+          {[[-34, 0, 16], [28, 5, 22], [-10, 11, 19], [52, 15, 26]].map(([y, delay, duration]) => <path key={y} className="jr-pass jr-cloudlet"
             style={{ '--y': `${y}px`, '--delay': `${delay}s`, '--duration': `${duration}s` } as CSSProperties}
             d="M0 28 h60 a14 14 0 0 0 0 -28 a20 20 0 0 0 -38 -6 a16 16 0 0 0 -22 34 z" />)}
-          <g className="jr-pass" style={{ '--y': '190px', '--delay': '7s', '--duration': '13s' } as CSSProperties}>
+          <g className="jr-pass" style={{ '--y': '66px', '--delay': '7s', '--duration': '13s' } as CSSProperties}>
             <path className="jr-bird" d="M0 8 q8 -10 16 0 q8 -10 16 0" /><path className="jr-bird" d="M30 26 q7 -9 14 0 q7 -9 14 0" /><path className="jr-bird" d="M-18 30 q6 -8 12 0 q6 -8 12 0" />
           </g>
-          <g className="jr-pass" style={{ '--y': '70px', '--delay': '24s', '--duration': '34s' } as CSSProperties}>
+          <g className="jr-pass" style={{ '--y': '-24px', '--delay': '24s', '--duration': '34s' } as CSSProperties}>
             <ellipse className="jr-hotair" cx="24" cy="24" rx="24" ry="28" />
             <path className="jr-line" d="M8 46 L16 62 M40 46 L32 62" /><rect className="jr-paper" x="15" y="62" width="18" height="12" rx="2" />
           </g>
@@ -282,11 +285,11 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 0 · 설계도 — 올린 소스(ZIP)를 읽어 배포 명세(IR)를 그린다 */}
-    {!reused && <g className="jr-zip">
+    {!reused && <g className="jr-zip" transform="translate(-30 0)">
       <rect className="jr-paper" x="34" y="408" width="46" height="32" rx="4" />
       <text className="scene-zip" x="57" y="429" textAnchor="middle">ZIP</text>
     </g>}
-    {!reused && <g className={`jr-easel ${working(0) ? 'is-working' : reached(1) ? 'is-done' : ''}`}>
+    {!reused && <g transform="translate(-50 0)" className={`jr-easel ${working(0) ? 'is-working' : reached(1) ? 'is-done' : ''}`}>
       <path className="jr-line" d="M122 372 L106 440 M208 372 L224 440" />
       <rect className="jr-paper" x="95" y="270" width="140" height="102" rx="6" />
       <text className="jr-board-title" x="107" y="290">IR</text>

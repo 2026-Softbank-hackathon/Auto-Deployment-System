@@ -359,7 +359,8 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
     };
   }
 
-  it("succeeded 전이 + env_lock DELETE + SSE state_changed 알림", async () => {
+  it("succeeded 전이 시 직전 On-Prem만 15분 standby로 두고 더 오래된 런타임은 즉시 정리한다", async () => {
+    const startedAt = Date.now();
     const harness = makeTxnHarness("verifying", [31, 32]);
     const bossSend = vi.fn(async () => "job");
     const notify = vi.fn(async () => {});
@@ -389,10 +390,12 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
       [31, "superseded"],
       [32, "superseded"],
     ]);
-    for (const cleanup of cleanupJobs) {
-      expect(cleanup.params[2]).toBeInstanceOf(Date);
-      expect((cleanup.params[2] as Date).getTime() - Date.now()).toBeGreaterThan(14 * 60 * 1000);
-    }
+    const standbyAvailableAt = cleanupJobs[0]?.params[2] as Date;
+    const obsoleteAvailableAt = cleanupJobs[1]?.params[2] as Date;
+    expect(standbyAvailableAt).toBeInstanceOf(Date);
+    expect(standbyAvailableAt.getTime() - startedAt).toBeGreaterThan(14 * 60 * 1000);
+    expect(obsoleteAvailableAt).toBeInstanceOf(Date);
+    expect(obsoleteAvailableAt.getTime() - startedAt).toBeLessThan(1_000);
   });
 
   it("failed 전이 + boss diagnose 큐잉 + env_lock DELETE + SSE 알림", async () => {

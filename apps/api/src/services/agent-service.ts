@@ -164,13 +164,25 @@ export class AgentService {
     );
     if (runtimes.length === 0) return [];
     const deploymentIds = runtimes.map((runtime) => runtime.deploymentId);
+    // cleanup row가 없으면 active 후보, 아직 한 번도 실행되지 않은 미래 cleanup이면 standby다.
+    // cleanup 시각 도달·claim·재시도 이후에는 desired에서 제외해 Agent 재연결 때도 정리한다.
     const desired = await this.pool.query<{ id: number | string }>(
-      `SELECT id
-       FROM deployments
-       WHERE target_environment_id = $1
-         AND id = ANY($2::bigint[])
-         AND status IN ('deploying', 'verifying', 'rollback', 'succeeded')
-       ORDER BY id`,
+      `SELECT deployment.id
+       FROM deployments AS deployment
+       LEFT JOIN onprem_agent_cleanup_jobs AS cleanup
+         ON cleanup.deployment_id = deployment.id
+       WHERE deployment.target_environment_id = $1
+         AND deployment.id = ANY($2::bigint[])
+         AND deployment.status IN ('deploying', 'verifying', 'rollback', 'succeeded')
+         AND (
+           cleanup.deployment_id IS NULL
+           OR (
+             cleanup.status = 'pending'
+             AND cleanup.attempt = 0
+             AND cleanup.available_at > NOW()
+           )
+         )
+       ORDER BY deployment.id`,
       [environmentId, deploymentIds],
     );
     return desired.rows.map((row) => String(row.id));

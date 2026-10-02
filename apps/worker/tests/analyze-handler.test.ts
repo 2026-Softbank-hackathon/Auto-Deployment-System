@@ -506,6 +506,83 @@ describe("handleAnalyze", () => {
       "ANALYZE_DEPLOYMENT_NOT_FOUND",
     );
   });
+
+  describe("IR 기반 프로필 다시 고르기 (#273)", () => {
+    const staticIr = {
+      metadata: { name: "site", version: "1.0.0" },
+      services: { site: { type: "static", static: { output_dir: "." } } },
+      deploy: { profile: "aws-ecs-basic" },
+    };
+
+    function makeProfilePool(targetProfile: string, cachedIr: unknown = null) {
+      const pool = makeMockPool("received");
+      const profileUpdates: unknown[][] = [];
+      pool.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+        if (sql.includes("SELECT status FROM deployments")) return { rows: [{ status: "received" }] };
+        if (sql.includes("SELECT target_profile")) return { rows: [{ target_profile: targetProfile }] };
+        if (sql.includes("SET target_profile")) {
+          profileUpdates.push(params ?? []);
+          return { rows: [] };
+        }
+        if (cachedIr && sql.includes("FROM source_versions sv")) {
+          return {
+            rows: [{
+              source_version_id: 5, services_json: [], resources_json: [], warnings_json: [],
+              unresolved_json: [], ir_valid: true, ir_errors_json: null, ir_json: cachedIr,
+            }],
+          };
+        }
+        if (sql.includes("INSERT INTO ir_versions")) {
+          pool.insertedRows.push({ table: "ir_versions", params: params ?? [] });
+        }
+        return { rows: [] };
+      });
+      return { pool, profileUpdates };
+    }
+
+    function savedIrProfile(pool: ReturnType<typeof makeMockPool>): unknown {
+      const row = pool.insertedRows.find((r) => r.table === "ir_versions");
+      return (JSON.parse(String(row?.params[1])) as { deploy: { profile: string } }).deploy.profile;
+    }
+
+    it("AWS + 정적 사이트 IR 이면 배포 프로필을 aws-static-basic 으로 바꾸고 IR 에도 반영한다", async () => {
+      const { pool, profileUpdates } = makeProfilePool("aws-ecs-basic");
+      const { deps, storage } = makeDeps(pool);
+      vi.mocked(analyzeWithAI).mockResolvedValue(
+        makeAnalysisResult({ ai: { ir_after: structuredClone(staticIr), ir_valid_after: true, still_unresolved: [], skipped: false } }) as any,
+      );
+
+      await handleAnalyze(makeJob(), deps);
+
+      expect(profileUpdates).toEqual([["aws-static-basic", 42]]);
+      expect(savedIrProfile(pool)).toBe("aws-static-basic");
+      const log = storage.files.get("logs/deployments/42/analyze.log")?.toString("utf8") ?? "";
+      expect(log).toContain("aws-static-basic");
+    });
+
+    it("온프레미스는 정적 사이트도 컨테이너 프로필 그대로", async () => {
+      const { pool, profileUpdates } = makeProfilePool("onprem-docker-basic");
+      const { deps } = makeDeps(pool);
+      vi.mocked(analyzeWithAI).mockResolvedValue(
+        makeAnalysisResult({ ai: { ir_after: structuredClone(staticIr), ir_valid_after: true, still_unresolved: [], skipped: false } }) as any,
+      );
+
+      await handleAnalyze(makeJob(), deps);
+
+      expect(profileUpdates).toEqual([]);
+      expect(savedIrProfile(pool)).toBe("onprem-docker-basic");
+    });
+
+    it("분석 캐시를 재사용할 때도 IR 로 프로필을 다시 고른다", async () => {
+      const { pool, profileUpdates } = makeProfilePool("aws-ecs-basic", structuredClone(staticIr));
+      const { deps } = makeDeps(pool);
+
+      await handleAnalyze(makeJob(), deps);
+
+      expect(profileUpdates).toEqual([["aws-static-basic", 42]]);
+      expect(savedIrProfile(pool)).toBe("aws-static-basic");
+    });
+  });
 });
 
 describe("handleAnalyze — 서버리스 배포 형태 (#282)", () => {

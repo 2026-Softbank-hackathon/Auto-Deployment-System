@@ -402,6 +402,32 @@ describe("DeploymentService.redeploy", () => {
     expect(sourceIr.deploy.profile).toBe("onprem-docker-basic");
   });
 
+  it("정적 사이트를 온프레미스 → AWS 전환 — 원본 IR 로 aws-static-basic 을 고른다 (#273)", async () => {
+    setupSource({
+      target_profile: "onprem-docker-basic",
+      target_environment_id: "20",
+      registry_environment_id: "10",
+    });
+    const sourceIr = {
+      metadata: { name: "site", version: "1.0.0" },
+      services: { site: { type: "static", port: 8080, static: { output_dir: "." } } },
+      deploy: { profile: "onprem-docker-basic" },
+    };
+    pool.on(/FROM ir_versions/, () => ({ rows: [{ id: 1, ir_json: sourceIr, source: "analyzer" }] }));
+    setupSourceVersion();
+    setupNoLock();
+    setupTransaction();
+    setupEnvironments([
+      { id: 10, type: "aws", project_id: 1, is_default: true },
+      { id: 20, type: "onprem", project_id: 1, is_default: true },
+    ]);
+
+    await svc.redeploy(42, { targetEnvironmentId: 10 });
+
+    expect(insertedDeploymentParams()).toEqual([42, "aws-static-basic", "10", "10"]);
+    expect(insertedIr().deploy.profile).toBe("aws-static-basic");
+  });
+
   it("온프레미스 전환 시 원본 Registry 가 없으면 프로젝트 기본 AWS 환경 사용", async () => {
     setupSource({
       target_profile: "onprem-docker-basic",

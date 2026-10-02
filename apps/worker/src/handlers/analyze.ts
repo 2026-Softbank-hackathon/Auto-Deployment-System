@@ -21,7 +21,7 @@ import * as path from "node:path";
 
 import { createHash } from "node:crypto";
 import { stage } from "@camellia/analyzer/stager";
-import { awsLambdaBasic, resolveProfile } from "@camellia/profiles";
+import { awsLambdaBasic, awsStaticBasic } from "@camellia/profiles";
 import {
   analyzeWithAI,
   applyPatch,
@@ -40,6 +40,7 @@ import type {
 import type { WorkerDeps } from "../deps.js";
 import { transitionTo } from "../state-machine.js";
 import { createStepLogger } from "../step-log.js";
+import { syncTargetProfile, withDeployProfile } from "../profile-sync.js";
 
 export type AnalyzeJobPayload = {
   deployment_id: number;
@@ -56,8 +57,11 @@ async function writeTmpFile(buf: Buffer, filename: string): Promise<string> {
 }
 
 /**
- * 이번 배포의 target_profile. 서버리스(aws-lambda-basic)를 골랐지만 IR 을 보니 Lambda 로 띄울 수 없는 앱
- * (공개 HTTP 서비스 하나가 아니거나 DB 같은 리소스가 있음)이면 컨테이너 프로필로 되돌리고 이유를 남긴다 (#282).
+ * 이번 배포의 target_profile 을 IR 에 맞게 다시 고른다 (#273, 9/30 합의: 사용자는 AWS / 온프레미스만 고르고
+ * 프로필은 시스템이 고른다). 같은 연결 종류 · 배포 형태 안에서 profiles 카탈로그 규칙(resolveProfileAfterAnalysis)으로:
+ * - AWS + 정적 사이트 → aws-static-basic (서버 없이 S3)
+ * - 서버리스(aws-lambda-basic)를 골랐지만 Lambda 로 띄울 수 없는 앱(공개 HTTP 서비스 하나가 아니거나
+ *   DB 같은 리소스가 있음)이면 컨테이너 프로필로 되돌리고 이유를 남긴다 (#282)
  */
 async function settleTargetProfile(
   pool: WorkerDeps["pool"],
@@ -69,18 +73,19 @@ async function settleTargetProfile(
     "SELECT target_profile FROM deployments WHERE id = $1",
     [deploymentId]
   );
-  const targetProfile = result.rows[0]?.target_profile ?? null;
-  if (targetProfile !== awsLambdaBasic.id) return targetProfile;
-  const resolved = resolveProfile("aws", ir, { mode: "serverless" });
-  if (resolved === targetProfile) return targetProfile;
-  await pool.query(
-    "UPDATE deployments SET target_profile = $1, updated_at = NOW() WHERE id = $2",
-    [resolved, deploymentId]
-  );
-  await stepLog.line(
-    "이 앱은 서버리스(Lambda)로 실행할 수 없어 컨테이너로 배포합니다 — 공개 HTTP 서비스 하나이고 DB 같은 추가 리소스가 없어야 합니다."
-  );
-  return resolved;
+  const current = result.rows[0]?.target_profile ?? null;
+  const { profile, changed } = await syncTargetProfile(pool, deploymentId, current, ir);
+  if (!changed || !profile) return profile;
+  if (profile === awsStaticBasic.id) {
+    await stepLog.line("정적 사이트라 AWS 에서는 서버 없이 S3 웹사이트로 배포합니다 (aws-static-basic).");
+  } else if (current === awsLambdaBasic.id) {
+    await stepLog.line(
+      "이 앱은 서버리스(Lambda)로 실행할 수 없어 컨테이너로 배포합니다 — 공개 HTTP 서비스 하나이고 DB 같은 추가 리소스가 없어야 합니다."
+    );
+  } else {
+    await stepLog.line(`분석 결과에 맞춰 배포 프로필을 ${profile} 로 정했습니다.`);
+  }
+  return profile;
 }
 
 /** ANL-08: 같은 sha256 으로 이미 완료된 다른 배포의 분석 결과가 있으면 반환. */
@@ -192,14 +197,11 @@ export async function handleAnalyze(
       ]
     );
 
-    // ir_versions 복사 — 이번 배포의 target_profile 로 deploy.profile 덮어쓰기
+    // ir_versions 복사 — IR 로 이번 배포의 프로필을 다시 골라(#273) deploy.profile 덮어쓰기
     let irJson = cached.ir_json as Record<string, unknown> | null;
     if (irJson) {
-      const targetProfile = await settleTargetProfile(pool, deployment_id, irJson, stepLog);
-      if (targetProfile) {
-        const deploy = (irJson["deploy"] ?? {}) as Record<string, unknown>;
-        irJson = { ...irJson, deploy: { ...deploy, profile: targetProfile } };
-      }
+      const profile = await settleTargetProfile(pool, deployment_id, irJson, stepLog);
+      if (profile) irJson = withDeployProfile(irJson, profile);
       await pool.query(
         `INSERT INTO ir_versions(deployment_id, ir_json, source) VALUES ($1,$2,$3)`,
         [deployment_id, JSON.stringify(irJson), "analyzer_cache"]
@@ -302,13 +304,11 @@ export async function handleAnalyze(
     );
 
     // 7. ir_versions INSERT
-    // target_profile을 IR deploy.profile에 반영 (분석기 기본값 "aws-ecs-basic" 덮어쓰기)
-    const irJson = analysis.ai?.ir_after ?? analysis.ir_draft;
-    const targetProfile = await settleTargetProfile(pool, deployment_id, irJson, stepLog);
-    if (targetProfile && irJson && typeof irJson === "object" && irJson !== null) {
-      const ir = irJson as Record<string, unknown>;
-      const deploy = (ir["deploy"] ?? {}) as Record<string, unknown>;
-      ir["deploy"] = { ...deploy, profile: targetProfile };
+    // IR 로 프로필을 다시 골라(#273 · #282) IR deploy.profile 에 반영 (분석기 기본값 "aws-ecs-basic" 덮어쓰기)
+    let irJson: unknown = analysis.ai?.ir_after ?? analysis.ir_draft;
+    if (irJson && typeof irJson === "object") {
+      const profile = await settleTargetProfile(pool, deployment_id, irJson, stepLog);
+      if (profile) irJson = withDeployProfile(irJson as Record<string, unknown>, profile);
     }
     const source =
       analysis.ai != null && !analysis.ai.skipped ? "ai_filled" : "analyzer";

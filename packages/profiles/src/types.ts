@@ -15,7 +15,7 @@ export const ComputeSizeSchema = z.object({
 });
 
 export const RuntimeProfileSchema = z.object({
-  type: z.enum(["ecs-fargate", "docker-compose", "lambda"]),
+  type: z.enum(["ecs-fargate", "docker-compose", "lambda", "s3-website"]),
   replicas: z.number().int().positive(),
   size_map: z.record(
     z.enum(["small", "medium", "large"]),
@@ -24,7 +24,7 @@ export const RuntimeProfileSchema = z.object({
 });
 
 export const IngressProfileSchema = z.object({
-  type: z.enum(["alb", "cloudflare-tunnel"]),
+  type: z.enum(["alb", "cloudflare-tunnel", "cloudflare-proxy"]),
   https: z.boolean(),
 });
 

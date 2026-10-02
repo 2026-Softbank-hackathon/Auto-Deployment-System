@@ -8,16 +8,24 @@ export type CommonPlanOptions = {
   managedResourceTypes?: readonly string[];
 };
 
+/** 정적 사이트 이미지(nginx)의 기본 포트 — 분석기와 같은 값 (#273) */
+export const STATIC_SITE_DEFAULT_PORT = 8080;
+
 export function createCommonPlan(
   ir: Ir,
   profile: Profile,
   options: CommonPlanOptions = {},
 ): CommonDeploymentPlan {
   const services = Object.entries(ir.services);
-  if (services.length !== 1 || services[0]?.[1].type !== "http") {
+  const first = services[0];
+  if (
+    services.length !== 1 ||
+    !first ||
+    (first[1].type !== "http" && first[1].type !== "static")
+  ) {
     throw new AdapterError(
       "P0_SINGLE_HTTP_SERVICE_REQUIRED",
-      "P0 Adapter는 단일 HTTP 서비스만 지원합니다.",
+      "P0 Adapter는 단일 HTTP 서비스 또는 정적 사이트만 지원합니다.",
     );
   }
 
@@ -43,7 +51,13 @@ export function createCommonPlan(
     resources.flatMap((resource) => (resource.connectionEnv ? [resource.connectionEnv] : [])),
   );
 
-  const [serviceName, service] = services[0];
+  const [serviceName, irService] = first;
+  const isStaticSite = irService.type === "static";
+  // 정적 사이트는 플랫폼이 만드는 nginx 이미지가 듣는 포트 — IR 에 없으면 기본값
+  const service =
+    isStaticSite && irService.port === undefined
+      ? { ...irService, port: STATIC_SITE_DEFAULT_PORT }
+      : irService;
   if (service.port === undefined) {
     throw new AdapterError(
       "SERVICE_PORT_REQUIRED",
@@ -93,20 +107,36 @@ export function createCommonPlan(
       name: ir.metadata.name,
       version: ir.metadata.version,
     },
-    build: {
-      context: service.build?.context ?? ".",
-      dockerfile: service.build?.dockerfile,
-      buildpack:
-        service.build?.buildpack ??
-        (service.build?.dockerfile === undefined ? "railpack" : undefined),
-    },
+    build: isStaticSite
+      ? {
+          context: service.build?.context ?? ".",
+          staticSite: {
+            ...(service.static?.build_command
+              ? { buildCommand: service.static.build_command }
+              : {}),
+            outputDir: service.static?.output_dir ?? ".",
+            spaFallback: service.static?.spa_fallback ?? true,
+            listenPort: service.port,
+          },
+        }
+      : {
+          context: service.build?.context ?? ".",
+          dockerfile: service.build?.dockerfile,
+          buildpack:
+            service.build?.buildpack ??
+            (service.build?.dockerfile === undefined ? "railpack" : undefined),
+        },
     service: {
       name: serviceName,
-      type: service.type,
-      command: service.command,
+      // 정적 사이트 이미지도 컨테이너로는 nginx 가 서빙하는 HTTP 서비스다 (On-Prem Agent 는 http 만 받는다)
+      type: isStaticSite ? "http" : service.type,
+      command: isStaticSite ? undefined : service.command,
       containerPort: service.port,
-      environmentNames: (service.env ?? []).filter((name) => !resourceEnvNames.has(name)),
-      environmentDefaults: service.env_defaults ?? {},
+      // 정적 파일은 실행 중에 환경변수를 읽지 않는다
+      environmentNames: isStaticSite
+        ? []
+        : (service.env ?? []).filter((name) => !resourceEnvNames.has(name)),
+      environmentDefaults: isStaticSite ? {} : service.env_defaults ?? {},
       secretNames: service.secrets ?? [],
       compute: {
         vcpu: compute.vcpu,

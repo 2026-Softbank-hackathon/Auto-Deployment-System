@@ -6,7 +6,8 @@ export const onpremDockerBasic: Profile = {
   description: "Intel Mac VM + Docker Compose + Cloudflare Tunnel",
   version: "0.1.0",
   capabilities: {
-    service_types: ["http", "worker", "job"],
+    // static: 정적 파일을 담은 nginx 이미지를 http 컨테이너로 실행 (#273)
+    service_types: ["http", "worker", "job", "static"],
     resource_types: ["postgres"],
     sizes: ["small", "medium"],
     supports_public_expose: true,

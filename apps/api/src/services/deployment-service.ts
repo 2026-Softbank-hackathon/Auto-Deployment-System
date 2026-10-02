@@ -105,7 +105,7 @@ export interface CreateDeploymentInput {
 }
 
 /** 배포 형태로 서로 바뀌는 AWS 프로필 — 같은 state key 를 쓴다 */
-const AWS_COMPUTE_PROFILES = new Set(["aws-ecs-basic", "aws-lambda-basic"]);
+const AWS_COMPUTE_PROFILES = new Set(["aws-ecs-basic", "aws-lambda-basic", "aws-static-basic"]);
 
 export class DeploymentService {
   constructor(
@@ -441,6 +441,7 @@ export class DeploymentService {
     if (overrideId != null && String(overrideId) !== String(src.target_environment_id)) {
       const target = await this.findRedeployTarget(overrideId, src.project_id);
       targetEnvironmentId = target.id;
+      // 원본 IR 로 고른다 — 예: 정적 사이트를 온프레미스 → AWS 로 옮기면 aws-static-basic (#273)
       targetProfile = resolveProfile(target.type, ir.ir_json, { mode });
       registryEnvironmentId =
         target.type === "aws"

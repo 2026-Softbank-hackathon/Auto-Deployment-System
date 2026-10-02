@@ -126,6 +126,7 @@ export class OpsService {
          FROM ${b}.queue q
          LEFT JOIN live l ON l.name = q.name
          LEFT JOIN done d ON d.name = q.name
+         WHERE q.name NOT LIKE '\\_\\_pgboss\\_\\_%'
          ORDER BY array_position($1::text[], q.name) NULLS LAST, q.name`,
         [QUEUE_ORDER],
       ),

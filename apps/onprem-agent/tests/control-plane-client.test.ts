@@ -147,14 +147,30 @@ describe("Agent Control Plane HTTP Client", () => {
     ]);
   });
 
-  it("heartbeat 응답의 취소 신호를 반환한다", async () => {
+  it("heartbeat에 런타임 inventory를 보내고 요구 배포와 취소 신호를 반환한다", async () => {
     const baseUrl = await listen(async (request) => {
-      expect(await readBody(request)).toEqual({ currentJobId: "73" });
-      return { status: 200, body: { ok: true, deploymentCancelled: true } };
+      expect(await readBody(request)).toEqual({
+        currentJobId: "73",
+        runtimes: [{
+          deploymentId: "73",
+          digest: `sha256:${"a".repeat(64)}`,
+          status: "running",
+          health: "healthy",
+        }],
+      });
+      return {
+        status: 200,
+        body: { ok: true, deploymentCancelled: true, desiredDeploymentIds: ["73"] },
+      };
     });
     const client = new AgentControlPlaneHttpClient(credential(baseUrl));
 
-    await expect(client.sendHeartbeat("73")).resolves.toEqual({ jobCancelled: true });
+    await expect(client.sendHeartbeat("73", [{
+      deploymentId: "73",
+      digest: `sha256:${"a".repeat(64)}`,
+      status: "running",
+      health: "healthy",
+    }])).resolves.toEqual({ jobCancelled: true, desiredDeploymentIds: ["73"] });
   });
 
   it("서버 오류에 Agent Key·ECR·Tunnel 응답 본문을 노출하지 않는다", async () => {

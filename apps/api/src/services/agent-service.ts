@@ -8,6 +8,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import type { Pool } from "@camellia/db";
+import type { AgentRuntimeReport } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 function sha256hex(plain: string): string {
@@ -149,12 +150,29 @@ export class AgentService {
     return { agentId: row.id, environmentId: row.environment_id };
   }
 
-  /** Agent 생존 시각 갱신. Job lease와 취소는 AgentJobService가 소유한다. */
-  async recordHeartbeat(agentId: number): Promise<void> {
+  /** Agent 생존 시각과 실제 런타임 목록을 갱신하고, DB가 유지 대상으로 인정한 배포를 돌려준다. */
+  async recordHeartbeat(
+    agentId: number,
+    environmentId: number,
+    runtimes: AgentRuntimeReport[],
+  ): Promise<string[]> {
     await this.pool.query(
-      `UPDATE agents SET last_seen_at = now() WHERE id = $1`,
-      [agentId],
+      `UPDATE agents
+       SET last_seen_at = now(), runtime_inventory = $2::jsonb
+       WHERE id = $1`,
+      [agentId, JSON.stringify(runtimes)],
     );
-
+    if (runtimes.length === 0) return [];
+    const deploymentIds = runtimes.map((runtime) => runtime.deploymentId);
+    const desired = await this.pool.query<{ id: number | string }>(
+      `SELECT id
+       FROM deployments
+       WHERE target_environment_id = $1
+         AND id = ANY($2::bigint[])
+         AND status IN ('deploying', 'verifying', 'rollback', 'succeeded')
+       ORDER BY id`,
+      [environmentId, deploymentIds],
+    );
+    return desired.rows.map((row) => String(row.id));
   }
 }

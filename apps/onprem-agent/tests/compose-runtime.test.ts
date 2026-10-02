@@ -31,6 +31,9 @@ class ComposeRunner implements CommandRunner {
 
 const healthy: HealthChecker = {
   async waitUntilHealthy() {},
+  async isHealthy() {
+    return true;
+  },
 };
 
 describe("DockerComposeRuntime", () => {

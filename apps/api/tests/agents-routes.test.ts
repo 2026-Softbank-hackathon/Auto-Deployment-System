@@ -212,6 +212,36 @@ describe("POST /api/v1/agents/heartbeat", () => {
     const body = res.json();
     expect(body.ok).toBe(true);
     expect(body.deploymentCancelled).toBeUndefined();
+    expect(body.desiredDeploymentIds).toEqual([]);
+  });
+
+  it("런타임 inventory를 저장하고 서버가 유지할 배포 ID를 반환한다", async () => {
+    const inventory = [{
+      deploymentId: "42",
+      digest: `sha256:${"a".repeat(64)}`,
+      status: "running",
+      health: "healthy",
+    }];
+    let heartbeatParams: unknown[] = [];
+    pool.on(/FROM agents WHERE long_lived_key_hash/, () => ({
+      rows: [{ id: 3, environment_id: 7 }],
+    }));
+    pool.on(/UPDATE agents SET last_seen_at/, (params) => {
+      heartbeatParams = params;
+      return { rows: [] };
+    });
+    pool.on(/FROM deployments/, () => ({ rows: [{ id: 42 }] }));
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/heartbeat",
+      headers: { authorization: `Bearer ${LONG_LIVED_KEY}` },
+      payload: { runtimes: inventory },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, desiredDeploymentIds: ["42"] });
+    expect(heartbeatParams).toEqual([3, JSON.stringify(inventory)]);
   });
 
   it("currentJobId heartbeat가 lease를 갱신하고 취소 신호를 반환한다", async () => {

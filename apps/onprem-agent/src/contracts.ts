@@ -37,6 +37,14 @@ export type EcrCredential = {
 
 export type AgentJobHeartbeatResult = {
   jobCancelled?: boolean;
+  desiredDeploymentIds?: string[];
+};
+
+export type AgentRuntimeReport = {
+  deploymentId: string;
+  digest: string;
+  status: "running" | "stopped";
+  health: "healthy" | "unhealthy" | "unknown";
 };
 
 export type OnpremExecutionResult =
@@ -74,7 +82,10 @@ export interface AgentControlPlaneClient {
     options?: { signal?: AbortSignal },
   ): Promise<TunnelSession>;
   reportResult(jobId: string, result: OnpremExecutionResult): Promise<void>;
-  sendHeartbeat(currentJobId?: string): Promise<AgentJobHeartbeatResult>;
+  sendHeartbeat(
+    currentJobId?: string,
+    runtimes?: AgentRuntimeReport[],
+  ): Promise<AgentJobHeartbeatResult>;
 }
 
 export interface OnpremJobExecutor {
@@ -82,6 +93,9 @@ export interface OnpremJobExecutor {
     job: OnpremAgentJob,
     options?: { signal?: AbortSignal },
   ): Promise<OnpremExecutionResult>;
+  restore?(): Promise<void>;
+  inventory?(): Promise<AgentRuntimeReport[]>;
+  reconcile?(desiredDeploymentIds: string[]): Promise<void>;
   shutdown?(): Promise<void>;
 }
 
@@ -168,6 +182,7 @@ export type RunningDeployment = {
   projectName: string;
   localUrl: string;
   isRunning(): Promise<boolean>;
+  isHealthy?(): Promise<boolean>;
   cleanup(): Promise<void>;
 };
 
@@ -177,4 +192,9 @@ export interface RuntimeManager {
     imageUri: string,
     signal?: AbortSignal,
   ): Promise<RunningDeployment>;
+  restore?(input: {
+    projectName: string;
+    localUrl: string;
+    health: OnpremAgentJob["plan"]["health"];
+  }): Promise<RunningDeployment | null>;
 }

@@ -68,8 +68,8 @@ cloudflared --version
 
 ```bash
 curl -fsSL \
-  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.4/install-agent.sh \
-  | sh -s -- v0.1.4
+  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.6/install-agent.sh \
+  | sh -s -- v0.1.6
 ```
 
 로컬 build 결과를 직접 설치할 때는 `dist/main.js`와 `dist/launchd-cli.js`를 만든 뒤 bundle 내부 설치기를 실행합니다.

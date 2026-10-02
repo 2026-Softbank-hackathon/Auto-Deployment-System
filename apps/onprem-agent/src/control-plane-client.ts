@@ -1,6 +1,7 @@
 import type {
   AgentControlPlaneClient,
   AgentJobHeartbeatResult,
+  AgentRuntimeReport,
   EcrCredential,
   OnpremAgentJob,
   OnpremExecutionResult,
@@ -51,12 +52,15 @@ function validateTunnelSession(value: unknown): TunnelSession {
 
 export class AgentControlPlaneHttpClient implements AgentControlPlaneClient {
   private readonly baseUrl: string;
+  private readonly requestTimeoutMs: number;
 
   constructor(
     private readonly credential: AgentCredential,
     private readonly fetchRequest: Fetch = fetch,
+    options: { requestTimeoutMs?: number } = {},
   ) {
     this.baseUrl = credential.controlPlaneUrl.replace(/\/$/, "");
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
   }
 
   async claimJob(): Promise<OnpremAgentJob | null> {
@@ -113,21 +117,37 @@ export class AgentControlPlaneHttpClient implements AgentControlPlaneClient {
     );
   }
 
-  async sendHeartbeat(currentJobId?: string): Promise<AgentJobHeartbeatResult> {
+  async sendHeartbeat(
+    currentJobId?: string,
+    runtimes: AgentRuntimeReport[] = [],
+  ): Promise<AgentJobHeartbeatResult> {
     const body = await this.requestJson("/api/v1/agents/heartbeat", {
-      body: currentJobId ? { currentJobId } : {},
+      body: {
+        ...(currentJobId ? { currentJobId } : {}),
+        ...(runtimes.length > 0 ? { runtimes } : {}),
+      },
     });
     if (
       !isRecord(body) ||
       body.ok !== true ||
       (body.deploymentCancelled !== undefined &&
-        typeof body.deploymentCancelled !== "boolean")
+        typeof body.deploymentCancelled !== "boolean") ||
+      (body.desiredDeploymentIds !== undefined &&
+        (!Array.isArray(body.desiredDeploymentIds) ||
+          !body.desiredDeploymentIds.every(
+            (deploymentId) => typeof deploymentId === "string" && /^\d+$/.test(deploymentId),
+          )))
     ) {
       throw new Error("Agent Heartbeat 응답 형식이 올바르지 않습니다.");
     }
-    return body.deploymentCancelled === undefined
-      ? {}
-      : { jobCancelled: body.deploymentCancelled as boolean };
+    return {
+      ...(body.deploymentCancelled === undefined
+        ? {}
+        : { jobCancelled: body.deploymentCancelled as boolean }),
+      ...(body.desiredDeploymentIds === undefined
+        ? {}
+        : { desiredDeploymentIds: body.desiredDeploymentIds as string[] }),
+    };
   }
 
   private async requestJson(
@@ -143,6 +163,10 @@ export class AgentControlPlaneHttpClient implements AgentControlPlaneClient {
   ): Promise<Response> {
     let response: Response;
     try {
+      const timeout = AbortSignal.timeout(this.requestTimeoutMs);
+      const signal = options.signal
+        ? AbortSignal.any([options.signal, timeout])
+        : timeout;
       response = await this.fetchRequest(`${this.baseUrl}${path}`, {
         method: "POST",
         headers: {
@@ -154,7 +178,7 @@ export class AgentControlPlaneHttpClient implements AgentControlPlaneClient {
         ...(options.body === undefined
           ? {}
           : { body: JSON.stringify(options.body) }),
-        signal: options.signal,
+        signal,
       });
     } catch {
       throw new Error("Control Plane 요청에 실패했습니다.");

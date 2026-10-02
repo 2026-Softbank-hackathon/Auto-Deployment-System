@@ -219,7 +219,17 @@ export class AgentJobService {
     jobId: string,
     input: AgentTunnelInput,
   ): Promise<AgentTunnelSession> {
-    const job = await this.loadOwnedJob(agentId, environmentId, jobId, true);
+    const job = await this.loadOwnedJob(agentId, environmentId, jobId, false);
+    const restorable =
+      job.status === "ready_for_verify" &&
+      ["verifying", "rollback", "succeeded"].includes(job.deployment_status);
+    if (!["claimed", "running"].includes(job.status) && !restorable) {
+      throw new ApiError(
+        409,
+        "AGENT_JOB_NOT_RESTORABLE",
+        "이 Agent Job의 Tunnel을 복구할 수 없습니다.",
+      );
+    }
     this.assertJobIdentity(job, input.deploymentId, input.environmentId, jobId);
     const manager = this.options.tunnelManager;
     const zoneId = this.options.cloudflareZoneId;

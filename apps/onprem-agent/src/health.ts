@@ -7,6 +7,11 @@ export interface HealthChecker {
     job: OnpremAgentJob,
     signal?: AbortSignal,
   ): Promise<void>;
+  isHealthy(
+    localUrl: string,
+    health: OnpremAgentJob["plan"]["health"],
+    signal?: AbortSignal,
+  ): Promise<boolean>;
 }
 
 type LocalHealthCheckerOptions = {
@@ -70,5 +75,21 @@ export class LocalHealthChecker implements HealthChecker {
       "health_check_failed",
       `로컬 endpoint 헬스체크에 실패했습니다. (${lastFailure})`,
     );
+  }
+
+  async isHealthy(
+    localUrl: string,
+    health: OnpremAgentJob["plan"]["health"],
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const target = new URL(health.path, `${localUrl}/`).toString();
+    const timeout = AbortSignal.timeout(health.timeoutSeconds * 1_000);
+    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    try {
+      const response = await this.fetcher(target, { signal: combined });
+      return response.status === health.expectedStatus;
+    } catch {
+      return false;
+    }
   }
 }

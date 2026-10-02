@@ -58,7 +58,7 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
   const shouldSelect = known !== null && !selectedHere;
   useEffect(() => { if (shouldSelect) void selectProject(projectId); }, [shouldSelect, projectId, selectProject]);
 
-  const back = <a className="project-detail__back" href="/projects" onClick={(event) => followAppLink(event, onNavigate)}>← {t.nav.projects}</a>;
+  const back = <a className="project-detail__back" href="/" onClick={(event) => followAppLink(event, onNavigate)}>← {t.nav.dashboard}</a>;
 
   if (state.phase === 'loading') return <>{back}<p className="dashboard-status" role="status">{copy.loading}</p></>;
   if (state.phase === 'error') return <>{back}<div className="notice error" role="alert"><strong>{copy.loadError}</strong><br />{errorMessage(state.error, t, copy.loadError)}

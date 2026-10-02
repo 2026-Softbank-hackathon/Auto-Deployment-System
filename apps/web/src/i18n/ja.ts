@@ -144,6 +144,7 @@ export const ja: Messages = {
     loading: 'プロジェクトを読み込んでいます…',
     loadError: 'プロジェクトを読み込めませんでした。',
     neverDeployed: 'まだデプロイしていません',
+    olderHidden: (shown: number) => `最新の ${shown} 件のみ表示しています。それより古いデプロイはこの一覧に出ません。`,
     deploy: 'このプロジェクトでデプロイ',
     searchPlaceholder: 'デプロイ番号、URL',
     notFound: 'プロジェクトが見つかりませんでした。',
@@ -528,7 +529,8 @@ export const ja: Messages = {
     count: (n) => `${n}個`,
     cases: (n) => `${n}件`,
     riskTitle: '運用上のリスクが見つかりました。',
-    warningLabels: { 'ANL-06-HARDCODED-SECRET': 'コード内のシークレットの疑い', 'ANL-06-DOCKER-ROOT': 'rootで実行されるコンテナ', 'ANL-06-SQLITE': 'SQLite使用', 'ANL-06-SQLITE-FILE': 'SQLiteファイル', 'PAT-02-SKIPPED': 'DB移行なし' },
+    noteTitle: '参考情報があります。',
+    warningLabels: { 'ANL-06-HARDCODED-SECRET': 'コード内のシークレットの疑い', 'ANL-06-DOCKER-ROOT': 'rootで実行されるコンテナ', 'ANL-06-SQLITE': 'SQLite使用', 'ANL-06-SQLITE-FILE': 'SQLiteファイル', 'PAT-02-SKIPPED': 'DB移行なし', 'ANL-PKG-PARSE': 'package.json を読めませんでした' },
     warningMessages: {
       'ANL-06-HARDCODED-SECRET': 'シークレットらしき値がコードに含まれています。環境変数またはシークレットストレージに移してください。',
       'ANL-06-DOCKER-ROOT': 'コンテナがrootで実行されます。Dockerfileでroot以外のユーザーを指定してください。',

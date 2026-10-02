@@ -11,7 +11,7 @@ import { KoroHat, KoroProp } from './KoroProp';
  *   1 빌드      — 집(컨테이너 이미지)을 짓는다. 층이 올라간다
  *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 비행기를 조립한다 · 온프레미스: 에이전트 로봇에게 집을 넘긴다
  *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다 · 온프레미스: 에이전트 로봇이 집을 이고 서버 옆으로 알아서 옮긴다
- *                 (AWS의 "배포"는 ECS 롤아웃을 기다리는 단계라 꽤 길다. 그동안 날아가며 가끔 공중제비를 돈다.
+ *                 (AWS의 "배포"는 ECS 롤아웃을 기다리는 단계라 꽤 길다. 그동안 구름을 향해 날아간다.
  *                  그 전의 "인프라 준비"는 땅에서 비행기를 조립하고 집을 싣는 장면이다 — awsLoaded)
  *   4 검증      — 도착한 집에 불이 들어오는지 점검한다
  *   5 완료      — 집에 깃발이 오른다
@@ -51,10 +51,8 @@ const PLANE_GROUND: Spot = [800, GROUND];
 
 const PLANE_TOP = 64;
 /** 단계별 코로 중심 좌표 (0 설계도 · 1 집 짓는 곳 · 2 탈것 준비 · 3 이동 중 · 4 도착 · 5 완료) */
-// 날아가는 자리는 장면 가운데 왼쪽이다 — 코로의 말풍선이 구름 위 세계와 겹치지 않고, 공중제비를 돌 자리가 있다.
+// 날아가는 자리는 장면 가운데 왼쪽이다 — 코로의 말풍선이 구름 위 세계와 겹치지 않게 떨어뜨려 놓았다.
 const PLANE_AIR: Spot = [560, 350];
-/** 공중제비의 중심 (비행기 바닥에서 위로 120) */
-const LOOP_CENTER: Spot = [PLANE_AIR[0], PLANE_AIR[1] - 120];
 const skySpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [640, KORO_Y], [PLANE_AIR[0] + 55, PLANE_AIR[1] - PLANE_TOP - KORO_SIZE / 2], [950, 114], [950, 114]];
 // 온프레미스: 집을 지은 뒤에는 에이전트 로봇이 알아서 옮긴다. 코로는 집 짓는 곳에서 넘겨주고 지켜보다가, 검증 때 서버 옆으로 간다.
 const groundSpots: readonly Spot[] = [[262, KORO_Y], [415, KORO_Y], [415, KORO_Y], [415, KORO_Y], [880, KORO_Y], [880, KORO_Y]];
@@ -339,10 +337,6 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       </g>}
       <House floors={floors} total={total} roofed={roofed} windows={arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
     </g>
-
-    {/* 공중제비의 연기 자국 (공중제비와 같은 박자로 그려졌다 사라진다) */}
-    {airborne && <path className="jr-trail" aria-hidden="true" pathLength="100"
-      d={`M${LOOP_CENTER[0]} ${LOOP_CENTER[1] + 120} A120 120 0 1 0 ${LOOP_CENTER[0]} ${LOOP_CENTER[1] - 120} A120 120 0 1 0 ${LOOP_CENTER[0]} ${LOOP_CENTER[1] + 120}`} />}
 
     {/* 서버에서 새 소식(로그 한 줄)이 올 때마다 코로 둘레에서 반짝인다 */}
     {eventTick > 0 && rolling && <g key={eventTick} className="jr-burst" aria-hidden="true" style={place([cx, cy])}>

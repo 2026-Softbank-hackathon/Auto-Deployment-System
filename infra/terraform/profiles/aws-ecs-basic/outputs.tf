@@ -8,6 +8,11 @@ output "origin_hostname" {
   value       = var.public_ingress ? aws_lb.app[0].dns_name : null
 }
 
+output "database_address" {
+  description = "Private RDS PostgreSQL hostname when the database add-on is enabled."
+  value       = var.database_enabled ? aws_db_instance.database[0].address : null
+}
+
 output "cluster_name" {
   value = aws_ecs_cluster.main.name
 }

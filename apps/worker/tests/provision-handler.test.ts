@@ -42,12 +42,15 @@ function makeHarness(overrides: Partial<{
   previousApply: { status: string; terraform_inputs_hash: string } | null;
   rolloutFailure: Error;
   taskDefinitionArn: string | null;
+  resources: Record<string, unknown>;
+  previousDatabase: boolean;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
+  const baseIr = overrides.resources ? { ...IR, resources: overrides.resources } : IR;
   const ir = overrides.targetType === "onprem"
-    ? { ...IR, deploy: { profile: "onprem-docker-basic" } }
-    : IR;
+    ? { ...baseIr, deploy: { profile: "onprem-docker-basic" } }
+    : baseIr;
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   const order: string[] = [];
   const agentJobQueries: Array<{ sql: string; params: unknown[] }> = [];
@@ -106,6 +109,9 @@ function makeHarness(overrides: Partial<{
             },
           ],
         };
+      }
+      if (sql.includes("jsonb_each")) {
+        return { rows: overrides.previousDatabase ? [{ id: "77" }] : [] };
       }
       if (sql.includes("terraform_inputs_hash IS NOT NULL")) {
         return { rows: overrides.previousApply ? [overrides.previousApply] : [] };
@@ -607,6 +613,57 @@ describe("handleProvision", () => {
       .filter(([, event]) => event === "log.line")
       .map(([, , payload]) => (payload as { line: string }).line);
   }
+
+  describe("PostgreSQL 추가 모듈 (#278)", () => {
+    const SQLITE_DB = {
+      db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" },
+    };
+
+    it("IR 의 postgres 리소스를 RDS 모듈 변수로 넘기고, 입력 지문에도 포함한다", async () => {
+      const harness = makeHarness({ resources: SQLITE_DB });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const [applyInput] = harness.terraformCli.apply.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }];
+      expect(applyInput.variables).toMatchObject({ database_enabled: true, database_env_name: "DATABASE_URL" });
+      const [fingerprintInput] = harness.terraformCli.fingerprint.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }];
+      expect(fingerprintInput.variables).toMatchObject({ database_enabled: true });
+      expect(provisionLogLines(harness).some((line) => line.includes("PostgreSQL(RDS)"))).toBe(true);
+      expect(harness.getStatus()).toBe("verifying");
+    });
+
+    it("DB 가 없는 IR 이어도 이 환경에 만든 DB 가 있으면 지우지 않고 유지한다", async () => {
+      const harness = makeHarness({ previousDatabase: true });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const [applyInput] = harness.terraformCli.apply.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }];
+      expect(applyInput.variables).toMatchObject({ database_enabled: true });
+      const lookup = harness.queries.find(({ sql }) => sql.includes("jsonb_each"))!;
+      expect(lookup.params).toEqual([12, 34, 99]);
+      expect(provisionLogLines(harness).some((line) => line.includes("유지"))).toBe(true);
+    });
+
+    it("DB 가 없고 만든 적도 없으면 모듈을 끈다", async () => {
+      const harness = makeHarness();
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const [applyInput] = harness.terraformCli.apply.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }];
+      expect(applyInput.variables).toMatchObject({ database_enabled: false });
+    });
+
+    it("온프레미스는 DATABASE_URL 없이 SQLite 로 실행한다", async () => {
+      const harness = makeHarness({ targetType: "onprem", resources: SQLITE_DB });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const payload = JSON.parse(String(harness.agentJobQueries[0]?.params[4]));
+      expect(payload.environment).toEqual({ PUBLIC_MODE: "demo" });
+      expect(payload.plan.service.environmentNames).not.toContain("DATABASE_URL");
+      expect(harness.queries.some(({ sql }) => sql.includes("jsonb_each"))).toBe(false);
+    });
+  });
 
   describe("이미지만 바뀐 재배포의 상태 재조회 생략 (#252)", () => {
     it("입력 지문은 이미지를 뺀 변수로 만들고, 같은 프로젝트 · 환경의 직전 Terraform 배포를 찾는다", async () => {

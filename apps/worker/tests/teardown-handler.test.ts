@@ -196,6 +196,20 @@ describe("handleTeardown", () => {
     });
   });
 
+  it("PostgreSQL 추가 모듈을 쓴 앱도 같은 state 로 destroy 해 RDS 까지 지운다 (#278)", async () => {
+    const irWithDatabase = {
+      ...IR,
+      resources: { db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" } },
+    };
+    const h = harness({ envs: [awsEnv({ ir_json: irWithDatabase })] });
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
+    const request = (h.destroy.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }])[0];
+    expect(request.variables).toMatchObject({ database_enabled: true, database_env_name: "DATABASE_URL" });
+    expect(h.stateStore.delete).toHaveBeenCalled();
+  });
+
   it("프로젝트 소유 연결이면 그 프로젝트 범위의 시크릿을 읽는다", async () => {
     const h = harness({ envs: [awsEnv({ environment_id: "9", environment_project_id: "24" })] });
 

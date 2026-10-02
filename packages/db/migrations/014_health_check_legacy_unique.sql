@@ -1,0 +1,2 @@
+ALTER TABLE health_check_attempts
+  DROP CONSTRAINT IF EXISTS health_check_attempts_deployment_step_id_environment_id_att_key;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createDeploymentPlan, getRegisteredProfileIds } from "../src/index.js";
+import { IrSchema } from "@camellia/ir-schema";
+import { AdapterError, createDeploymentPlan, getRegisteredProfileIds } from "../src/index.js";
 import { createSimpleHttpIr } from "./fixtures/simple-http-ir.js";
 
 describe("onprem-docker-basic Adapter", () => {
@@ -37,6 +38,36 @@ describe("onprem-docker-basic Adapter", () => {
       "aws-ecs-basic",
       "onprem-docker-basic",
     ]);
+  });
+
+  it("keeps the SQLite fallback instead of a managed database (environment difference)", () => {
+    const base = createSimpleHttpIr("onprem-docker-basic");
+    const ir = IrSchema.parse({
+      ...base,
+      services: { web: { ...base.services["web"], env: ["NODE_ENV", "DATABASE_URL"] } },
+      resources: {
+        db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" },
+      },
+    });
+
+    const plan = createDeploymentPlan(ir, "onprem-docker-basic");
+
+    // DATABASE_URL 을 주지 않아야 앱이 SQLite 로 동작한다
+    expect(plan.service.environmentNames).toEqual(["NODE_ENV"]);
+    expect(plan.resources).toEqual([
+      { name: "db", type: "postgres", connectionEnv: "DATABASE_URL", localFallback: "sqlite" },
+    ]);
+  });
+
+  it("still rejects a database the app cannot run without", () => {
+    const ir = IrSchema.parse({
+      ...createSimpleHttpIr("onprem-docker-basic"),
+      resources: { db: { type: "postgres" } },
+    });
+
+    expect(() => createDeploymentPlan(ir, "onprem-docker-basic")).toThrowError(
+      expect.objectContaining<Partial<AdapterError>>({ code: "P0_RESOURCES_UNSUPPORTED" }),
+    );
   });
 
   it("maps the supported medium size to Docker limits", () => {

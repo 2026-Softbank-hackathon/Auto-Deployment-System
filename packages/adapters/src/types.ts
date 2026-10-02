@@ -45,6 +45,15 @@ export type ServicePlan = {
   };
 };
 
+/** IR resources 한 개. 환경이 만들어 주지 않으면 앱이 localFallback 저장소로 실행된다 */
+export type ResourcePlan = {
+  name: string;
+  type: "postgres" | "mysql" | "redis" | "object_storage";
+  /** 접속 정보를 주입할 환경변수 이름 */
+  connectionEnv?: string;
+  localFallback?: "sqlite";
+};
+
 export type CommonDeploymentPlan = {
   schemaVersion: "0.1.0";
   profile: {
@@ -59,6 +68,7 @@ export type CommonDeploymentPlan = {
   service: ServicePlan;
   health: HealthPlan;
   ingress: IngressPlan;
+  resources: ResourcePlan[];
 };
 
 export type AwsEcsDeploymentPlan = CommonDeploymentPlan & {

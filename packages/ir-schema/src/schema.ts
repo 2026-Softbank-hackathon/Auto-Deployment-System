@@ -190,6 +190,19 @@ const ResourceSchema = z
     plan: ResourcePlanSchema.optional().describe(
       "리소스 크기 등급. 프로필이 실제 인스턴스 클래스로 매핑"
     ),
+    connection_env: z
+      .string()
+      .regex(/^[A-Z_][A-Z0-9_]*$/, "환경변수 이름 형식(대문자 · 숫자 · _) 필요")
+      .optional()
+      .describe(
+        "앱이 접속 정보를 읽는 환경변수 이름 (예: DATABASE_URL). 리소스를 만드는 환경은 이 이름으로 접속 정보를 주입한다"
+      ),
+    local_fallback: z
+      .literal("sqlite")
+      .optional()
+      .describe(
+        "connection_env 가 비어 있으면 앱이 대신 쓰는 로컬 저장소. 관리형 리소스가 없는 환경(온프레미스)은 이 저장소로 실행한다"
+      ),
   })
   .describe("논리적 관리형 리소스 정의");
 

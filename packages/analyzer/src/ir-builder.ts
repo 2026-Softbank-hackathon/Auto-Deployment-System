@@ -121,7 +121,11 @@ export function buildIr(input: IrBuildInput): IrBuildResult {
   for (const res of input.resources) {
     if (res.type === "unknown") continue; // skip unknown
     if (res.type === "postgres" || res.type === "mysql" || res.type === "redis" || res.type === "object_storage") {
-      resourcesMap[res.name] = { type: res.type };
+      resourcesMap[res.name] = {
+        type: res.type,
+        ...(res.connection_env ? { connection_env: res.connection_env } : {}),
+        ...(res.local_fallback ? { local_fallback: res.local_fallback } : {}),
+      };
     }
   }
 

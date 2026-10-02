@@ -9,6 +9,7 @@ export type {
   HealthPlan,
   RoutePlan,
   IngressPlan,
+  ResourcePlan,
   ServicePlan,
   CommonDeploymentPlan,
   AwsEcsDeploymentPlan,

@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.zip
+Dockerfile
+.dockerignore
+README.md
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm

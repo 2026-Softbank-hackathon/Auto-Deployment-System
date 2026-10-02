@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getDeploymentStatus, getProject, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { DeployKeycap } from '../../components/ui/DeployKeycap';
 import { Keycap } from '../../components/ui/Keycap';
+import { Confetti } from './Confetti';
 import { RedeployButton } from './RedeployButton';
 import { Koro, type KoroMood } from '../../components/ui/Koro';
 import { StatusTape } from '../../components/ui/StatusTape';
@@ -89,6 +90,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
   }
 
   return <section className="result-card is-success" aria-labelledby="result-title">
+    <Confetti celebrationKey={deploymentId} />
     <Koro mood="happy" size={72} />
     <StatusTape tone="success">{view.tape}</StatusTape>
     <h1 id="result-title">{t.result.titleDone}</h1>

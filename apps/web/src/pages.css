@@ -566,3 +566,58 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .settings-row--check small { font-weight: 400; color: var(--ink-soft); }
 .settings-row--check input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--koro); }
 .settings-row--check input:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+
+/* ── 움직임 보강 ─────────────────────────────────────────────
+   전부 장식이다. 움직임을 줄이도록 설정한 환경에서는 적용하지 않는다(no-preference 안에만 둔다).
+   실제 상태가 바뀔 때만 움직이고, 길이는 짧게 둔다. */
+@media (prefers-reduced-motion: no-preference) {
+  /* 1) 배포 성공: 결과 카드의 내용이 차례로 떠오르고, 색종이가 한 번 터진다 */
+  .result-card.is-success { position: relative; }
+  .result-card.is-success > *:not(.confetti) { animation: rise-in 420ms var(--ease-roll) both; }
+  .result-card.is-success > *:nth-child(2) { animation-delay: 40ms; }
+  .result-card.is-success > *:nth-child(3) { animation-delay: 90ms; }
+  .result-card.is-success > *:nth-child(4) { animation-delay: 140ms; }
+  .result-card.is-success > *:nth-child(5) { animation-delay: 190ms; }
+  .result-card.is-success > *:nth-child(6) { animation-delay: 260ms; }
+  .result-card.is-success > *:nth-child(7) { animation-delay: 320ms; }
+  .result-card.is-success > *:nth-child(n+8) { animation-delay: 380ms; }
+  .result-card.is-success .koro { animation: rise-in 420ms var(--ease-roll) both, koro-cheer 700ms 380ms var(--ease-roll) 2; }
+  .confetti { position: absolute; left: 50%; top: 84px; width: 0; height: 0; pointer-events: none; }
+  .confetti__piece { position: absolute; width: 8px; height: 12px; border-radius: 2px; opacity: 0; animation: confetti-fall 1700ms cubic-bezier(.15, .7, .3, 1) var(--delay) both; }
+  .confetti__piece.is-round { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* 2) 단계 칩: 완료되면 살짝 튀고, 다음 단계로 가는 선이 왼쪽에서 채워지고, 진행 중인 칩은 은은하게 숨 쉰다 */
+  .stage-chip + .stage-chip::before { background: linear-gradient(var(--brass), var(--brass)) left / 0% 100% no-repeat, var(--line); transition: background-size var(--dur-scene) var(--ease-roll); }
+  .stage-chip.is-done + .stage-chip::before { background: linear-gradient(var(--brass), var(--brass)) left / 100% 100% no-repeat, var(--line); }
+  .stage-chip.is-done { animation: chip-pop 360ms var(--ease-roll); }
+  .stage-chip.is-current { animation: chip-breathe 1800ms ease-in-out infinite; }
+
+  /* 3) 목록과 카드: 처음 나타날 때 위에서부터 차례로 떠오른다 */
+  .deployment-list > *, .project-list > *, .picker-list > * { animation: rise-in 320ms var(--ease-roll) both; }
+  .deployment-list > *:nth-child(2), .project-list > *:nth-child(2), .picker-list > *:nth-child(2) { animation-delay: 35ms; }
+  .deployment-list > *:nth-child(3), .project-list > *:nth-child(3), .picker-list > *:nth-child(3) { animation-delay: 70ms; }
+  .deployment-list > *:nth-child(4), .project-list > *:nth-child(4), .picker-list > *:nth-child(4) { animation-delay: 105ms; }
+  .deployment-list > *:nth-child(5), .project-list > *:nth-child(5), .picker-list > *:nth-child(5) { animation-delay: 140ms; }
+  .deployment-list > *:nth-child(6), .project-list > *:nth-child(6) { animation-delay: 175ms; }
+  .deployment-list > *:nth-child(7), .project-list > *:nth-child(7) { animation-delay: 210ms; }
+  .deployment-list > *:nth-child(8), .project-list > *:nth-child(8) { animation-delay: 245ms; }
+  .deployment-list > *:nth-child(n+9), .project-list > *:nth-child(n+9) { animation-delay: 280ms; }
+
+  /* 4) 모달과 메뉴: 살짝 커지며 나타나고, 배경은 서서히 어두워진다 */
+  .picker-dialog[open] { animation: dialog-in 200ms var(--ease-roll); }
+  .picker-dialog[open]::backdrop { animation: fade-in 200ms ease-out; }
+  .row-menu__list { transform-origin: top right; animation: menu-in 140ms var(--ease-roll); }
+
+  @keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+  @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes chip-pop { 0% { transform: scale(1); } 45% { transform: scale(1.07); } 100% { transform: scale(1); } }
+  @keyframes chip-breathe { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--koro) 35%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--koro) 0%, transparent); } }
+  @keyframes koro-cheer { 0%, 100% { translate: 0 0; } 40% { translate: 0 -10px; } }
+  @keyframes confetti-fall {
+    0% { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+    35% { opacity: 1; transform: translate(var(--x), var(--y)) rotate(calc(var(--spin) * .5)); }
+    100% { opacity: 0; transform: translate(calc(var(--x) * 1.15), calc(var(--y) + 260px)) rotate(var(--spin)); }
+  }
+}

@@ -880,3 +880,34 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @keyframes live-bob { from { translate: 0 0; } to { translate: 0 -4px; } }
 @keyframes window-check { 0%, 100% { fill: var(--line); } 50% { fill: var(--brass); } }
 @keyframes cloud-drift { from { transform: translateX(-10px); } to { transform: translateX(26px); } }
+
+/* ── 날아가는 동안의 하늘 (DeployScene) ─────────────────────────────── */
+.jr-sky__tint { fill: transparent; transition: fill 8s ease-in-out; }
+.jr-sky.is-sunset .jr-sky__tint { fill: #F9E2CF; }
+.jr-sky.is-night .jr-sky__tint { fill: #D5DCF3; }
+.jr-sky.is-dawn .jr-sky__tint { fill: #F6E6EF; }
+.jr-sky__night { opacity: 0; transition: opacity 8s ease-in-out; }
+.jr-sky.is-night .jr-sky__night { opacity: 1; }
+.jr-sky__moon { fill: var(--surface); stroke: var(--brass); stroke-width: 2.5; stroke-linejoin: round; }
+.jr-sky__star { fill: var(--brass); }
+.jr-bird { fill: none; stroke: var(--ink-soft); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.jr-hotair { fill: var(--surface); stroke: var(--brass); stroke-width: 3; }
+.jr-dust circle { fill: var(--line); }
+.koro-prop__tube { fill: var(--brass); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+/* 흘러가는 것들은 움직임을 줄이지 않았을 때만 나온다 (멈춘 채로는 뜻이 없다) */
+.jr-passing, .jr-dust { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .jr-passing, .jr-dust { display: inline; }
+  .jr-pass { animation: pass-by var(--duration) linear var(--delay) infinite backwards; }
+  .jr-sky__star { animation: star-twinkle 2.4s ease-in-out infinite alternate; }
+  .jr-sky__star:nth-of-type(odd) { animation-delay: 1.1s; }
+  .jr-dust circle { animation: dust-puff .9s ease-out infinite; }
+  .jr-dust circle:nth-child(2) { animation-delay: .3s; }
+  .jr-dust circle:nth-child(3) { animation-delay: .6s; }
+  .koro-prop--spyglass { transform-box: view-box; transform-origin: 58px 22px; animation: prop-wrench 2.6s ease-in-out infinite alternate; }
+  .koro-prop--book { animation: book-nod 2.2s ease-in-out infinite alternate; }
+}
+@keyframes pass-by { from { transform: translate(1340px, var(--y)); } to { transform: translate(-260px, var(--y)); } }
+@keyframes star-twinkle { from { opacity: .35; } to { opacity: 1; } }
+@keyframes dust-puff { from { opacity: .9; transform: translate(0, 0) scale(.6); } to { opacity: 0; transform: translate(-16px, -8px) scale(1.3); } }
+@keyframes book-nod { from { transform: translateY(0); } to { transform: translateY(2px); } }

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useId, type CSSProperties } from 'react';
 import { Koro, type KoroMood } from '../../components/ui/Koro';
 import { useI18n } from '../../i18n/I18nProvider';
 import { railStageCount, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
@@ -143,6 +143,16 @@ export function awsSceneStage(view: DeploymentStatusView, target: SceneTarget, s
   return flying ? { ...view, stage: 3 } : view;
 }
 
+/**
+ * 날아가는 동안의 하늘. 그 단계에서 실제로 흐른 시간에 따라 낮 → 노을 → 밤 → 새벽으로 바뀐다(5분에 한 바퀴).
+ * 진행률이 아니다 — 시간이 흐르고 있다는 것만 보여 준다. 도착하면(검증 단계) 낮으로 돌아온다.
+ */
+export type SkyPhase = 'day' | 'sunset' | 'night' | 'dawn';
+export function skyPhase(seconds: number): SkyPhase {
+  const beat = Math.max(0, seconds) % 300;
+  return beat < 60 ? 'day' : beat < 120 ? 'sunset' : beat < 240 ? 'night' : 'dawn';
+}
+
 /** 빌드 중에 올라간 층수. 빌드 단계에서 실제로 흐른 시간만큼 한 층씩 쌓고(최대 3층), 지붕은 빌드가 끝났을 때만 올린다. */
 const FLOOR_SECONDS = 8;
 const FLOORS = 3;
@@ -206,12 +216,39 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
 
   const handingOff = onGround && !moving && (stage === 2 || stage === 3);
   const box = sceneBox(target, story);
+  // 날아가는 중(AWS 여정의 비행 장면): 구름 · 새 · 열기구가 뒤로 흘러가고 하늘빛이 바뀐다.
+  const traveling = !onGround && stage === 3 && rolling;
+  const sky = traveling ? skyPhase(stepSeconds) : 'day';
+  const clipId = useId();
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
   const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
   return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
+    {showCloud && <>
+      {/* 흘러가는 것들이 잘라 낸 장면 밖으로 나가지 않게 한다 */}
+      <defs><clipPath id={clipId}><rect x={box.left} y={box.top - 70} width={box.width} height={GROUND - box.top + 70} /></clipPath></defs>
+      <g className={`jr-sky is-${sky}`} clipPath={`url(#${clipId})`} aria-hidden="true">
+        <rect className="jr-sky__tint" x={box.left} y={box.top - 70} width={box.width} height={GROUND - box.top + 70} rx="18" />
+        <g className="jr-sky__night">
+          <path className="jr-sky__moon" d="M250 70 a26 26 0 1 0 26 34 a20 20 0 0 1 -26 -34 z" />
+          {[[420, 60], [690, 40], [820, 120], [330, 170], [560, 150], [1120, 60], [760, 230]].map(([x, y], index) => <circle key={x} className="jr-sky__star" cx={x} cy={y} r={index % 2 ? 2.5 : 3.5} />)}
+        </g>
+        {traveling && <g className="jr-passing">
+          {[[60, 0, 16], [150, 5, 22], [240, 11, 19], [110, 15, 26]].map(([y, delay, duration]) => <path key={y} className="jr-pass jr-cloudlet"
+            style={{ '--y': `${y}px`, '--delay': `${delay}s`, '--duration': `${duration}s` } as CSSProperties}
+            d="M0 28 h60 a14 14 0 0 0 0 -28 a20 20 0 0 0 -38 -6 a16 16 0 0 0 -22 34 z" />)}
+          <g className="jr-pass" style={{ '--y': '190px', '--delay': '7s', '--duration': '13s' } as CSSProperties}>
+            <path className="jr-bird" d="M0 8 q8 -10 16 0 q8 -10 16 0" /><path className="jr-bird" d="M30 26 q7 -9 14 0 q7 -9 14 0" /><path className="jr-bird" d="M-18 30 q6 -8 12 0 q6 -8 12 0" />
+          </g>
+          <g className="jr-pass" style={{ '--y': '70px', '--delay': '24s', '--duration': '34s' } as CSSProperties}>
+            <ellipse className="jr-hotair" cx="24" cy="24" rx="24" ry="28" />
+            <path className="jr-line" d="M8 46 L16 62 M40 46 L32 62" /><rect className="jr-paper" x="15" y="62" width="18" height="12" rx="2" />
+          </g>
+        </g>}
+      </g>
+    </>}
     <line className="scene-floor" x1={box.left + 20} y1={GROUND} x2="1180" y2={GROUND} />
 
     {/* 배포할 곳 — AWS: 구름 위 세계 · 온프레미스: 내 서버 옆 자리. 환경 전환이면 둘 다 그린다(집터는 이번에 갈 곳에만) */}
@@ -288,6 +325,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     {onGround && <g className={`jr-robot ${!moving && stage === 3 ? 'is-carrying' : ''} ${!moving && working(2) ? 'is-called' : ''}`}
       style={place(moving || stage === null || stage < 2 || stage >= 4 ? ROBOT_DOCK : stage === 2 ? ROBOT_PICKUP : ROBOT_CARRY)}>
       {!moving && stage === 3 && <path className="jr-plane__wind" d="M-62 -40 H-38 M-70 -26 H-40 M-62 -12 H-38" />}
+      {!moving && stage === 3 && <g className="jr-dust" aria-hidden="true"><circle cx="-34" cy="-6" r="5" /><circle cx="-46" cy="-9" r="4" /><circle cx="-56" cy="-5" r="3" /></g>}
       {!moving && stage === 3
         ? <path className="jr-line jr-line--thick" d={`M-18 -40 L-28 -${ROBOT_TOP} M18 -40 L28 -${ROBOT_TOP} M-44 -${ROBOT_TOP} H44`} />
         : <path className="jr-line jr-line--thick" d="M-20 -34 L-28 -20 M20 -34 L28 -20" />}
@@ -318,7 +356,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         {/* 팔과 도구는 몸 뒤에, 안전모는 몸 앞에 그린다. 일하는 중이 아니거나 조는 동안에는 팔만 내린다 */}
         {/* 온프레미스(전환이 아닐 때)의 인프라 준비 · 배포: 코로는 로봇에게 넘겨주고 손을 흔든다 */}
-        <KoroProp stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
+        <KoroProp activity={traveling ? Math.floor(stepSeconds / 14) % 3 : 0} stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
         <Koro mood={mood} size={KORO_SIZE} />
         {rolling && !dozing && ((stage === 1 && !reused) || (stage === 2 && !handingOff)) && <KoroHat />}
       </g>

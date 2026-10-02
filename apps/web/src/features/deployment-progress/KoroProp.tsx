@@ -15,7 +15,7 @@ const LeftIdle = () => <Arm d="M8 46 Q0 54 4 62" hand={[4, 62]} />;
 const RightIdle = () => <Arm d="M64 46 Q72 54 68 62" hand={[68, 62]} />;
 
 /** 코로 몸 뒤에 그리는 팔과 도구. stage = null 이면 팔만 내린다. */
-export function KoroProp({ stage, carrying = false }: { stage: number | null; /** 빌드 단계에서 집을 짓지 않고 창고에서 꺼낸다 (이미지 재사용) */ carrying?: boolean }) {
+export function KoroProp({ stage, carrying = false, activity = 0 }: { stage: number | null; /** 날아가는 동안 번갈아 하는 일: 0 손 흔들기 · 1 망원경으로 앞을 보기 · 2 책 읽기 */ activity?: number; /** 빌드 단계에서 집을 짓지 않고 창고에서 꺼낸다 (이미지 재사용) */ carrying?: boolean }) {
   if (stage === 1 && carrying) return <g className="koro-prop koro-prop--push">
     <Arm d="M60 34 L84 30" hand={[84, 30]} />
     <Arm d="M60 48 L84 46" hand={[84, 46]} />
@@ -49,6 +49,22 @@ export function KoroProp({ stage, carrying = false }: { stage: number | null; /*
         </g>
       </g>;
     case 3:
+      if (activity === 1) return <g className="koro-prop">
+        <LeftIdle />
+        <Arm d="M62 36 L74 24" hand={[74, 24]} />
+        <g className="koro-prop--spyglass">
+          <path className="koro-prop__line koro-prop__line--thick" d="M58 22 L96 12" />
+          <path className="koro-prop__tube" d="M92 6 L104 3 L107 17 L95 20 Z" />
+        </g>
+      </g>;
+      if (activity === 2) return <g className="koro-prop">
+        <Arm d="M10 44 L20 58" hand={[20, 58]} />
+        <Arm d="M62 44 L52 58" hand={[52, 58]} />
+        <g className="koro-prop--book">
+          <path className="koro-prop__box" d="M14 50 L36 56 L58 50 V68 L36 74 L14 68 Z" />
+          <path className="koro-prop__line" d="M36 56 V74" />
+        </g>
+      </g>;
       return <g className="koro-prop">
         <LeftIdle />
         <g className="koro-prop--wave"><Arm d="M62 36 L80 18" hand={[80, 18]} /></g>

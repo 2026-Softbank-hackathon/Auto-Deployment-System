@@ -101,14 +101,17 @@ describe.skipIf(!databaseUrl)("Verify → Origin: isolated PostgreSQL + HTTP", (
         calls.push("dns");
       }),
     };
-    const deps = { pool, originActivator: new DeploymentOriginActivator(pool, {
+    const waitUntilResolvable = vi.fn(async () => true);
+    const deps = { pool, dnsActivationChecker: { waitUntilResolvable }, originActivator: new DeploymentOriginActivator(pool, {
       cloudflare: cf, zoneId: "test-zone", platformDomain: "example.com",
     }) } as unknown as WorkerDeps;
     await expect(runVerifyJob({ data: payload }, deps, { sleep: async () => undefined })).rejects.toThrow("ORIGIN_CLOUDFLARE_FAILED");
+    expect(waitUntilResolvable).toHaveBeenCalledWith(new URL(payload.targetUrl).hostname, undefined);
     healthStatus = 503;
     await expect(runVerifyJob({ data: payload }, deps)).resolves.toMatchObject({ status: "passed" });
     const checks = await pool.query("SELECT count(*) AS count FROM health_check_attempts");
     expect(Number(checks.rows[0].count)).toBe(3);
+    expect(waitUntilResolvable).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["ingress", "ingress", "dns"]);
   });
 

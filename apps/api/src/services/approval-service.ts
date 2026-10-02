@@ -7,21 +7,24 @@
 import type { Pool } from "@camellia/db";
 import type { DeploymentStatus, SubmitApprovalResponse } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
+import { applyPatchDecision } from "./source-patch-service.js";
 
 export interface SubmitApprovalInput {
   deploymentId: number;
-  gate: "target" | "plan";
+  gate: "patch" | "target" | "plan";
   decision: "approve" | "reject";
   note?: string;
 }
 
 // Status transitions
 const APPROVAL_REQUIRED_STATUS: Record<string, DeploymentStatus> = {
+  patch: "awaiting_patch_approval",
   target: "awaiting_target_confirmation",
   plan: "awaiting_plan_approval",
 };
 
 const APPROVE_NEXT_STATUS: Record<string, DeploymentStatus> = {
+  patch: "awaiting_target_confirmation",
   target: "queued",
   plan: "provisioning",
 };
@@ -76,7 +79,11 @@ export class ApprovalService {
       let newStatus: DeploymentStatus;
       let lockAcquired = false;
 
-      if (decision === "approve") {
+      if (gate === "patch") {
+        // 코드 수정안 (#277): 승인이면 수정된 소스로, 거절이면 원래 소스(SQLite 그대로)로 배포를 이어 간다
+        await applyPatchDecision(client, deploymentId, decision);
+        newStatus = APPROVE_NEXT_STATUS.patch!;
+      } else if (decision === "approve") {
         newStatus = APPROVE_NEXT_STATUS[gate]!;
 
         // target 승인 시: env_lock 획득 (D-30)

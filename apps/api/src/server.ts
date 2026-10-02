@@ -23,6 +23,7 @@ import { DeploymentService } from "./services/deployment-service.js";
 import { IrService } from "./services/ir-service.js";
 import { ApprovalService } from "./services/approval-service.js";
 import { AnalysisReportService } from "./services/analysis-report-service.js";
+import { SourcePatchService } from "./services/source-patch-service.js";
 import { LogService } from "./services/log-service.js";
 import { DeploymentHealthService } from "./services/deployment-health-service.js";
 import { DiagnosisService } from "./services/diagnosis-service.js";
@@ -47,6 +48,7 @@ import deploymentIrRoutes from "./routes/deployment-ir.js";
 import deploymentMissingRoutes from "./routes/deployment-missing.js";
 import deploymentApprovalsRoutes from "./routes/deployment-approvals.js";
 import deploymentAnalysisReportRoutes from "./routes/deployment-analysis-report.js";
+import deploymentPatchRoutes from "./routes/deployment-patch.js";
 import deploymentLogsRoutes from "./routes/deployment-logs.js";
 import deploymentHealthRoutes from "./routes/deployment-health.js";
 import deploymentDiagnosisRoutes from "./routes/deployment-diagnosis.js";
@@ -131,6 +133,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const irService = new IrService(opts.pool);
   const approvalService = new ApprovalService(opts.pool);
   const analysisReportService = new AnalysisReportService(opts.pool);
+  const sourcePatchService = new SourcePatchService(opts.pool);
   const logService = new LogService(opts.pool, opts.storage);
   const deploymentHealthService = new DeploymentHealthService(opts.pool);
   const diagnosisService = new DiagnosisService(opts.pool);
@@ -254,6 +257,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(deploymentAnalysisReportRoutes, {
       prefix: "/deployments",
       analysisReportService,
+    });
+
+    v1.register(deploymentPatchRoutes, {
+      prefix: "/deployments",
+      sourcePatchService,
     });
 
     v1.register(deploymentLogsRoutes, {

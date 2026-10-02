@@ -1,0 +1,142 @@
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import pg from "pg";
+
+// 방명록 데이터는 SQLite 파일 하나에 둔다. 저장소에 커밋된 data/guestbook.db 에 첫 글 몇 개가 들어 있다.
+const DB_PATH = "data/guestbook.db";
+// DATABASE_URL 이 있으면 PostgreSQL, 없으면 지금처럼 SQLite
+const DATABASE_URL = process.env.DATABASE_URL;
+const usePostgres = Boolean(DATABASE_URL);
+
+export type Entry = {
+  id: number;
+  name: string;
+  message: string;
+  created_at: string;
+};
+
+const SQLITE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  )
+`;
+
+const POSTGRES_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS entries (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+  )
+`;
+
+let sqlite: DatabaseSync | null = null;
+let pool: pg.Pool | null = null;
+
+function sqliteDb(): DatabaseSync {
+  if (!sqlite) {
+    sqlite = new DatabaseSync(DB_PATH);
+    sqlite.exec(SQLITE_SCHEMA);
+  }
+  return sqlite;
+}
+
+function postgres(): pg.Pool {
+  if (!pool) throw new Error("PostgreSQL is not initialised");
+  return pool;
+}
+
+/** 서버가 요청을 받기 전에 한 번 — PostgreSQL 이면 테이블을 만들고, 비어 있으면 SQLite 파일의 글을 옮겨 온다 */
+export async function initDb(): Promise<void> {
+  if (!usePostgres) {
+    sqliteDb();
+    return;
+  }
+  pool = new pg.Pool({ connectionString: DATABASE_URL });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(727001)");
+    await client.query(POSTGRES_SCHEMA);
+    const existing = await client.query<{ count: string }>("SELECT COUNT(*) AS count FROM entries");
+    if (Number(existing.rows[0]?.count ?? 0) === 0 && existsSync(DB_PATH)) {
+      const source = new DatabaseSync(DB_PATH, { readOnly: true });
+      try {
+        const rows = source
+          .prepare("SELECT id, name, message, created_at FROM entries ORDER BY id")
+          .all() as Entry[];
+        for (const row of rows) {
+          await client.query(
+            "INSERT INTO entries (id, name, message, created_at) VALUES ($1, $2, $3, $4)",
+            [row.id, row.name, row.message, row.created_at],
+          );
+        }
+        await client.query(
+          "SELECT setval(pg_get_serial_sequence('entries', 'id'), COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM entries",
+        );
+        console.log(`imported ${rows.length} rows from ${DB_PATH} into PostgreSQL`);
+      } finally {
+        source.close();
+      }
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** 화면에 보여 주는 저장소 이름 */
+export function storageName(): string {
+  return usePostgres ? "PostgreSQL" : "SQLite";
+}
+
+export async function listEntries(limit = 50): Promise<Entry[]> {
+  if (usePostgres) {
+    const result = await postgres().query<Entry>(
+      "SELECT id, name, message, created_at FROM entries ORDER BY id DESC LIMIT $1",
+      [limit],
+    );
+    return result.rows;
+  }
+  return sqliteDb()
+    .prepare("SELECT id, name, message, created_at FROM entries ORDER BY id DESC LIMIT ?")
+    .all(limit) as Entry[];
+}
+
+export async function addEntry(name: string, message: string): Promise<Entry> {
+  if (usePostgres) {
+    const result = await postgres().query<Entry>(
+      "INSERT INTO entries (name, message) VALUES ($1, $2) RETURNING id, name, message, created_at",
+      [name, message],
+    );
+    return result.rows[0]!;
+  }
+  return sqliteDb()
+    .prepare("INSERT INTO entries (name, message) VALUES (?, ?) RETURNING id, name, message, created_at")
+    .get(name, message) as Entry;
+}
+
+export async function countEntries(): Promise<number> {
+  if (usePostgres) {
+    const result = await postgres().query<{ count: string }>("SELECT COUNT(*) AS count FROM entries");
+    return Number(result.rows[0]?.count ?? 0);
+  }
+  const row = sqliteDb().prepare("SELECT COUNT(*) AS count FROM entries").get() as { count: number };
+  return Number(row.count);
+}
+
+/** 헬스체크용 — DB 에 실제로 질의가 되는지 확인한다 */
+export async function ping(): Promise<boolean> {
+  if (usePostgres) {
+    await postgres().query("SELECT 1");
+    return true;
+  }
+  sqliteDb().prepare("SELECT 1").get();
+  return true;
+}

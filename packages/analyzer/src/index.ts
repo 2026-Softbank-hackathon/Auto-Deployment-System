@@ -47,6 +47,13 @@ export type {
 } from "./ai/anthropic-client.js";
 export { redact, redactPayload } from "./ai/redact.js";
 export { estimateCost } from "./ai/tokens.js";
+export type { TokenUsage } from "./ai/tokens.js";
+
+// SQLite → PostgreSQL 코드 수정안 (#277)
+export { createSqlitePatch, applyPatch } from "./patch/sqlite-to-postgres.js";
+export type { PatchFile, SqlitePatch, SqlitePatchSkipped, SqlitePatchOptions } from "./patch/sqlite-to-postgres.js";
+export { zipDirectory } from "./patch/zip.js";
+export { countDiffLines, createUnifiedDiff } from "./patch/unified-diff.js";
 
 /** 정적 사이트 이미지(nginx)가 듣는 포트 (#272) */
 export const STATIC_SITE_PORT = 8080;

@@ -149,13 +149,50 @@ export const SubmitApprovalResponseSchema = z
     deploymentId: IdStringSchema,
     gate: ApprovalGateSchema,
     decision: z.enum(["approve", "reject"]),
-    /** approve: target → queued, plan → provisioning / reject: failed */
+    /**
+     * approve: patch → awaiting_target_confirmation(수정된 소스로 빌드), target → queued, plan → provisioning
+     * reject: patch → awaiting_target_confirmation(수정 없이 SQLite 그대로), 그 밖은 failed
+     */
     newStatus: DeploymentStatusSchema,
     /** gate=target 일 때만 있음 (env_lock 획득 여부) */
     lockAcquired: z.boolean().optional(),
   })
   .strict();
 export type SubmitApprovalResponse = z.infer<typeof SubmitApprovalResponseSchema>;
+
+// ── GET /deployments/:id/patch ───────────────────────────────────────────────
+
+/** 코드 수정안 (PAT-02, #277). 수정안이 없는 배포는 404 */
+export const SourcePatchSchema = z
+  .object({
+    deploymentId: IdStringSchema,
+    /** 지금은 SQLite → PostgreSQL 겸용(dual-mode) 하나 */
+    kind: z.literal("sqlite_to_postgres"),
+    status: z.enum(["pending", "approved", "rejected"]),
+    /** 승인하는 사람에게 보여 줄 한두 문장 */
+    summary: z.string(),
+    notes: z.array(z.string()),
+    /** unified diff (lock 파일처럼 규칙으로 다시 만든 파일은 빠짐) */
+    diff: z.string(),
+    files: z.array(
+      z
+        .object({
+          path: z.string(),
+          change: z.enum(["added", "modified"]),
+          additions: z.number().int(),
+          deletions: z.number().int(),
+          /** true = 규칙으로 다시 만든 파일(package-lock.json) — diff 에 없음 */
+          generated: z.boolean(),
+        })
+        .strict(),
+    ),
+    generator: z.string(),
+    model: z.string().nullable(),
+    createdAt: IsoDateTimeSchema,
+    decidedAt: IsoDateTimeSchema.nullable(),
+  })
+  .strict();
+export type SourcePatch = z.infer<typeof SourcePatchSchema>;
 
 // ── GET /deployments/:id/analysis-report ─────────────────────────────────────
 

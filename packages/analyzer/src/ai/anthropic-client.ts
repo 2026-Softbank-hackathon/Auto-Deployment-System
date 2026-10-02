@@ -14,8 +14,8 @@
 
 export type AiProvider = "bedrock" | "anthropic";
 
-/** 기능별 모델 역할. analyze = IR 빈칸 채우기, diagnose = 배포 실패 진단. */
-export type AiRole = "analyze" | "diagnose";
+/** 기능별 모델 역할. analyze = IR 빈칸 채우기, diagnose = 배포 실패 진단, patch = 코드 수정안(SQLite → PostgreSQL). */
+export type AiRole = "analyze" | "diagnose" | "patch";
 
 type Env = Record<string, string | undefined>;
 
@@ -39,11 +39,16 @@ const MODEL_IDS: Record<AiRole, Record<AiProvider, string>> = {
     anthropic: "claude-sonnet-5-5",
     bedrock: "global.anthropic.claude-sonnet-5-5",
   },
+  patch: {
+    anthropic: "claude-opus-5-5",
+    bedrock: "global.anthropic.claude-opus-5-5",
+  },
 };
 
 const MODEL_ENV: Record<AiRole, string> = {
   analyze: "AI_MODEL_ANALYZE",
   diagnose: "AI_MODEL_DIAGNOSE",
+  patch: "AI_MODEL_PATCH",
 };
 
 function nonEmpty(v: string | undefined): string | undefined {
@@ -76,7 +81,11 @@ export function resolveAiProvider(env: Env = process.env): AiProviderResolution 
  * 역할 · 제공자에 맞는 모델 ID. AI_MODEL_ANALYZE / AI_MODEL_DIAGNOSE 로 덮어쓸 수 있다.
  */
 export function resolveModel(role: AiRole, provider: AiProvider, env: Env = process.env): string {
-  return nonEmpty(env[MODEL_ENV[role]]) ?? MODEL_IDS[role][provider];
+  const override = nonEmpty(env[MODEL_ENV[role]]);
+  if (override) return override;
+  // 코드 수정안은 분석과 같은 모델을 기본으로 쓴다 (AI_MODEL_ANALYZE 를 바꾸면 같이 따라간다)
+  if (role === "patch") return resolveModel("analyze", provider, env);
+  return MODEL_IDS[role][provider];
 }
 
 export type ClientOptions = {

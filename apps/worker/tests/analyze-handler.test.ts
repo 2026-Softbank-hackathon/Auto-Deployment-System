@@ -15,6 +15,11 @@ import type { WorkerDeps } from "../src/deps.js";
 
 vi.mock("@camellia/analyzer", () => ({
   analyzeWithAI: vi.fn(),
+  createSqlitePatch: vi.fn(),
+  applyPatch: vi.fn(async () => {}),
+  zipDirectory: vi.fn(async () => Buffer.from("patched-zip")),
+  countDiffLines: vi.fn(() => ({ additions: 3, deletions: 1 })),
+  createUnifiedDiff: vi.fn(() => "diff"),
 }));
 
 vi.mock("@camellia/analyzer/stager", () => ({
@@ -34,7 +39,7 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-import { analyzeWithAI } from "@camellia/analyzer";
+import { analyzeWithAI, applyPatch, createSqlitePatch } from "@camellia/analyzer";
 import { stage } from "@camellia/analyzer/stager";
 
 // ---------------------------------------------------------------------------
@@ -67,6 +72,9 @@ function makeMockPool(currentStatus = "received") {
       }
       if (sql.includes("INSERT INTO ir_versions")) {
         insertedRows.push({ table: "ir_versions", params: params ?? [] });
+      }
+      if (sql.includes("INSERT INTO source_patches")) {
+        insertedRows.push({ table: "source_patches", params: params ?? [] });
       }
       // 재진입 체크용 상태 조회 — makeMockPool(currentStatus) 로 분기 테스트.
       if (sql.includes("SELECT status FROM deployments")) {
@@ -205,6 +213,103 @@ describe("handleAnalyze", () => {
     expect(stateChangedCalls[0]?.[2]).toMatchObject({ status: "analyzing" });
     expect(stateChangedCalls[1]?.[2]).toMatchObject({
       status: "awaiting_target_confirmation",
+    });
+  });
+
+  describe("SQLite → PostgreSQL 수정안 (#277)", () => {
+    const SQLITE_RESOURCE = {
+      name: "db",
+      type: "postgres",
+      connection_env: "DATABASE_URL",
+      local_fallback: "sqlite",
+      detected_from: ["src/db.ts (node:sqlite)"],
+      sqlite: { libraries: ["node:sqlite"], sources: ["src/db.ts"], files: ["data/app.db"] },
+    };
+    const IR_WITH_DB = {
+      name: "test-app",
+      version: "1.0.0",
+      resources: { db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" } },
+    };
+
+    function sqliteAnalysis() {
+      return makeAnalysisResult({
+        resources: [SQLITE_RESOURCE],
+        ai: { ...makeAnalysisResult().ai, ir_after: structuredClone(IR_WITH_DB) },
+      });
+    }
+
+    it("수정안을 만들면 적용한 소스를 zip 으로 저장하고 patch 승인을 기다린다", async () => {
+      const pool = makeMockPool("received");
+      const notifierCalls: unknown[][] = [];
+      const { deps, storage } = makeDeps(pool, notifierCalls);
+      vi.mocked(analyzeWithAI).mockResolvedValue(sqliteAnalysis() as any);
+      vi.mocked(createSqlitePatch).mockResolvedValue({
+        status: "ready",
+        summary: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.",
+        notes: [],
+        files: [
+          { path: "src/db.ts", before: "old", after: "new" },
+          { path: "package-lock.json", before: "{}", after: "{ }", generated: true },
+        ],
+        diff: "--- a/src/db.ts\n+++ b/src/db.ts\n",
+        generator: "ai",
+        model: "claude-opus-5-5",
+      });
+
+      await handleAnalyze(makeJob(), deps);
+
+      // 서비스 폴더(".")에서 수정안을 만들고 적용
+      expect(vi.mocked(createSqlitePatch).mock.calls[0]?.[0].replaceAll("\\", "/")).toMatch(/\/tmp\/staged-src$/);
+      expect(vi.mocked(createSqlitePatch).mock.calls[0]?.[1]).toMatchObject({ local_fallback: "sqlite" });
+      expect(applyPatch).toHaveBeenCalled();
+      const key = [...storage.files.keys()].find((k) => k.startsWith("sources/"));
+      expect(key).toMatch(/^sources\/[0-9a-f]{64}\.zip$/);
+
+      const row = pool.insertedRows.find((r) => r.table === "source_patches")!;
+      expect(row.params[0]).toBe(42);
+      expect(row.params[1]).toBe("SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.");
+      expect(JSON.parse(row.params[4] as string)).toEqual([
+        { path: "src/db.ts", change: "modified", additions: 3, deletions: 1, generated: false },
+        { path: "package-lock.json", change: "modified", additions: 0, deletions: 0, generated: true },
+      ]);
+      expect(row.params[7]).toBe(key);
+
+      // IR 에 DB 가 남아 있고, 상태는 patch 승인 대기
+      const ir = JSON.parse(pool.insertedRows.find((r) => r.table === "ir_versions")!.params[1] as string);
+      expect(ir.resources.db.type).toBe("postgres");
+      const states = notifierCalls.filter((c) => c[1] === "state_changed").map((c) => (c[2] as { status: string }).status);
+      expect(states).toEqual(["analyzing", "awaiting_patch_approval"]);
+      expect(notifierCalls.find((c) => c[1] === "approval_requested")?.[2]).toEqual({ gate: "patch" });
+    });
+
+    it("수정안을 못 만들면 경고를 남기고 DB 없이(SQLite 그대로) 대상 확인으로 간다", async () => {
+      const pool = makeMockPool("received");
+      const notifierCalls: unknown[][] = [];
+      const { deps } = makeDeps(pool, notifierCalls);
+      vi.mocked(analyzeWithAI).mockResolvedValue(sqliteAnalysis() as any);
+      vi.mocked(createSqlitePatch).mockResolvedValue({ status: "skipped", reason: "AI_DISABLED: AI 가 꺼져 있음" });
+
+      await handleAnalyze(makeJob(), deps);
+
+      const report = pool.insertedRows.find((r) => r.table === "analysis_reports")!;
+      expect(JSON.parse(report.params[4] as string)).toEqual([
+        expect.objectContaining({ code: "PAT-02-SKIPPED", message: expect.stringContaining("AI_DISABLED") }),
+      ]);
+      const ir = JSON.parse(pool.insertedRows.find((r) => r.table === "ir_versions")!.params[1] as string);
+      expect(ir.resources).toBeUndefined();
+      expect(pool.insertedRows.some((r) => r.table === "source_patches")).toBe(false);
+      expect(notifierCalls.find((c) => c[1] === "approval_requested")?.[2]).toEqual({ gate: "target" });
+    });
+
+    it("SQLite 앱은 같은 소스의 이전 분석을 재사용하지 않는다 (캐시 조회에서 제외)", async () => {
+      const pool = makeMockPool("received");
+      const { deps } = makeDeps(pool);
+      vi.mocked(analyzeWithAI).mockResolvedValue(makeAnalysisResult() as any);
+
+      await handleAnalyze(makeJob(), deps);
+
+      const cacheQuery = (pool.query.mock.calls as unknown[][]).find((c) => String(c[0]).includes("FROM source_versions sv"));
+      expect(String(cacheQuery?.[0])).toContain(`'[{"local_fallback": "sqlite"}]'::jsonb`);
     });
   });
 

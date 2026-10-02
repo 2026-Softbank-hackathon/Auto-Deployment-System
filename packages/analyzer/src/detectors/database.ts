@@ -202,6 +202,14 @@ const SQLITE_CODE_PATTERNS: Array<{ library: string; pattern: RegExp }> = [
   { library: "django sqlite3", pattern: /django\.db\.backends\.sqlite3/ },
 ];
 
+/** 소스 내용에 SQLite 사용 흔적이 있는지 — 수정안이 SQLite 경로를 지우지 않았는지 확인할 때 쓴다 */
+export function usesSqlite(content: string): boolean {
+  return (
+    SQLITE_CODE_PATTERNS.some(({ pattern }) => pattern.test(content)) ||
+    /provider\s*=\s*["']sqlite["']/.test(content)
+  );
+}
+
 type SqliteUsage = {
   libraries: string[];
   sources: string[];

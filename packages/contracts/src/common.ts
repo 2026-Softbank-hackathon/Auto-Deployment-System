@@ -123,6 +123,6 @@ export const DEPLOY_MODES = ["container", "serverless"] as const;
 export const DeployModeSchema = z.enum(DEPLOY_MODES);
 export type DeployMode = z.infer<typeof DeployModeSchema>;
 
-/** 승인 게이트 */
-export const ApprovalGateSchema = z.enum(["target", "plan"]);
+/** 승인 게이트. patch = 코드 수정안(SQLite → PostgreSQL, #277) */
+export const ApprovalGateSchema = z.enum(["patch", "target", "plan"]);
 export type ApprovalGate = z.infer<typeof ApprovalGateSchema>;

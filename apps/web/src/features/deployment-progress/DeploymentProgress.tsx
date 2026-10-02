@@ -10,7 +10,8 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { DeployScene } from './DeployScene';
+import { DeployScene, sceneTarget } from './DeployScene';
+import { localizeLogLine } from './log-line-i18n';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
@@ -65,6 +66,12 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
   return logs.map((log) => (log === existing ? { ...log, text: `${log.text}\n${entry.line}` } : log));
 }
 /** 로그 줄 앞의 "[ISO 시각]"으로 가장 최근 줄을 고른다. */
+/** 진행 탭의 "지금" 자리에 보여 주는 최근 로그 줄 수 (좁은 화면에서는 마지막 한 줄만 보인다) */
+const RECENT_LINES = 3;
+/** "지금" 자리에 보여 줄 줄: 시각을 떼고 화면 언어로 옮긴다. 옮길 수 없는 줄은 뺀다. */
+function nowLines(lines: string[], locale: string): string[] {
+  return lines.flatMap((line) => localizeLogLine(line.replace(/^\[[^\]]+\]\s*/, ''), locale) ?? []);
+}
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
 
 /** 진행 중일 때만 1초마다 다시 그린다. 경과 시간은 서버의 createdAt 기준 실제 값이다. */
@@ -102,7 +109,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
-  const [latestLine, setLatestLine] = useState<string | null>(null);
+  const [recentLines, setRecentLines] = useState<string[]>([]);
   const [logs, setLogs] = useState<StepLog[] | null>(null);
   const [error, setError] = useState<ErrorState>(null);
   const [loading, setLoading] = useState(true);
@@ -124,7 +131,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
       if (event.name === 'log.line') {
         const entry = readLogLine(event.payload);
         if (!entry) return;
-        setLatestLine(entry.line);
+        setRecentLines((previous) => [...previous, entry.line].slice(-RECENT_LINES));
         setLogs((previous) => (previous ? appendLogLine(previous, entry) : previous));
         return;
       }
@@ -132,14 +139,14 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     }, () => { /* The server closes SSE after succeeded/failed; HTTP remains authoritative. */ });
   }, [deploymentId, refresh]);
 
-  // 작업 노트 첫 줄 — 단계별 마지막 로그 한 줄씩 받아 가장 최근 것을 쓴다.
+  // "지금" 줄 — 단계별 마지막 로그 몇 줄을 받아 가장 최근 것들을 쓴다. 실시간 줄이 먼저 왔으면 건드리지 않는다.
   useEffect(() => {
     let active = true;
-    void Promise.allSettled(deploymentLogSteps.map((step) => getDeploymentLogs(deploymentId, step, 1))).then((results) => {
+    void Promise.allSettled(deploymentLogSteps.map((step) => getDeploymentLogs(deploymentId, step, RECENT_LINES))).then((results) => {
       if (!active) return;
-      const lines = results.flatMap((result) => (result.status === 'fulfilled' && result.value ? [result.value.trim().split('\n').pop() ?? ''] : [])).filter(Boolean);
-      const newest = lines.sort((a, b) => lineTime(b) - lineTime(a))[0];
-      if (newest) setLatestLine((current) => current ?? newest);
+      const lines = results.flatMap((result) => (result.status === 'fulfilled' && result.value ? result.value.trim().split('\n') : [])).filter(Boolean);
+      const newest = lines.sort((a, b) => lineTime(a) - lineTime(b)).slice(-RECENT_LINES);
+      if (newest.length) setRecentLines((current) => (current.length ? current : newest));
     });
     return () => { active = false; };
   }, [deploymentId]);
@@ -307,10 +314,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure className="run-scene"><DeployScene view={view} /></figure>
+        <figure className="run-scene"><DeployScene view={view} target={sceneTarget(text(status?.targetProfile))} /></figure>
 
-        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 가장 최근 로그 한 줄(시각은 뗀다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
-        {view.outcome === 'active' && !view.waiting && latestLine && <p className="run-now" aria-live="polite"><span>{t.run.nowLabel}</span><code>{latestLine.replace(/^\[[^\]]+\]\s*/, '')}</code></p>}
+        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 최근 로그 몇 줄(시각은 떼고 화면 언어로 옮긴다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
+        {view.outcome === 'active' && !view.waiting && nowLines(recentLines, t.locale).length > 0 && <div className="run-now" aria-live="polite">
+          <span>{t.run.nowLabel}</span>
+          <ol>{nowLines(recentLines, t.locale).map((line, index) => <li key={`${index}-${line}`}><code>{line}</code></li>)}</ol>
+        </div>}
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 
@@ -343,7 +353,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     {shownTab === 'logs' && <section className="work-note" aria-label={t.run.workNote}>
       <div className="work-note__bar">
         <h2>{t.run.workNote}</h2>
-        <p className="work-note__line">{latestLine ?? t.run.noNote}</p>
+        <p className="work-note__line">{recentLines[recentLines.length - 1] ?? t.run.noNote}</p>
         <div className="work-note__actions">
           <Keycap variant="ghost" onClick={() => { void refresh(); void loadLogs(); }}>{t.progress.refresh}</Keycap>
         </div>

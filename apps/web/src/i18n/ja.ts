@@ -456,6 +456,7 @@ export const ja: Messages = {
     copyUrl: 'URLをコピー',
     factTarget: 'デプロイ先',
     factDuration: '所要時間',
+    timelineTitle: '段階別の所要時間',
     factFinished: '完了時刻',
     targets: { aws: 'AWS', onprem: 'オンプレミス' },
   },

@@ -4,6 +4,7 @@ import { DeployKeycap } from '../../components/ui/DeployKeycap';
 import { Keycap } from '../../components/ui/Keycap';
 import { Confetti } from './Confetti';
 import { RedeployButton } from './RedeployButton';
+import { StageTimeline } from './StageTimeline';
 import { Koro, type KoroMood } from '../../components/ui/Koro';
 import { StatusTape } from '../../components/ui/StatusTape';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
@@ -111,6 +112,8 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       {createdAt && succeededAt && <div><dt>{t.result.factDuration}</dt><dd>{elapsed(createdAt, Date.parse(succeededAt))}</dd></div>}
       {succeededAt && <div><dt>{t.result.factFinished}</dt><dd>{new Date(succeededAt).toLocaleString(t.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>}
     </dl>
+
+    <StageTimeline deploymentId={deploymentId} />
 
     <div className="result-card__actions">
       <DeployKeycap onClick={onNewDeployment}>{t.result.newDeploy}</DeployKeycap>

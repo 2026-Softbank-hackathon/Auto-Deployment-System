@@ -455,6 +455,7 @@ export const ko = {
     copyUrl: '주소 복사',
     factTarget: '배포한 곳',
     factDuration: '걸린 시간',
+    timelineTitle: '단계별 걸린 시간',
     factFinished: '완료 시각',
     targets: { aws: 'AWS', onprem: '온프레미스' },
   },

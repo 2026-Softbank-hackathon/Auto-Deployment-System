@@ -1,11 +1,17 @@
 import type { Ir } from "@camellia/ir-schema";
 import type { Profile } from "@camellia/profiles";
 import { AdapterError } from "./errors.js";
-import type { CommonDeploymentPlan, RoutePlan } from "./types.js";
+import type { CommonDeploymentPlan, ResourcePlan, RoutePlan } from "./types.js";
+
+export type CommonPlanOptions = {
+  /** 이 환경이 직접 만들어 주는 관리형 리소스 종류 (예: AWS 의 postgres) */
+  managedResourceTypes?: readonly string[];
+};
 
 export function createCommonPlan(
   ir: Ir,
   profile: Profile,
+  options: CommonPlanOptions = {},
 ): CommonDeploymentPlan {
   const services = Object.entries(ir.services);
   if (services.length !== 1 || services[0]?.[1].type !== "http") {
@@ -15,12 +21,27 @@ export function createCommonPlan(
     );
   }
 
-  if (ir.resources && Object.keys(ir.resources).length > 0) {
+  // 환경이 만들어 주지 못하는 리소스라도 앱에 로컬 대체 저장소(local_fallback)가 있으면
+  // 접속 정보 없이 실행한다 — 온프레미스의 SQLite 유지 (#276)
+  const resources: ResourcePlan[] = Object.entries(ir.resources ?? {}).map(
+    ([name, resource]) => ({
+      name,
+      type: resource.type,
+      ...(resource.connection_env ? { connectionEnv: resource.connection_env } : {}),
+      ...(resource.local_fallback ? { localFallback: resource.local_fallback } : {}),
+    }),
+  );
+  const managed = new Set(options.managedResourceTypes ?? []);
+  if (resources.some((resource) => !managed.has(resource.type) && !resource.localFallback)) {
     throw new AdapterError(
       "P0_RESOURCES_UNSUPPORTED",
       "P0 Adapter는 관리형 리소스를 지원하지 않습니다.",
     );
   }
+  // 리소스 접속 정보는 사용자가 등록하는 환경변수가 아니다 — 리소스를 만드는 환경이 주입한다
+  const resourceEnvNames = new Set(
+    resources.flatMap((resource) => (resource.connectionEnv ? [resource.connectionEnv] : [])),
+  );
 
   const [serviceName, service] = services[0];
   if (service.port === undefined) {
@@ -84,7 +105,7 @@ export function createCommonPlan(
       type: service.type,
       command: service.command,
       containerPort: service.port,
-      environmentNames: service.env ?? [],
+      environmentNames: (service.env ?? []).filter((name) => !resourceEnvNames.has(name)),
       environmentDefaults: service.env_defaults ?? {},
       secretNames: service.secrets ?? [],
       compute: {
@@ -105,5 +126,6 @@ export function createCommonPlan(
       domain: ir.expose?.domain,
       routes,
     },
+    resources,
   };
 }

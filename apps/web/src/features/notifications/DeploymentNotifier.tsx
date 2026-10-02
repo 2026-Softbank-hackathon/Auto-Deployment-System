@@ -5,6 +5,7 @@ import { useI18n } from '../../i18n/I18nProvider';
 import { displayProjectName, isStalled } from '../dashboard/format';
 import { loadDeployments } from '../dashboard/useDeploymentList';
 import { deploymentStatusView, type DeploymentOutcome } from '../deployment-status/status-view';
+import { usePreferences } from '../settings/preferences';
 import { useSound } from '../sound/SoundProvider';
 
 /** 진행 중인 배포가 있을 때 / 없을 때 다시 조회하는 간격. 전역 이벤트 스트림이 없어 목록을 다시 읽는다. */
@@ -23,6 +24,10 @@ export function DeploymentNotifier({ route, onNavigate }: { route: Route; onNavi
   const { t } = useI18n();
   const { play } = useSound();
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // 환경설정에서 알림을 꺼도 목록 확인은 계속한다(배포 현황에 바로 보여 줄 값을 채워 두기 위해). 알림과 효과음만 내지 않는다.
+  const { preferences } = usePreferences();
+  const notifyRef = useRef(preferences.notify);
+  notifyRef.current = preferences.notify;
   /** 직전 조회에서 본 상태. 처음 조회는 기준만 잡고 알리지 않는다. */
   const seen = useRef<Map<string, DeploymentOutcome> | null>(null);
   const viewing = useRef<string | null>(null);
@@ -50,7 +55,7 @@ export function DeploymentNotifier({ route, onNavigate }: { route: Route; onNavi
           }
         }
         seen.current = next;
-        if (finished.length > 0) {
+        if (finished.length > 0 && notifyRef.current) {
           play(finished.some((toast) => toast.outcome === 'success') ? 'success' : 'failure');
           setToasts((current) => [...finished, ...current.filter((toast) => !finished.some((done) => done.deploymentId === toast.deploymentId))].slice(0, MAX_TOASTS));
         }
@@ -72,7 +77,7 @@ export function DeploymentNotifier({ route, onNavigate }: { route: Route; onNavi
   const dismiss = (deploymentId: string) => setToasts((current) => current.filter((toast) => toast.deploymentId !== deploymentId));
 
   return <div className="toast-stack" role="status" aria-live="polite">
-    {toasts.map((toast) => {
+    {preferences.notify && toasts.map((toast) => {
       const path = `/deployments/${encodeURIComponent(toast.deploymentId)}${toast.outcome === 'success' ? '/result' : ''}`;
       return <div key={toast.deploymentId} className={`toast is-${toast.outcome}`}>
         <div className="toast__body">

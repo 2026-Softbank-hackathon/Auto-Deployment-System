@@ -36,7 +36,9 @@ export function koroLine(stage: number, stepSeconds: number, facts: AnalysisFact
 /** 재배포 · 롤백 · 환경 전환일 때 먼저 하는 말 */
 function storyLines(stage: number, story: DeployStory | null, talk: Messages['run']['talk']): string[] {
   if (!story) return [];
-  if (stage === 1 && story.reused) return [talk.reuse, ...(story.kind === 'switch' ? [talk.reuseSwitch] : story.kind === 'rollback' ? [talk.rollback(story.label)] : [])];
+  // "같은 이미지, 장소만 바꾼다"는 지금 서비스 중인 버전과 이름표가 같을 때만 말한다 (환경을 바꾸면서 예전 이미지로 되돌리는 경우도 있다).
+  const sameImage = story.prev !== null && story.prev.label === story.label;
+  if (stage === 1 && story.reused) return [talk.reuse, ...(story.kind === 'switch' && sameImage ? [talk.reuseSwitch] : story.kind === 'rollback' ? [talk.rollback(story.label)] : [])];
   if (stage >= 2 && stage <= 4 && story.kind === 'switch') return [talk.switchKeeps];
   if (stage >= 2 && stage <= 4 && story.kind === 'rollback') return [talk.rollback(story.label)];
   return [];

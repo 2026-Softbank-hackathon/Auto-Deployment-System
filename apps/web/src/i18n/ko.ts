@@ -7,11 +7,11 @@ export const ko = {
     sound: { label: '사운드', on: '켬', off: '끔' },
   },
   nav: { label: '메인 메뉴', dashboard: '대시보드', projects: '내 프로젝트', deploy: '간단 배포!' },
-  stages: { source: '소스 업로드', analyze: 'AI 분석', deploy: '배포', verify: '검증', done: '완료' },
-  gadgets: { source: '출발대', analyze: '도미노', deploy: '깔때기', verify: '저울', done: '컵' },
+  stages: { source: '소스 업로드', analyze: 'AI 분석', build: '빌드', provision: '인프라 준비', deploy: '배포', verify: '검증', done: '완료' },
+  gadgets: { source: '출발대', analyze: '도미노', build: '깔때기', provision: '나선', deploy: '도약대', verify: '저울', done: '컵' },
   status: {
     stage: {
-      source: '소스 업로드', analyze: 'AI 분석 단계', deploy: '배포 단계', verify: '검증 단계', rollback: '되돌리는 중',
+      analyze: 'AI 분석 단계', build: '빌드 단계', provision: '인프라 준비 단계', deploy: '배포 단계', verify: '검증 단계', rollback: '되돌리는 중',
       arrived: '도착', failed: '배포 실패', cancelled: '취소됨', rejected: '거절됨', unknown: '상태 확인 필요',
     },
   },
@@ -372,6 +372,7 @@ export const ko = {
     sceneFailed: '코로가 레일 밖으로 떨어졌다',
     sceneStopped: '코로가 출발대에서 멈춰 있다',
     workNote: '작업 노트',
+    nowLabel: '지금',
     tabsLabel: '배포 화면 메뉴',
     tabs: { progress: '진행', failure: '실패 원인', logs: '로그', analysis: '분석', attention: '(확인 필요)' },
     viewFailure: '실패 원인 보기',

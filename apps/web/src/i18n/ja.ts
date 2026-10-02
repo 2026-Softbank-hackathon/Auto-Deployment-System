@@ -9,11 +9,11 @@ export const ja: Messages = {
     sound: { label: 'サウンド', on: 'オン', off: 'オフ' },
   },
   nav: { label: 'メインメニュー', dashboard: 'ダッシュボード', projects: 'マイプロジェクト', deploy: 'かんたんデプロイ！' },
-  stages: { source: 'ソースアップロード', analyze: 'AI分析', deploy: 'デプロイ', verify: '検証', done: '完了' },
-  gadgets: { source: 'スタート台', analyze: 'ドミノ', deploy: 'じょうご', verify: '天びん', done: 'カップ' },
+  stages: { source: 'ソースアップロード', analyze: 'AI分析', build: 'ビルド', provision: 'インフラ準備', deploy: 'デプロイ', verify: '検証', done: '完了' },
+  gadgets: { source: 'スタート台', analyze: 'ドミノ', build: 'じょうご', provision: 'らせん', deploy: 'ジャンプ台', verify: '天びん', done: 'カップ' },
   status: {
     stage: {
-      source: 'ソースアップロード', analyze: 'AI分析中', deploy: 'デプロイ中', verify: '検証中', rollback: 'ロールバック中',
+      analyze: 'AI分析中', build: 'ビルド中', provision: 'インフラ準備中', deploy: 'デプロイ中', verify: '検証中', rollback: 'ロールバック中',
       arrived: '到着', failed: 'デプロイ失敗', cancelled: 'キャンセル済み', rejected: '却下済み', unknown: '状態の確認が必要',
     },
   },
@@ -374,6 +374,7 @@ export const ja: Messages = {
     sceneFailed: 'コロがレールから落ちてしまった',
     sceneStopped: 'コロがスタート台で止まっている',
     workNote: '作業ノート',
+    nowLabel: '現在',
     tabsLabel: 'デプロイ画面のメニュー',
     tabs: { progress: '進行', failure: '失敗の原因', logs: 'ログ', analysis: '分析', attention: '(要確認)' },
     viewFailure: '失敗の原因を見る',

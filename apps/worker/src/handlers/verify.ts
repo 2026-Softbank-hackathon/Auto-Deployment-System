@@ -1,3 +1,6 @@
+import http from "node:http";
+import https from "node:https";
+import type { LookupFunction } from "node:net";
 import { z } from "zod";
 import type { WorkerDeps } from "../deps.js";
 
@@ -208,12 +211,16 @@ export async function handleVerify(
   );
 }
 
+/** hostname 을 접속할 IPv4 주소로 바꾼다. 시스템 resolver 를 거치지 않을 때 쓴다. */
+export type HostAddressLookup = (hostname: string) => Promise<string>;
+
 export async function executeHealthCheck(
   targetUrl: string,
   expectedStatus: number,
   timeoutMs: number,
   attempt: number,
   externalSignal?: AbortSignal,
+  lookupAddress?: HostAddressLookup,
 ): Promise<HealthCheckAttempt> {
   const timestamp = new Date();
   const requestStartedAt = Date.now();
@@ -229,22 +236,22 @@ export async function executeHealthCheck(
   if (externalSignal?.aborted) controller.abort();
 
   try {
-    const response = await fetch(targetUrl, {
-      method: "GET",
-      redirect: "manual",
-      signal: controller.signal,
-    });
+    const status = await requestStatus(
+      targetUrl,
+      controller.signal,
+      lookupAddress,
+    );
     const latencyMs = Date.now() - requestStartedAt;
-    const passed = response.status === expectedStatus;
+    const passed = status === expectedStatus;
     return {
       attempt,
       timestamp: timestamp.toISOString(),
-      statusCode: response.status,
+      statusCode: status,
       latencyMs,
       passed,
       ...(!passed
         ? {
-            error: `unexpected_status: expected ${expectedStatus}, received ${response.status}`,
+            error: `unexpected_status: expected ${expectedStatus}, received ${status}`,
           }
         : {}),
     };
@@ -260,6 +267,47 @@ export async function executeHealthCheck(
     clearTimeout(timeout);
     externalSignal?.removeEventListener("abort", cancelRequest);
   }
+}
+
+/**
+ * GET 한 번의 응답 status 만 확인한다. 리다이렉트는 따라가지 않는다.
+ * lookupAddress 가 있으면 그 주소로 접속하되 Host · SNI 는 URL 의 hostname 을 유지한다.
+ */
+async function requestStatus(
+  targetUrl: string,
+  signal: AbortSignal,
+  lookupAddress?: HostAddressLookup,
+): Promise<number> {
+  if (!lookupAddress) {
+    const response = await fetch(targetUrl, {
+      method: "GET",
+      redirect: "manual",
+      signal,
+    });
+    return response.status;
+  }
+  const lookup: LookupFunction = (hostname, options, callback) => {
+    lookupAddress(hostname).then(
+      (address) => {
+        if (options.all) callback(null, [{ address, family: 4 }]);
+        else callback(null, address, 4);
+      },
+      (error: NodeJS.ErrnoException) => callback(error, "", 4),
+    );
+  };
+  const client = new URL(targetUrl).protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const request = client.request(
+      targetUrl,
+      { method: "GET", agent: false, lookup, signal },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      },
+    );
+    request.once("error", reject);
+    request.end();
+  });
 }
 
 export function buildHealthUrl(targetUrl: string, healthPath: string): string {
@@ -294,7 +342,9 @@ function classifyRequestError(
   if (cancelled) return "cancelled";
 
   const code = extractErrorCode(error);
-  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "dns_error";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN" || code === "ENODATA") {
+    return "dns_error";
+  }
   if (code === "ECONNREFUSED") return "connection_refused";
   if (code.startsWith("CERT_") || code.includes("TLS")) return "tls_error";
   return "network_error";

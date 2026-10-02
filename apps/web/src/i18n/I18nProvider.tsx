@@ -80,3 +80,9 @@ export function errorMessage(error: unknown, t: Messages, fallback: string): str
 export function serverReasonText(error: unknown, t: Messages, fallback: string): string {
   return error instanceof DeploymentApiError && error.serverMessage ? error.serverMessage : errorMessage(error, t, fallback);
 }
+
+/** 재배포(다른 환경으로 배포 · 롤백 포함)를 서버가 거절한 사유. 아는 오류 코드는 현재 언어 문구로, 모르는 코드는 서버 설명 그대로. */
+export function redeployReasonText(error: unknown, t: Messages, fallback: string): string {
+  const known = error instanceof DeploymentApiError && error.code ? t.redeploy.errors[error.code] : undefined;
+  return known ?? serverReasonText(error, t, fallback);
+}

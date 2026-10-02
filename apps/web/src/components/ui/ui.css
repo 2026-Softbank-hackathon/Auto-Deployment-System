@@ -80,6 +80,9 @@
 .status-tape__dot--success { background: var(--moss-on-dark); }
 .status-tape__dot--failed { background: var(--brick-on-dark); }
 .status-tape__dot--waiting { background: var(--pebble); }
+/* 한발 물러선 상태 (예: 이전 버전). 어두운 테이프 대신 옅은 바탕 */
+.status-tape--quiet { background: var(--paper-sunken); color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--line); }
+.status-tape--quiet .status-tape__dot--success { background: var(--moss); }
 
 /* GadgetIcon */
 .gadget-icon { display: block; flex-shrink: 0; }

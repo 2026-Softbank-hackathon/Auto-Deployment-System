@@ -21,6 +21,7 @@ import {
   SecretSchema,
   TARGET_VENDORS,
   TargetVendorSchema,
+  UpdateEnvironmentBodySchema,
   type DeploymentEventData,
 } from "../src/index.js";
 
@@ -235,5 +236,12 @@ describe("공용 연결 (#215)", () => {
     expect(OptionalProjectIdQuerySchema.parse({})).toEqual({});
     expect(OptionalProjectIdQuerySchema.parse({ projectId: "3" })).toEqual({ projectId: 3 });
     expect(OptionalProjectIdQuerySchema.safeParse({ projectId: "0" }).success).toBe(false);
+  });
+
+  it("요청 — PATCH /environments/:id 는 isDefault: true 만 받는다 (#228)", () => {
+    expect(UpdateEnvironmentBodySchema.parse({ isDefault: true })).toEqual({ isDefault: true });
+    expect(UpdateEnvironmentBodySchema.safeParse({ isDefault: false }).success).toBe(false);
+    expect(UpdateEnvironmentBodySchema.safeParse({}).success).toBe(false);
+    expect(UpdateEnvironmentBodySchema.safeParse({ isDefault: true, name: "x" }).success).toBe(false);
   });
 });

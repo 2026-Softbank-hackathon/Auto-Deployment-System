@@ -7,8 +7,10 @@
  *
  * 소유 범위(#215): projectId 가 있으면 프로젝트 전용 연결, 없으면(NULL) 공용 연결.
  * 기본 연결 · 이름 중복 · 참조 시크릿 검증은 모두 같은 소유 범위 안에서 한다.
+ * 기본 연결을 지우면 같은 범위 · 종류에서 가장 오래된 연결이 기본을 이어받는다(#228).
  */
 
+import type { PoolClient } from "pg";
 import type { Pool } from "@camellia/db";
 import type {
   AwsConfig,
@@ -61,6 +63,11 @@ const ACTIVE_STATUSES = [
   "deploying",
   "verifying",
 ];
+
+/** 같은 소유 범위 · 종류의 기본 연결을 바꾸는 작업(생성 · 삭제 · 기본 변경)을 줄 세운다 */
+async function lockDefaultScope(client: PoolClient, projectId: number | null, type: string) {
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`${projectId ?? "shared"}:${type}`]);
+}
 
 export class EnvironmentService {
   constructor(private readonly pool: Pool) {}
@@ -128,9 +135,7 @@ export class EnvironmentService {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-        `${projectId ?? "shared"}:${input.type}`,
-      ]);
+      await lockDefaultScope(client, projectId, input.type);
       const currentDefault = await client.query<{ id: number }>(
         `SELECT id FROM environments
          WHERE project_id IS NOT DISTINCT FROM $1::bigint AND type = $2 AND is_default = TRUE
@@ -237,10 +242,31 @@ export class EnvironmentService {
     if ((active.rowCount ?? 0) > 0) {
       throw new ApiError(409, "CONFLICT", "이 연결로 진행 중인 배포가 있어 환경을 삭제할 수 없습니다.");
     }
-    let res;
+    const client = await this.pool.connect();
     try {
-      res = await this.pool.query(`DELETE FROM environments WHERE id = $1`, [id]);
+      await client.query("BEGIN");
+      const env = await this.lockScopeOf(client, id);
+      const deleted = await client.query<{ is_default: boolean }>(
+        `DELETE FROM environments WHERE id = $1 RETURNING is_default`,
+        [id],
+      );
+      const row = deleted.rows[0];
+      if (!row) throw new ApiError(404, "NOT_FOUND", `환경 ID ${id}를 찾을 수 없습니다.`);
+      if (row.is_default) {
+        // 기본 연결이 없어지면 같은 범위 · 종류에서 가장 오래된 연결이 이어받는다(#228)
+        await client.query(
+          `UPDATE environments SET is_default = TRUE
+           WHERE id = (
+             SELECT id FROM environments
+             WHERE project_id IS NOT DISTINCT FROM $1::bigint AND type = $2
+             ORDER BY created_at, id LIMIT 1
+           )`,
+          [env.project_id, env.type],
+        );
+      }
+      await client.query("COMMIT");
     } catch (e) {
+      await client.query("ROLLBACK");
       // deployments.target/registry_environment_id 가 ON DELETE RESTRICT 로 참조 중
       if ((e as { code?: string }).code === "23503") {
         throw new ApiError(
@@ -251,10 +277,48 @@ export class EnvironmentService {
         );
       }
       throw e;
+    } finally {
+      client.release();
     }
-    if (res.rowCount === 0) {
-      throw new ApiError(404, "NOT_FOUND", `환경 ID ${id}를 찾을 수 없습니다.`);
+  }
+
+  /** 이 연결을 같은 소유 범위 · 종류의 기본 연결로 바꾼다 (PATCH /environments/:id, #228) */
+  async setDefault(id: number): Promise<EnvironmentDto> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const env = await this.lockScopeOf(client, id);
+      // 부분 유니크 인덱스(종류별 기본 하나)에 걸리지 않게 기존 기본을 먼저 푼다
+      await client.query(
+        `UPDATE environments SET is_default = FALSE
+         WHERE project_id IS NOT DISTINCT FROM $1::bigint AND type = $2
+           AND is_default = TRUE AND id <> $3`,
+        [env.project_id, env.type, id],
+      );
+      await client.query(`UPDATE environments SET is_default = TRUE WHERE id = $1`, [id]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
     }
+    return this.get(id);
+  }
+
+  /** 연결의 소유 범위 · 종류를 읽고 그 범위의 기본 연결 락을 잡는다. 없으면 404 */
+  private async lockScopeOf(
+    client: PoolClient,
+    id: number,
+  ): Promise<{ project_id: number | null; type: "aws" | "onprem" }> {
+    const res = await client.query<{ project_id: number | null; type: "aws" | "onprem" }>(
+      `SELECT project_id, type FROM environments WHERE id = $1`,
+      [id],
+    );
+    const env = res.rows[0];
+    if (!env) throw new ApiError(404, "NOT_FOUND", `환경 ID ${id}를 찾을 수 없습니다.`);
+    await lockDefaultScope(client, env.project_id, env.type);
+    return env;
   }
 
   /** 목록/단건 조회 응답. onpremConfig 에서 agentRegistrationToken 은 제거한다(#61) */

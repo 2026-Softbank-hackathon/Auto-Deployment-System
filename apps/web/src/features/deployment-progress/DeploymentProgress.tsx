@@ -308,9 +308,6 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 
-        {/* 가장 최근 로그 한 줄. 전체는 로그 탭에서 본다. */}
-        <p className="run-latest"><span>{t.run.workNote}</span><code>{latestLine ?? t.run.noNote}</code></p>
-
         {view.outcome === 'active' && <CancelDeployment deploymentId={deploymentId} onCancelled={() => void refresh()} />}
 
         {failed && <a className="setup-summary__link" href={`${base}/failure`} onClick={(event) => followAppLink(event, onNavigate)}>{t.run.viewFailure}</a>}

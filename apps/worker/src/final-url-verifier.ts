@@ -23,6 +23,8 @@ export type FinalUrlVerificationInput = Pick<
   "deploymentId" | "environmentId" | "health"
 > & {
   serviceHostname: string;
+  /** 공개 주소 레코드를 바꾸지 않았다 (#299) — 이미 권한 DNS 에 보이므로 레코드 대기를 생략한다 */
+  originUnchanged?: boolean;
 };
 
 export type FinalUrlVerifierOptions = {
@@ -65,7 +67,7 @@ export class FinalUrlVerifier {
     // NXDOMAIN 을 캐시하고 있을 수 있어 권한 DNS 로 주소를 찾아 접속한다.
     const hostname = new URL(healthUrl).hostname;
     const lookupAddress = isIP(hostname) ? undefined : this.lookupAddress;
-    if (lookupAddress) {
+    if (lookupAddress && !input.originUnchanged) {
       await new PublicDnsActivationChecker({
         attempts: this.dnsWaitAttempts,
         intervalMs: this.dnsWaitIntervalMs,

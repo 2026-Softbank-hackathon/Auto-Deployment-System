@@ -48,6 +48,11 @@ export type OriginActivationReceipt = {
     activatedServiceUrl: string;
     previousServiceUrl: string | null;
   } | null;
+  /**
+   * 공개 주소 레코드가 이미 이번 origin 을 프록시로 가리키고 Tunnel ingress 도 그대로라 바꾸지 않았다 (#299).
+   * 권한 DNS 에 이미 보이는 레코드이므로 최종 URL 검증이 DNS 대기를 생략한다
+   */
+  reused?: true;
 };
 
 export class DeploymentOriginActivator {
@@ -156,18 +161,26 @@ export class DeploymentOriginActivator {
         previousServiceUrl: change?.previousServiceUrl ?? null,
       };
     }
-    try {
-      const activated = await safeCloudflare(() => cloudflare.switchServiceOrigin({
-        zoneId: zoneId.trim(), serviceHostname, originHostname,
-      }));
-      if (activated.content !== originHostname) {
-        throw new OriginActivationError("ORIGIN_CLOUDFLARE_MISMATCH");
+    // 같은 origin 으로의 갱신 (#299): 레코드 · ingress 가 이미 그대로면 바꿀 것이 없다.
+    // 첫 배포(레코드 없음) · AWS ↔ 온프레미스 전환 · 실패 뒤 복구된 다른 origin 은 모두 여기서 갈린다
+    const reused =
+      previousRecord?.content === originHostname &&
+      previousRecord.proxied === true &&
+      (!tunnelChange || tunnelChange.previousServiceUrl === tunnelChange.activatedServiceUrl);
+    if (!reused) {
+      try {
+        const activated = await safeCloudflare(() => cloudflare.switchServiceOrigin({
+          zoneId: zoneId.trim(), serviceHostname, originHostname,
+        }));
+        if (activated.content !== originHostname) {
+          throw new OriginActivationError("ORIGIN_CLOUDFLARE_MISMATCH");
+        }
+      } catch (error) {
+        if (tunnelChange) {
+          await this.restoreTunnelIngress(cloudflare, tunnelChange).catch(() => undefined);
+        }
+        throw error;
       }
-    } catch (error) {
-      if (tunnelChange) {
-        await this.restoreTunnelIngress(cloudflare, tunnelChange).catch(() => undefined);
-      }
-      throw error;
     }
     return {
       serviceHostname,
@@ -176,6 +189,7 @@ export class DeploymentOriginActivator {
         ? { hostname: previousRecord.content, proxied: previousRecord.proxied }
         : null,
       tunnelIngress: tunnelChange,
+      ...(reused ? { reused: true as const } : {}),
     };
   }
 

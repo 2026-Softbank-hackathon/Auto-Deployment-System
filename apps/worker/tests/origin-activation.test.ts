@@ -268,6 +268,99 @@ describe("DeploymentOriginActivator", () => {
     }).activate(awsPayload)).rejects.toThrow("ORIGIN_CLOUDFLARE_FAILED");
   });
 
+  describe("origin 이 그대로면 주소 연결 생략 (#299)", () => {
+    function activatorFor(payload: VerifyJobPayload, cf: ReturnType<typeof cloudflare>) {
+      const query = vi.fn().mockResolvedValueOnce({ rows: [context(payload)] })
+        .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });
+      return new DeploymentOriginActivator(queryPool(query), {
+        cloudflare: cf, zoneId: "zone-1", platformDomain: "example.com",
+      });
+    }
+    const record = (content: string, proxied = true) => ({
+      id: "dns-4", name: "service-4.example.com", content, proxied,
+    });
+
+    it("공개 주소 레코드가 이미 이번 origin 을 프록시로 가리키면 바꾸지 않고 reused 로 남긴다", async () => {
+      const cf = cloudflare();
+      cf.getCname.mockResolvedValueOnce(record("demo.ap-northeast-2.elb.amazonaws.com"));
+
+      const receipt = await activatorFor(awsPayload, cf).activate(awsPayload);
+
+      expect(cf.switchServiceOrigin).not.toHaveBeenCalled();
+      expect(receipt).toEqual({
+        serviceHostname: "service-4.example.com",
+        activatedOrigin: "demo.ap-northeast-2.elb.amazonaws.com",
+        previousOrigin: { hostname: "demo.ap-northeast-2.elb.amazonaws.com", proxied: true },
+        tunnelIngress: null,
+        reused: true,
+      });
+    });
+
+    it("reused 활성화를 되돌려도 레코드는 그대로 둔다 (지우지 않음)", async () => {
+      const cf = cloudflare();
+      cf.getCname.mockResolvedValueOnce(record("demo.ap-northeast-2.elb.amazonaws.com"));
+      const activator = activatorFor(awsPayload, cf);
+      const receipt = await activator.activate(awsPayload);
+
+      await activator.rollback(receipt!);
+
+      expect(cf.deleteCname).not.toHaveBeenCalled();
+      expect(cf.ensureCname).toHaveBeenLastCalledWith({
+        zoneId: "zone-1", hostname: "service-4.example.com",
+        target: "demo.ap-northeast-2.elb.amazonaws.com", proxied: true,
+      });
+    });
+
+    it.each([
+      ["첫 배포 (레코드 없음)", null],
+      ["다른 origin", record("old-origin.example.com")],
+      ["온프레미스 → AWS 전환", record("tunnel-4.cfargotunnel.com")],
+      ["같은 origin 이지만 프록시가 꺼져 있음", record("demo.ap-northeast-2.elb.amazonaws.com", false)],
+    ])("%s → 레코드를 갱신한다", async (_case, existing) => {
+      const cf = cloudflare();
+      cf.getCname.mockResolvedValueOnce(existing);
+
+      const receipt = await activatorFor(awsPayload, cf).activate(awsPayload);
+
+      expect(cf.switchServiceOrigin).toHaveBeenCalledOnce();
+      expect(receipt?.reused).toBeUndefined();
+    });
+
+    it("AWS → 온프레미스 전환은 Tunnel ingress 와 레코드를 갱신한다", async () => {
+      const cf = cloudflare();
+      cf.getCname.mockResolvedValueOnce(record("demo.ap-northeast-2.elb.amazonaws.com"));
+      cf.setTunnelOrigin.mockResolvedValueOnce({ previousServiceUrl: null } as never);
+
+      const receipt = await activatorFor(onpremPayload, cf).activate(onpremPayload);
+
+      expect(cf.setTunnelOrigin).toHaveBeenCalledOnce();
+      expect(cf.switchServiceOrigin).toHaveBeenCalledOnce();
+      expect(receipt?.reused).toBeUndefined();
+    });
+
+    it("온프레미스 — 레코드가 같아도 Tunnel ingress 가 바뀌면 reused 가 아니다", async () => {
+      const cf = cloudflare();
+      cf.getCname.mockResolvedValueOnce(record("tunnel-4.cfargotunnel.com"));
+
+      const receipt = await activatorFor(onpremPayload, cf).activate(onpremPayload);
+
+      expect(cf.setTunnelOrigin).toHaveBeenCalledOnce();
+      expect(cf.switchServiceOrigin).toHaveBeenCalledOnce();
+      expect(receipt?.reused).toBeUndefined();
+    });
+
+    it("온프레미스 — 레코드와 Tunnel ingress 가 모두 그대로면 reused", async () => {
+      const cf = cloudflare();
+      cf.getCname.mockResolvedValueOnce(record("tunnel-4.cfargotunnel.com"));
+      cf.setTunnelOrigin.mockResolvedValueOnce({ previousServiceUrl: "http://127.0.0.1:32145" });
+
+      const receipt = await activatorFor(onpremPayload, cf).activate(onpremPayload);
+
+      expect(cf.switchServiceOrigin).not.toHaveBeenCalled();
+      expect(receipt?.reused).toBe(true);
+    });
+  });
+
   it("이미 성공한 동일 배포의 재실행은 DNS를 다시 전환하지 않는다", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ ...context(), status: "succeeded" }] });
     const cf = cloudflare();
@@ -332,6 +425,64 @@ describe("Verify → Origin 활성화 연결", () => {
     await expect(runVerifyJob({ data: awsPayload }, deps)).rejects.toThrow("ORIGIN_CLOUDFLARE_FAILED");
     await expect(runVerifyJob({ data: awsPayload }, deps)).resolves.toMatchObject({ status: "passed" });
     expect(activate).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["주소 연결을 생략한(reused) 활성화는 권한 DNS 대기 없이", { ...activationReceipt, reused: true }, true],
+    ["레코드를 바꾼 활성화는 지금처럼 권한 DNS 를 기다린 뒤", activationReceipt, undefined],
+  ])("%s 공개 주소를 검증한다 (#299)", async (_case, receipt, originUnchanged) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok", { status: 200 })));
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("INSERT INTO deployment_steps")) return { rows: [{ id: 10 }] };
+      if (sql.includes("SELECT status FROM deployments")) return { rows: [{ status: "verifying" }] };
+      return { rows: [] };
+    });
+    const verify = vi.fn(async () => publicResult());
+    const deps = {
+      pool: { query, connect: vi.fn(async () => ({ query, release: vi.fn() })) },
+      boss: { send: vi.fn() },
+      storage: {},
+      originActivator: { activate: vi.fn(async () => receipt), rollback: vi.fn() },
+      finalUrlVerifier: { verify },
+    } as unknown as WorkerDeps;
+
+    await expect(runVerifyJob({ data: awsPayload }, deps, { sleep: async () => undefined }))
+      .resolves.toMatchObject({ status: "passed" });
+
+    const [input] = verify.mock.calls[0] as unknown as [{ originUnchanged?: boolean; serviceHostname: string }];
+    expect(input.serviceHostname).toBe("service-4.example.com");
+    expect(input.originUnchanged).toBe(originUnchanged);
+  });
+
+  it("저장된 reused 활성화로 이어서 검증해도 권한 DNS 대기를 생략한다 (#299)", async () => {
+    const stored: VerifyResult = {
+      deploymentId: 42, environmentId: "12", status: "passed", targetUrl: `${awsPayload.targetUrl}/health`,
+      checks: [], consecutivePassed: 3, requiredPasses: 3,
+      startedAt: "2026-10-01T10:00:00.000Z", finishedAt: "2026-10-01T10:00:10.000Z", durationMs: 10000,
+    };
+    const query = vi.fn(async (sql: string) => sql.includes("INSERT") ? { rows: [] } : {
+      rows: [{ id: 10, deployment_id: 42, status: "running", message: JSON.stringify({
+        jobId: awsPayload.jobId, environmentId: "12",
+        requestFingerprint: createVerifyRequestFingerprint(awsPayload),
+        phase: "public_url", targetResult: stored,
+        activation: { ...activationReceipt, reused: true },
+      }) }],
+    });
+    const activate = vi.fn();
+    const verify = vi.fn(async () => publicResult());
+    const deps = {
+      pool: { query },
+      boss: {},
+      storage: {},
+      originActivator: { activate, rollback: vi.fn() },
+      finalUrlVerifier: { verify },
+    } as unknown as WorkerDeps;
+
+    await runVerifyJob({ data: awsPayload }, deps).catch(() => undefined);
+
+    expect(activate).not.toHaveBeenCalled();
+    const [input] = verify.mock.calls[0] as unknown as [{ originUnchanged?: boolean }];
+    expect(input.originUnchanged).toBe(true);
   });
 
   it("헬스 실패 결과에서는 Origin을 활성화하지 않는다", async () => {

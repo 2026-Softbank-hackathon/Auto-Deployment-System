@@ -169,6 +169,24 @@ describe("FinalUrlVerifier", () => {
     expect(sleep.mock.calls.slice(0, 2)).toEqual([[2_000], [2_000]]);
   });
 
+  it.each([
+    ["origin 이 그대로면 권한 DNS 대기 없이 바로 헬스체크한다", true, 3],
+    ["origin 을 바꿨으면 권한 DNS 에 보이는지 먼저 확인한다", undefined, 4],
+  ])("%s (#299)", async (_case, originUnchanged, resolveCalls) => {
+    const target = await startServer([200]);
+    const resolver = { resolve4: vi.fn(async () => ["127.0.0.1"]) };
+
+    const result = await new FinalUrlVerifier({ protocol: "http", resolver }).verify(
+      { ...input(`${serviceName}:${target.port}`), ...(originUnchanged ? { originUnchanged } : {}) },
+      { sleep: async () => undefined },
+    );
+
+    expect(result.status).toBe("passed");
+    expect(result.checks).toHaveLength(3);
+    // 헬스체크마다 한 번씩 + (대기하면) 대기 확인 한 번
+    expect(resolver.resolve4).toHaveBeenCalledTimes(resolveCalls);
+  });
+
   it("헬스체크 중 dns_error 는 실패로 끝내지 않고 재시도한다", async () => {
     const target = await startServer([200]);
     const resolver = {

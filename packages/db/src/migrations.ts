@@ -20,5 +20,6 @@ export const MIGRATION_FILES = [
   "013_health_check_attempt_phase.sql",
   "014_health_check_legacy_unique.sql",
   "015_project_deletion.sql",
+  "016_terraform_inputs_hash.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

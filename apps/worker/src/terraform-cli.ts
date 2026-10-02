@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,8 +33,10 @@ export type TerraformCliRequest = {
   region: string;
   credentials: TerraformAwsCredentials;
   variables: Record<string, TerraformVariable>;
-  /** 사용자에게 보여줄 진행 로그 (예: 남은 state 락 해제) */
+  /** 사용자에게 보여줄 진행 로그 (예: 남은 state 락 해제, 단계별 소요 시간) */
   log?: (line: string) => Promise<void>;
+  /** false 면 plan 이 기존 리소스를 다시 조회하지 않는다 — 이미지만 바뀐 재배포 (#252). 기본 true */
+  refresh?: boolean;
 };
 
 export type TerraformOutput = {
@@ -91,6 +94,13 @@ export type TerraformCliOptions = {
    * 이전 컨테이너를 멈춘 뒤 새 컨테이너를 띄우므로, 그 전에 잡힌 락의 주인은 살아 있을 수 없다.
    */
   staleLockBefore?: Date;
+  /**
+   * provider 플러그인 캐시 (#252). 워커 이미지가 profile lock 파일의 provider 를 미리 받아 둔 경로.
+   * init 이 여기서 symlink 로 가져오고, 없는 버전만 내려받아 채운다
+   */
+  pluginCacheDir?: string;
+  /** 소요 시간 측정용 시계 (ms) — 테스트 주입용 */
+  now?: () => number;
 };
 
 /** state 락이 잡혀 있으면 이만큼 기다린다 (plan · apply · destroy) */
@@ -101,6 +111,8 @@ export class TerraformCli {
   private readonly tempRoot: string;
   private readonly execute: TerraformCommandExecutor;
   private readonly staleLockBefore: Date;
+  private readonly pluginCacheDir: string | undefined;
+  private readonly now: () => number;
 
   constructor(options: TerraformCliOptions = {}) {
     this.executable = options.executable ?? "terraform";
@@ -108,6 +120,30 @@ export class TerraformCli {
     this.execute = options.execute ?? executeTerraformCommand;
     this.staleLockBefore =
       options.staleLockBefore ?? new Date(Date.now() - process.uptime() * 1000);
+    this.pluginCacheDir = options.pluginCacheDir;
+    this.now = options.now ?? (() => performance.now());
+  }
+
+  /**
+   * 인프라 입력 지문 (#252) — 모듈 파일(.terraform 제외) · 변수 · region · access key ID 의 SHA-256.
+   * 호출자가 이미지 변수를 빼고 넘기면, 직전 성공 배포와 같을 때 이미지 외에는 바뀐 입력이 없다는 뜻이다.
+   */
+  async fingerprint(
+    input: Pick<TerraformCliRequest, "moduleDirectory" | "region" | "credentials" | "variables">,
+  ): Promise<string> {
+    const files: Array<[string, string]> = [];
+    for (const file of await listModuleFiles(input.moduleDirectory)) {
+      const content = createHash("sha256").update(await fs.readFile(file)).digest("hex");
+      files.push([path.relative(input.moduleDirectory, file).replaceAll(path.sep, "/"), content]);
+    }
+    return createHash("sha256")
+      .update(canonicalJson({
+        files,
+        region: input.region,
+        accessKeyId: input.credentials.accessKeyId,
+        variables: input.variables,
+      }))
+      .digest("hex");
   }
 
   async apply(request: TerraformCliRequest): Promise<TerraformOutputs> {
@@ -118,21 +154,26 @@ export class TerraformCli {
       ], workspace, env);
 
       const planPath = path.join(workspace, "tfplan");
-      await this.runReleasingStaleLock("TERRAFORM_PLAN_FAILED", [
-        "plan",
-        "-input=false",
-        "-no-color",
-        `-lock-timeout=${LOCK_TIMEOUT}`,
-        "-var-file=terraform.tfvars.json",
-        `-out=${planPath}`,
-      ], workspace, env, request);
-      await this.run("TERRAFORM_APPLY_FAILED", [
-        "apply",
-        "-input=false",
-        "-no-color",
-        `-lock-timeout=${LOCK_TIMEOUT}`,
-        planPath,
-      ], workspace, env);
+      await this.timed(request, "plan", () =>
+        this.runReleasingStaleLock("TERRAFORM_PLAN_FAILED", [
+          "plan",
+          "-input=false",
+          "-no-color",
+          `-lock-timeout=${LOCK_TIMEOUT}`,
+          ...(request.refresh === false ? ["-refresh=false"] : []),
+          "-var-file=terraform.tfvars.json",
+          `-out=${planPath}`,
+        ], workspace, env, request),
+      );
+      await this.timed(request, "apply", () =>
+        this.run("TERRAFORM_APPLY_FAILED", [
+          "apply",
+          "-input=false",
+          "-no-color",
+          `-lock-timeout=${LOCK_TIMEOUT}`,
+          planPath,
+        ], workspace, env),
+      );
 
       const outputText = await this.run(
         "TERRAFORM_OUTPUT_FAILED",
@@ -182,7 +223,7 @@ export class TerraformCli {
         { mode: 0o600 },
       );
 
-      const env = createTerraformEnvironment(request);
+      const env = createTerraformEnvironment(request, this.pluginCacheDir);
       const backendArgs = [
         `bucket=${request.backend.bucket}`,
         `key=${request.backend.stateKey}`,
@@ -192,17 +233,38 @@ export class TerraformCli {
         "use_lockfile=true",
       ].map((value) => `-backend-config=${value}`);
 
-      await this.run("TERRAFORM_INIT_FAILED", [
-        "init",
-        "-input=false",
-        "-no-color",
-        "-reconfigure",
-        ...backendArgs,
-      ], workspace, env);
+      // lock 파일이 있으면 그 버전 · 체크섬 그대로만 설치한다 → 캐시의 provider 를 검증 후 재사용 (#252)
+      const lockfileArgs = await fs
+        .access(path.join(workspace, ".terraform.lock.hcl"))
+        .then(() => ["-lockfile=readonly"], () => []);
+
+      await this.timed(request, "init", () =>
+        this.run("TERRAFORM_INIT_FAILED", [
+          "init",
+          "-input=false",
+          "-no-color",
+          "-reconfigure",
+          ...lockfileArgs,
+          ...backendArgs,
+        ], workspace, env),
+      );
       return await work(workspace, env);
     } finally {
       await fs.rm(workspace, { recursive: true, force: true }).catch(() => {});
     }
+  }
+
+  /** 단계 소요 시간을 진행 로그에 남긴다 (#252) — 예: "terraform plan 완료 (7.1초)" */
+  private async timed<T>(
+    request: TerraformCliRequest,
+    step: "init" | "plan" | "apply",
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const started = this.now();
+    const result = await work();
+    const seconds = (this.now() - started) / 1000;
+    await request.log?.(`terraform ${step} 완료 (${seconds.toFixed(1)}초)`);
+    return result;
   }
 
   /** 이전 워커가 작업 도중 죽으면 S3 락 파일이 남는다 → 주인이 죽은 락이면 풀고 한 번 더 */
@@ -306,6 +368,7 @@ function isValidStateKey(key: string): boolean {
 
 function createTerraformEnvironment(
   request: TerraformCliRequest,
+  pluginCacheDir: string | undefined,
 ): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
@@ -317,7 +380,29 @@ function createTerraformEnvironment(
   env["AWS_REGION"] = request.region;
   env["TF_IN_AUTOMATION"] = "1";
   env["TF_INPUT"] = "0";
+  if (pluginCacheDir) env["TF_PLUGIN_CACHE_DIR"] = pluginCacheDir;
   return env;
+}
+
+async function listModuleFiles(directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    if (entry.name === ".terraform") continue;
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...(await listModuleFiles(entryPath)));
+    else if (entry.isFile()) files.push(entryPath);
+  }
+  return files.sort();
+}
+
+/** 키 순서와 무관한 JSON — 같은 값이면 같은 문자열 */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function parseTerraformOutputs(text: string): TerraformOutputs {

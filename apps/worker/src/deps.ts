@@ -37,7 +37,7 @@ export type WorkerDeps = {
   buildHandler?: Pick<BuildHandler, "build">;
   awsRegistryFactory?: AwsRegistryFactory;
   registrySession?: RegistrySession;
-  terraformCli?: Pick<TerraformCli, "apply" | "destroy">;
+  terraformCli?: Pick<TerraformCli, "apply" | "destroy" | "fingerprint">;
   terraformBackend?: TerraformBackendConfig;
   terraformModuleRoot?: string;
   /** 앱 삭제 때 Terraform state 파일 확인 · 삭제 (#247) */

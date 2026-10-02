@@ -294,6 +294,105 @@ describe("TerraformCli", () => {
     ).rejects.toMatchObject({ code: "TERRAFORM_DESTROY_FAILED", detail: "Error: DependencyViolation" });
   });
 
+  it("provider 캐시 (#252) — 캐시 경로를 TF_PLUGIN_CACHE_DIR 로 넘기고 lock 파일이 있으면 init 을 -lockfile=readonly 로 한다", async () => {
+    vi.stubEnv("TF_PLUGIN_CACHE_DIR", "/ambient/cache");
+    const moduleDirectory = await createModuleDirectory();
+    await fs.writeFile(path.join(moduleDirectory, ".terraform.lock.hcl"), "# lock\n");
+    const commands: Array<{ args: string[]; env: NodeJS.ProcessEnv }> = [];
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args, env }) => {
+      commands.push({ args, env });
+      return args[0] === "output" ? "{}" : "";
+    });
+
+    await new TerraformCli({ execute, pluginCacheDir: "/opt/terraform/plugin-cache" })
+      .apply(makeRequest(moduleDirectory));
+
+    const init = commands.find((command) => command.args[0] === "init")!;
+    expect(init.args).toContain("-lockfile=readonly");
+    for (const command of commands) {
+      expect(command.env["TF_PLUGIN_CACHE_DIR"]).toBe("/opt/terraform/plugin-cache");
+    }
+  });
+
+  it("lock 파일이 없는 모듈은 readonly 없이 init 하고, 캐시 경로가 없으면 워커 환경의 TF_PLUGIN_CACHE_DIR 도 넘기지 않는다", async () => {
+    vi.stubEnv("TF_PLUGIN_CACHE_DIR", "/ambient/cache");
+    const moduleDirectory = await createModuleDirectory();
+    const commands: Array<{ args: string[]; env: NodeJS.ProcessEnv }> = [];
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args, env }) => {
+      commands.push({ args, env });
+      return args[0] === "output" ? "{}" : "";
+    });
+
+    await new TerraformCli({ execute }).apply(makeRequest(moduleDirectory));
+
+    expect(commands[0]!.args).not.toContain("-lockfile=readonly");
+    expect(commands[0]!.env["TF_PLUGIN_CACHE_DIR"]).toBeUndefined();
+  });
+
+  it("refresh: false 면 plan 에 -refresh=false 를 붙이고, 기본은 전체 재조회한다 (#252)", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const plans: string[][] = [];
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      if (args[0] === "plan") plans.push(args);
+      return args[0] === "output" ? "{}" : "";
+    });
+    const cli = new TerraformCli({ execute });
+
+    await cli.apply({ ...makeRequest(moduleDirectory), refresh: false });
+    await cli.apply(makeRequest(moduleDirectory));
+
+    expect(plans[0]).toContain("-refresh=false");
+    expect(plans[1]).not.toContain("-refresh=false");
+  });
+
+  it("init · plan · apply 소요 시간을 진행 로그에 남긴다 (#252)", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    let clock = 0;
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      clock += { init: 2_400, validate: 300, plan: 7_060, apply: 31_000, output: 100 }[args[0]!] ?? 0;
+      return args[0] === "output" ? "{}" : "";
+    });
+    const log = vi.fn(async (_line: string) => undefined);
+
+    await new TerraformCli({ execute, now: () => clock })
+      .apply({ ...makeRequest(moduleDirectory), log });
+
+    const lines = log.mock.calls.map(([line]) => line);
+    expect(lines).toEqual(expect.arrayContaining([
+      "terraform init 완료 (2.4초)",
+      "terraform plan 완료 (7.1초)",
+      "terraform apply 완료 (31.0초)",
+    ]));
+  });
+
+  it("입력 지문 (#252) — 모듈 파일 · 변수 · region · access key 가 같으면 같고 하나라도 바뀌면 달라진다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const cli = new TerraformCli({ execute: vi.fn() });
+    const base = {
+      moduleDirectory,
+      region: "ap-northeast-2",
+      credentials: { accessKeyId: "AKIA1", secretAccessKey: "secret-1" },
+      variables: { app_name: "demo-web", container_port: 3000, environment_variables: { A: "1", B: "2" } },
+    };
+
+    const first = await cli.fingerprint(base);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    // 키 순서 · secret key 회전 · .terraform 폴더는 영향 없음
+    expect(await cli.fingerprint({
+      ...base,
+      credentials: { accessKeyId: "AKIA1", secretAccessKey: "secret-2" },
+      variables: { environment_variables: { B: "2", A: "1" }, container_port: 3000, app_name: "demo-web" },
+    })).toBe(first);
+    await fs.writeFile(path.join(moduleDirectory, ".terraform", "provider-cache"), "x");
+    expect(await cli.fingerprint(base)).toBe(first);
+
+    expect(await cli.fingerprint({ ...base, variables: { ...base.variables, container_port: 8080 } })).not.toBe(first);
+    expect(await cli.fingerprint({ ...base, region: "us-east-1" })).not.toBe(first);
+    expect(await cli.fingerprint({ ...base, credentials: { accessKeyId: "AKIA2", secretAccessKey: "secret-1" } })).not.toBe(first);
+    await fs.writeFile(path.join(moduleDirectory, "main.tf"), "terraform {}\n# changed\n");
+    expect(await cli.fingerprint(base)).not.toBe(first);
+  });
+
   it("destroy 도 워커 시작 전에 남은 state 락은 해제하고 다시 한다", async () => {
     const moduleDirectory = await createModuleDirectory();
     const commands: string[][] = [];

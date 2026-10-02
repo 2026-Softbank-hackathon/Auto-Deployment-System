@@ -62,6 +62,8 @@ async function main(): Promise<void> {
   const finalUrlVerifier = new FinalUrlVerifier();
   const terraformCli = new TerraformCli({
     executable: process.env["TERRAFORM_BINARY"]?.trim() || "terraform",
+    // 워커 이미지에 미리 받아 둔 provider 캐시 (#252)
+    pluginCacheDir: process.env["TERRAFORM_PLUGIN_CACHE_DIR"]?.trim() || undefined,
   });
   const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
   const awsRegistryFactory = (input: {

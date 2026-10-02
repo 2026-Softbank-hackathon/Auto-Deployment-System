@@ -9,9 +9,7 @@ import { StatusTape } from '../components/ui/StatusTape';
 import { displayProjectName, elapsed, hostOf, isStalled, relativeTime, safeHttpUrl } from '../features/dashboard/format';
 import { MiniRail } from '../features/dashboard/MiniRail';
 import { latestActive, useProjectList } from '../features/dashboard/useProjectList';
-import { useDeployProject } from '../features/deployment-start/useDeployProject';
 import { deploymentStatusView } from '../features/deployment-status/status-view';
-import { ProjectNameForm } from '../features/projects/ProjectNameForm';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
 const PAGE_SIZE = 9;
@@ -153,30 +151,19 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
   const copy = t.dashboard;
   const { state, retry } = useProjectList();
-  const { createDeployProject, selectProject } = useDeployProject();
-  const [adding, setAdding] = useState(false);
   const searchId = useId();
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const toolsRef = useRef<HTMLDivElement>(null);
   const goToPage = (next: number) => { setPage(next); toolsRef.current?.scrollIntoView({ block: 'start' }); };
 
-  async function create(name: string) {
-    const created = await createDeployProject(name);
-    onNavigate(`/projects/${encodeURIComponent(created.id)}/settings`);
-  }
-
-  /** 그 앱을 배포할 앱으로 고른 뒤 간단 배포로 간다. */
-  async function deploy(projectId: string) {
-    await selectProject(projectId);
-    onNavigate('/deploy');
-  }
+  /** 그 앱을 골라 둔 채로 간단 배포로 간다. */
+  const deploy = (projectId: string) => onNavigate(`/deploy?project=${encodeURIComponent(projectId)}`);
 
   const hasProjects = state.phase === 'ready' && state.projects.length > 0;
   const head = <div className="page-head">
     <div><h1>{copy.title}</h1><p>{copy.description}</p></div>
     {hasProjects && <div className="page-head__actions">
-      {!adding && <Keycap variant="secondary" onClick={() => setAdding(true)}>{t.setup.app.add}</Keycap>}
       <DeployKeycap href="/deploy" onClick={(event) => followAppLink(event, onNavigate)}>{copy.newDeploy}</DeployKeycap>
     </div>}
   </div>;
@@ -187,12 +174,12 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
     <div className="page-actions"><Keycap variant="secondary" onClick={retry}>{copy.retry}</Keycap></div>
   </div></>;
 
-  // 등록한 앱이 하나도 없으면 이름부터 정하게 한다 (간단 배포도 앱이 없으면 이 화면으로 보낸다).
+  // 등록한 앱이 하나도 없으면 간단 배포로 안내한다. 앱은 첫 배포 때 ZIP 이름으로 만들어진다.
   if (state.projects.length === 0) return <>{head}<section className="dashboard-empty" aria-labelledby="empty-apps-title">
     <SleepingRailScene />
     <h2 id="empty-apps-title">{copy.emptyTitle}</h2>
-    <p>{t.setup.app.copy}</p>
-    <div className="dashboard-empty__form"><ProjectNameForm onCreate={create} /></div>
+    <p>{copy.emptyCopy}</p>
+    <DeployKeycap size="lg" href="/deploy" onClick={(event) => followAppLink(event, onNavigate)}>{copy.newDeploy}</DeployKeycap>
   </section></>;
 
   const needle = query.trim().toLowerCase();
@@ -203,12 +190,6 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
   const visible = filtered.slice(first, first + PAGE_SIZE);
   return <>
     {head}
-    {adding && <section className="setup-card" aria-label={t.setup.app.add}>
-      <div className="setup-card__body">
-        <p>{t.setup.app.addCopy}</p>
-        <ProjectNameForm onCancel={() => setAdding(false)} onCreate={create} />
-      </div>
-    </section>}
     <Counts projects={state.projects} now={state.loadedAt} />
     <div className="dashboard-tools" role="search" ref={toolsRef}>
       <div className="aws-key-form__field dashboard-tools__search">
@@ -223,7 +204,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
     </p>
     {visible.length > 0 && <ul className="app-list" aria-label={copy.appsLabel}>
       {visible.map((project) => <AppCard key={project.id} project={project} now={state.loadedAt}
-        onDeploy={() => void deploy(project.id)} onNavigate={onNavigate} />)}
+        onDeploy={() => deploy(project.id)} onNavigate={onNavigate} />)}
     </ul>}
     {pageCount > 1 && <nav className="pager" aria-label={copy.appsPagerLabel}>
       <Keycap variant="secondary" disabled={currentPage <= 1} onClick={() => goToPage(currentPage - 1)}>{copy.prevPage}</Keycap>

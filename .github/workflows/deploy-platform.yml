@@ -123,7 +123,9 @@ jobs:
         run: |
           # 전체 로그는 호스트 파일로, SSM 결과에는 마지막 100줄만 (SSM 출력은 앞 24,000자에서 잘린다)
           log="/var/log/camellia-deploy/gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
-          cmd="mkdir -p /var/log/camellia-deploy; bash /opt/camellia/platform/infra/platform/scripts/deploy.sh '$REF' > $log 2>&1; rc=\$?; tail -n 100 $log; echo \"[gha] full log: $log (exit \$rc)\"; exit \$rc"
+          # 플랫폼 CD 기록에 남길 실행 ID · 링크 (#310). 예전 deploy.sh 는 이 환경변수를 무시한다
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          cmd="mkdir -p /var/log/camellia-deploy; DEPLOY_RUN_ID='$GITHUB_RUN_ID' DEPLOY_RUN_URL='$run_url' bash /opt/camellia/platform/infra/platform/scripts/deploy.sh '$REF' > $log 2>&1; rc=\$?; tail -n 100 $log; echo \"[gha] full log: $log (exit \$rc)\"; exit \$rc"
           params="$(jq -nc --arg cmd "$cmd" '{commands: [$cmd], executionTimeout: ["3600"]}')"
 
           command_id="$(aws ssm send-command \

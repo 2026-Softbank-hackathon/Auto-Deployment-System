@@ -72,4 +72,7 @@ RUN mkdir -p /data/storage /data/terraform-work && chown node:node /data/storage
 # docker.sock 접근은 compose 의 group_add(호스트 docker 그룹 GID)로 부여한다
 USER node
 WORKDIR /repo/apps/worker
+# 운영 화면의 워커 커밋 (#310). 커밋마다 바뀌므로 캐시를 깨지 않게 맨 끝에 둔다
+ARG GIT_COMMIT=""
+ENV CAMELLIA_COMMIT=${GIT_COMMIT}
 CMD ["tsx", "src/main.ts"]

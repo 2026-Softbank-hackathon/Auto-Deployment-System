@@ -14,12 +14,14 @@ import type { VerifyJobPayload } from "./handlers/verify.js";
 import { runVerifyJob } from "./verify-orchestrator.js";
 import { handleDiagnose, type DiagnoseJobPayload } from "./handlers/diagnose.js";
 import { handleTeardown, type TeardownJobPayload } from "./handlers/teardown.js";
+import { handleAddressChange, type AddressChangeJobPayload } from "./handlers/address-change.js";
 import { trackActive } from "./shutdown.js";
 
 export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void> {
   // pg-boss v10 breaking change: send/work 이전에 큐를 명시적으로 생성해야 함.
   // 이미 존재하면 no-op으로 처리.
-  for (const q of ["analyze", "build", "provision", "verify", "diagnose"]) {
+  // address-change: 앱 주소 변경 (#301) — API 가 프로젝트마다 singletonKey 로 넣는다
+  for (const q of ["analyze", "build", "provision", "verify", "diagnose", "address-change"]) {
     try {
       await boss.createQueue(q);
     } catch (e) {
@@ -88,6 +90,17 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         await handleTeardown(job as { data: TeardownJobPayload }, deps);
       } catch (e) {
         deps.log?.error({ err: e, jobId: job.id }, "teardown job failed");
+        throw e;
+      }
+    }
+  }));
+
+  await boss.work("address-change", trackActive(async (jobs) => {
+    for (const job of jobs) {
+      try {
+        await handleAddressChange(job as { data: AddressChangeJobPayload }, deps);
+      } catch (e) {
+        deps.log?.error({ err: e, jobId: job.id }, "address-change job failed");
         throw e;
       }
     }

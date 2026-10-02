@@ -9,7 +9,7 @@ import {
 
 type CloudflareOperations = Pick<CloudflareClient,
   "deleteCname" | "ensureNamedTunnel" | "ensureCname" | "findNamedTunnel" | "getCname" |
-  "removeTunnelOrigin" | "setTunnelOrigin" | "switchServiceOrigin">;
+  "getTunnelOrigin" | "removeTunnelOrigin" | "setTunnelOrigin" | "switchServiceOrigin">;
 
 export type OriginActivationOptions = {
   cloudflare?: CloudflareOperations;
@@ -56,6 +56,20 @@ export type OriginActivationReceipt = {
    * 권한 DNS 에 이미 보이는 레코드이므로 최종 URL 검증이 DNS 대기를 생략한다
    */
   reused?: true;
+};
+
+/**
+ * 주소 변경 (#301) — 새 주소를 지금 서비스 중인 origin 에 연결한 결과. 검증에 실패하면 이걸로 새 주소만 지운다.
+ */
+export type ServiceAliasReceipt = {
+  /** 새 공개 호스트 이름 */
+  hostname: string;
+  /** 지금(바꾸기 전) 공개 호스트 이름 */
+  previousHostname: string;
+  /** 두 주소가 함께 가리키는 origin (ALB · cfargotunnel endpoint) */
+  origin: string;
+  /** 온프레미스: 새 주소로 더한 Tunnel ingress */
+  tunnelIngress: { tunnelId: string; serviceUrl: string } | null;
 };
 
 export class DeploymentOriginActivator {
@@ -262,6 +276,102 @@ export class DeploymentOriginActivator {
       } catch {
         failures.push(`Tunnel camellia-service-${input.projectId}`);
       }
+    }
+    return failures;
+  }
+
+  /**
+   * 주소 변경 (#301) 1단계 — 새 주소를 예전 주소가 가리키는 origin 에 연결한다. 예전 주소는 건드리지 않는다.
+   * - AWS(ECS · Lambda 의 ALB): 예전 레코드와 같은 대상 · 프록시 설정으로 새 CNAME
+   * - 온프레미스: 프로젝트 Named Tunnel 에 새 주소 ingress(예전 주소와 같은 로컬 포트)를 더한 뒤 같은 Tunnel 로 CNAME
+   * 새 주소에 다른 대상을 가리키는 레코드가 이미 있으면 덮어쓰지 않는다. 다시 실행해도 같은 결과(재시도 안전).
+   */
+  async addServiceAlias(input: {
+    projectId: number;
+    fromSubdomain: string;
+    toSubdomain: string;
+  }): Promise<ServiceAliasReceipt> {
+    if (!Number.isSafeInteger(input.projectId) || input.projectId < 1) {
+      throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
+    }
+    const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
+    const previousHostname = projectServiceHostname(input.fromSubdomain, input.projectId, domain);
+    const hostname = projectServiceHostname(input.toSubdomain, input.projectId, domain);
+    if (hostname === previousHostname) throw new OriginActivationError("ADDRESS_UNCHANGED");
+
+    const current = await safeCloudflare(() => cloudflare.getCname({ zoneId, hostname: previousHostname }));
+    if (!current) throw new OriginActivationError("ADDRESS_ORIGIN_MISSING");
+    const existing = await safeCloudflare(() => cloudflare.getCname({ zoneId, hostname }));
+    if (existing && existing.content !== current.content) {
+      throw new OriginActivationError("ADDRESS_RECORD_CONFLICT");
+    }
+
+    let tunnelIngress: ServiceAliasReceipt["tunnelIngress"] = null;
+    if (current.content.endsWith(".cfargotunnel.com")) {
+      const tunnel = await safeCloudflare(() => cloudflare.findNamedTunnel(String(input.projectId)));
+      const serviceUrl = tunnel && tunnel.endpoint === current.content
+        ? await safeCloudflare(() => cloudflare.getTunnelOrigin({ tunnelId: tunnel.id, hostname: previousHostname }))
+        : null;
+      if (!tunnel || !serviceUrl) throw new OriginActivationError("ADDRESS_TUNNEL_MISMATCH");
+      await safeCloudflare(() => cloudflare.setTunnelOrigin({ tunnelId: tunnel.id, hostname, serviceUrl }));
+      tunnelIngress = { tunnelId: tunnel.id, serviceUrl };
+    }
+
+    const receipt: ServiceAliasReceipt = { hostname, previousHostname, origin: current.content, tunnelIngress };
+    try {
+      await safeCloudflare(() => cloudflare.ensureCname({
+        zoneId,
+        hostname,
+        target: current.content,
+        proxied: current.proxied,
+      }));
+    } catch (error) {
+      await this.removeServiceAlias(receipt).catch(() => undefined);
+      throw error;
+    }
+    return receipt;
+  }
+
+  /** 주소 변경 실패 (#301) — 새 주소의 레코드 · ingress 만 지운다 (지금 origin 을 가리킬 때만). 예전 주소는 그대로 */
+  async removeServiceAlias(receipt: ServiceAliasReceipt): Promise<void> {
+    const { cloudflare, zoneId } = this.cloudflareConfiguration();
+    await safeCloudflare(() => cloudflare.deleteCname({
+      zoneId,
+      hostname: receipt.hostname,
+      expectedTarget: receipt.origin,
+    }));
+    const ingress = receipt.tunnelIngress;
+    if (ingress) {
+      await safeCloudflare(() => cloudflare.removeTunnelOrigin({
+        tunnelId: ingress.tunnelId,
+        hostname: receipt.hostname,
+        expectedServiceUrl: ingress.serviceUrl,
+      }));
+    }
+  }
+
+  /**
+   * 주소 변경 성공 뒤 (#301) — 예전 주소의 레코드와 (온프레미스에 배포한 적이 있으면) Tunnel ingress 를 지운다.
+   * best effort: 실패한 대상을 돌려준다. 새 주소는 이미 서비스 중이라 여기서 실패해도 되돌리지 않는다.
+   */
+  async removeServiceHostname(input: { projectId: number; subdomain: string }): Promise<string[]> {
+    if (!Number.isSafeInteger(input.projectId) || input.projectId < 1) {
+      throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
+    }
+    const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
+    const hostname = projectServiceHostname(input.subdomain, input.projectId, domain);
+    const failures: string[] = [];
+    try {
+      const record = await cloudflare.getCname({ zoneId, hostname });
+      if (record) await cloudflare.deleteCname({ zoneId, hostname, expectedTarget: record.content });
+    } catch {
+      failures.push(`DNS ${hostname}`);
+    }
+    try {
+      const tunnel = await cloudflare.findNamedTunnel(String(input.projectId));
+      if (tunnel) await cloudflare.removeTunnelOrigin({ tunnelId: tunnel.id, hostname });
+    } catch {
+      failures.push(`Tunnel camellia-service-${input.projectId}`);
     }
     return failures;
   }

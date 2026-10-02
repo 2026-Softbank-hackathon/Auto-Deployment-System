@@ -1,8 +1,13 @@
+import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BuildError, CommandExecutionError } from "./errors.js";
 import { NodeCommandRunner } from "./command-runner.js";
+import {
+  LAMBDA_WEB_ADAPTER_COPY,
+  LAMBDA_WEB_ADAPTER_VERSION,
+} from "./lambda-web-adapter.js";
 import {
   DEFAULT_BUILD_PLATFORM,
   type BuildRequest,
@@ -86,6 +91,7 @@ export class BuildHandler {
     return {
       strategy,
       platform,
+      lambdaWebAdapter: LAMBDA_WEB_ADAPTER_VERSION,
       image: {
         repository,
         tag,
@@ -96,6 +102,11 @@ export class BuildHandler {
     };
   }
 
+  /**
+   * 사용자 Dockerfile 끝에 Lambda Web Adapter COPY 한 줄을 붙인 사본으로 빌드해 한 번만 push 한다.
+   * 마지막 stage 에 레이어 하나가 더해질 뿐이라 CMD · USER · EXPOSE 등 실행 설정은 그대로다.
+   * 사본은 소스 밖 임시 폴더에 두고, Dockerfile 전용 ignore 파일(<Dockerfile>.dockerignore)이 있으면 같이 옮긴다.
+   */
   private async buildDockerfile(input: {
     contextPath: string;
     dockerfilePath: string;
@@ -103,70 +114,35 @@ export class BuildHandler {
     platform: string;
     commandEnvironment?: NodeJS.ProcessEnv;
   }): Promise<string> {
-    const temporaryDirectory = await fs.mkdtemp(
-      path.join(this.temporaryRoot, "camellia-build-"),
-    );
-    const metadataPath = path.join(temporaryDirectory, "metadata.json");
-
-    try {
-      await this.runBuildCommand({
-        command: "docker",
-        args: [
-          "buildx",
-          "build",
-          "--platform",
-          input.platform,
-          "--file",
-          input.dockerfilePath,
-          "--tag",
-          input.taggedRef,
-          "--push",
-          "--metadata-file",
-          metadataPath,
-          input.contextPath,
-        ],
-        cwd: input.contextPath,
-        env: input.commandEnvironment,
-      });
-
-      let metadata: Record<string, unknown>;
-      try {
-        metadata = JSON.parse(await fs.readFile(metadataPath, "utf8")) as Record<
-          string,
-          unknown
-        >;
-      } catch {
-        throw new BuildError(
-          "IMAGE_DIGEST_MISSING",
-          "Buildx metadata를 읽을 수 없습니다.",
-        );
-      }
-
-      const digest = metadata["containerimage.digest"];
-      if (typeof digest !== "string") {
-        throw new BuildError(
-          "IMAGE_DIGEST_MISSING",
-          "Buildx 결과에 image digest가 없습니다.",
-        );
-      }
-      return digest;
-    } finally {
-      await fs.rm(temporaryDirectory, { recursive: true, force: true });
-    }
+    const original = await fs.readFile(input.dockerfilePath, "utf8");
+    return this.withTemporaryDirectory(async (directory) => {
+      const dockerfilePath = path.join(directory, "Dockerfile");
+      await fs.writeFile(dockerfilePath, withLambdaWebAdapter(original));
+      const ignoreFile = await fs
+        .readFile(`${input.dockerfilePath}.dockerignore`)
+        .catch(() => null);
+      if (ignoreFile) await fs.writeFile(`${dockerfilePath}.dockerignore`, ignoreFile);
+      return this.buildxPush({ ...input, dockerfilePath, metadataDirectory: directory });
+    });
   }
 
+  /**
+   * Railpack 으로 로컬 이미지를 만든 뒤, 그 이미지를 FROM 으로 Lambda Web Adapter 레이어를 더해 push 한다.
+   * 로컬 이미지는 같은 Docker 데몬(docker 드라이버)에 있어 다시 받지 않는다. 중간 태그는 끝나면 지운다.
+   */
   private async buildRailpack(input: {
     contextPath: string;
     taggedRef: string;
     platform: string;
     commandEnvironment?: NodeJS.ProcessEnv;
   }): Promise<string> {
+    const localImage = `camellia-railpack:${randomBytes(8).toString("hex")}`;
     await this.runBuildCommand({
       command: "railpack",
       args: [
         "build",
         "--name",
-        input.taggedRef,
+        localImage,
         "--platform",
         input.platform,
         input.contextPath,
@@ -175,20 +151,100 @@ export class BuildHandler {
       env: input.commandEnvironment,
     });
 
-    const pushed = await this.runBuildCommand({
+    try {
+      return await this.withTemporaryDirectory(async (directory) => {
+        const dockerfilePath = path.join(directory, "Dockerfile");
+        await fs.writeFile(dockerfilePath, withLambdaWebAdapter(`FROM ${localImage}\n`));
+        return this.buildxPush({
+          contextPath: directory,
+          dockerfilePath,
+          taggedRef: input.taggedRef,
+          platform: input.platform,
+          commandEnvironment: input.commandEnvironment,
+          metadataDirectory: directory,
+        });
+      });
+    } finally {
+      await this.runner
+        .run({
+          command: "docker",
+          args: ["image", "rm", localImage],
+          cwd: input.contextPath,
+          env: input.commandEnvironment,
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  /**
+   * buildx 로 빌드 · push 하고 metadata 의 digest 를 돌려준다.
+   * provenance attestation 을 끄면 image index 가 아닌 단일 manifest 가 push 된다
+   * — Lambda 는 attestation 이 붙은 index 를 받지 않는다.
+   */
+  private async buildxPush(input: {
+    contextPath: string;
+    dockerfilePath: string;
+    taggedRef: string;
+    platform: string;
+    commandEnvironment?: NodeJS.ProcessEnv;
+    metadataDirectory: string;
+  }): Promise<string> {
+    const metadataPath = path.join(input.metadataDirectory, "metadata.json");
+    await this.runBuildCommand({
       command: "docker",
-      args: ["push", input.taggedRef],
+      args: [
+        "buildx",
+        "build",
+        "--platform",
+        input.platform,
+        "--provenance=false",
+        "--file",
+        input.dockerfilePath,
+        "--tag",
+        input.taggedRef,
+        "--push",
+        "--metadata-file",
+        metadataPath,
+        input.contextPath,
+      ],
       cwd: input.contextPath,
       env: input.commandEnvironment,
     });
-    const digest = extractPushDigest(`${pushed.stdout}\n${pushed.stderr}`);
-    if (!digest) {
+
+    let metadata: Record<string, unknown>;
+    try {
+      metadata = JSON.parse(await fs.readFile(metadataPath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
       throw new BuildError(
         "IMAGE_DIGEST_MISSING",
-        "Registry push 결과에서 image digest를 찾을 수 없습니다.",
+        "Buildx metadata를 읽을 수 없습니다.",
+      );
+    }
+
+    const digest = metadata["containerimage.digest"];
+    if (typeof digest !== "string") {
+      throw new BuildError(
+        "IMAGE_DIGEST_MISSING",
+        "Buildx 결과에 image digest가 없습니다.",
       );
     }
     return digest;
+  }
+
+  private async withTemporaryDirectory<T>(
+    task: (directory: string) => Promise<T>,
+  ): Promise<T> {
+    const directory = await fs.mkdtemp(
+      path.join(this.temporaryRoot, "camellia-build-"),
+    );
+    try {
+      return await task(directory);
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   }
 
   private async runBuildCommand(
@@ -301,6 +357,8 @@ function validateDigest(digest: string): `sha256:${string}` {
   return digest as `sha256:${string}`;
 }
 
-function extractPushDigest(output: string): string | null {
-  return output.match(/\bdigest:\s*(sha256:[0-9a-f]{64})\b/i)?.[1] ?? null;
+/** 마지막 stage 끝에 Lambda Web Adapter 를 더한다. 원본이 줄바꿈 없이 끝나도 새 줄에서 시작한다 */
+function withLambdaWebAdapter(dockerfile: string): string {
+  const base = dockerfile.endsWith("\n") ? dockerfile : `${dockerfile}\n`;
+  return `${base}${LAMBDA_WEB_ADAPTER_COPY}\n`;
 }

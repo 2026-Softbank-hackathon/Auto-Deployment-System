@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   BuildHandler,
   CommandExecutionError,
+  LAMBDA_WEB_ADAPTER_IMAGE,
+  LAMBDA_WEB_ADAPTER_VERSION,
   type CommandRequest,
   type CommandResult,
   type CommandRunner,
@@ -60,6 +62,7 @@ describe("BuildHandler", () => {
     expect(result).toEqual({
       strategy: "dockerfile",
       platform: "linux/amd64",
+      lambdaWebAdapter: LAMBDA_WEB_ADAPTER_VERSION,
       image: {
         repository: "registry.example.com/camellia/demo",
         tag: "v1",
@@ -76,19 +79,60 @@ describe("BuildHandler", () => {
         "build",
         "--platform",
         "linux/amd64",
+        "--provenance=false",
         "--push",
       ]),
     );
   });
 
-  it("uses Railpack and parses the Docker push digest", async () => {
-    const canonicalWorkspacePath = await fs.realpath(workspacePath);
+  it("adds the Lambda Web Adapter as the last layer of the user Dockerfile before the single push", async () => {
+    const original = "FROM alpine:3.24 AS runtime\nUSER node\nCMD [\"node\", \"server.js\"]";
+    await fs.mkdir(path.join(workspacePath, "docker"));
+    await fs.writeFile(path.join(workspacePath, "docker", "app.Dockerfile"), original);
+    await fs.writeFile(path.join(workspacePath, "docker", "app.Dockerfile.dockerignore"), "node_modules\n");
+    let builtDockerfile = "";
+    let builtIgnore = "";
+    let fileArgument = "";
     const runner = new FakeRunner(async (request) => {
-      if (request.command === "docker") {
-        return {
-          stdout: `latest: digest: ${DIGEST} size: 1234\n`,
-          stderr: "",
-        };
+      fileArgument = request.args[request.args.indexOf("--file") + 1]!;
+      builtDockerfile = await fs.readFile(fileArgument, "utf8");
+      builtIgnore = await fs.readFile(`${fileArgument}.dockerignore`, "utf8");
+      const metadataPath = request.args[request.args.indexOf("--metadata-file") + 1]!;
+      await fs.writeFile(metadataPath, JSON.stringify({ "containerimage.digest": DIGEST }));
+      return { stdout: "", stderr: "" };
+    });
+
+    await new BuildHandler({ runner }).build({
+      workspacePath,
+      plan: { context: ".", dockerfile: "docker/app.Dockerfile" },
+      image: { repository: "registry.example.com/camellia/demo", tag: "v1" },
+    });
+
+    expect(runner.calls).toHaveLength(1);
+    expect(path.dirname(fileArgument)).not.toBe(await fs.realpath(path.join(workspacePath, "docker")));
+    expect(builtDockerfile.startsWith(`${original}\n`)).toBe(true);
+    const lines = builtDockerfile.trimEnd().split("\n");
+    expect(lines.at(-1)).toBe(
+      `COPY --from=${LAMBDA_WEB_ADAPTER_IMAGE} /lambda-adapter /opt/extensions/lambda-adapter`,
+    );
+    expect(builtIgnore).toBe("node_modules\n");
+    // context 는 그대로 사용자 소스 폴더
+    expect(runner.calls[0]?.args.at(-1)).toBe(await fs.realpath(workspacePath));
+    // 임시 Dockerfile 은 빌드 후 지운다
+    await expect(fs.access(fileArgument)).rejects.toThrow();
+    // 사용자 Dockerfile 은 바꾸지 않는다
+    expect(await fs.readFile(path.join(workspacePath, "docker", "app.Dockerfile"), "utf8")).toBe(original);
+  });
+
+  it("builds Railpack locally, then adds the Lambda Web Adapter layer and pushes once", async () => {
+    const canonicalWorkspacePath = await fs.realpath(workspacePath);
+    let wrapperDockerfile = "";
+    const runner = new FakeRunner(async (request) => {
+      if (request.command === "docker" && request.args[0] === "buildx") {
+        const fileArgument = request.args[request.args.indexOf("--file") + 1]!;
+        wrapperDockerfile = await fs.readFile(fileArgument, "utf8");
+        const metadataPath = request.args[request.args.indexOf("--metadata-file") + 1]!;
+        await fs.writeFile(metadataPath, JSON.stringify({ "containerimage.digest": DIGEST }));
       }
       return { stdout: "", stderr: "" };
     });
@@ -100,25 +144,45 @@ describe("BuildHandler", () => {
     });
 
     expect(result.strategy).toBe("railpack");
+    expect(result.lambdaWebAdapter).toBe(LAMBDA_WEB_ADAPTER_VERSION);
     expect(result.image.digest).toBe(DIGEST);
-    expect(runner.calls.map((call) => call.command)).toEqual([
-      "railpack",
-      "docker",
+    expect(runner.calls.map((call) => [call.command, call.args[0]])).toEqual([
+      ["railpack", "build"],
+      ["docker", "buildx"],
+      ["docker", "image"],
     ]);
+    const localImage = runner.calls[0]!.args[2]!;
+    expect(localImage).toMatch(/^camellia-railpack:[0-9a-f]{16}$/);
     expect(runner.calls[0]?.args).toEqual([
       "build",
       "--name",
-      "registry.example.com/camellia/demo:v2",
+      localImage,
       "--platform",
       "linux/amd64",
       canonicalWorkspacePath,
     ]);
+    expect(wrapperDockerfile).toBe(
+      `FROM ${localImage}\nCOPY --from=${LAMBDA_WEB_ADAPTER_IMAGE} /lambda-adapter /opt/extensions/lambda-adapter\n`,
+    );
+    expect(runner.calls[1]?.args).toEqual(
+      expect.arrayContaining([
+        "--platform",
+        "linux/amd64",
+        "--provenance=false",
+        "--tag",
+        "registry.example.com/camellia/demo:v2",
+        "--push",
+      ]),
+    );
+    // 로컬 중간 이미지 태그는 지운다
+    expect(runner.calls[2]?.args).toEqual(["image", "rm", localImage]);
   });
 
   it("passes an isolated Docker command environment to every build command", async () => {
     const runner = new FakeRunner(async (request) => {
-      if (request.command === "docker") {
-        return { stdout: `digest: ${DIGEST}`, stderr: "" };
+      if (request.command === "docker" && request.args[0] === "buildx") {
+        const metadataPath = request.args[request.args.indexOf("--metadata-file") + 1]!;
+        await fs.writeFile(metadataPath, JSON.stringify({ "containerimage.digest": DIGEST }));
       }
       return { stdout: "", stderr: "" };
     });
@@ -134,7 +198,7 @@ describe("BuildHandler", () => {
       commandEnvironment,
     });
 
-    expect(runner.calls).toHaveLength(2);
+    expect(runner.calls).toHaveLength(3);
     expect(runner.calls.every((call) => call.env === commandEnvironment)).toBe(
       true,
     );

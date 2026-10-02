@@ -1,0 +1,68 @@
+{
+  "collectedAt": "2026-10-02T12:48:45.384Z",
+  "settleMs": 20000,
+  "publicHealthUrl": "https://service-6.camellia-deploy.app/health",
+  "before": {
+    "collectedAt": "2026-10-02T12:48:13.621Z",
+    "containers": [
+      {
+        "id": "94f018b6089c",
+        "image": "a86be81d9a0f",
+        "name": "camellia-d164-e7f6c01177-a86be81d9a0f-app-1",
+        "status": "Up About a minute (healthy)"
+      },
+      {
+        "id": "7772b22405ec",
+        "image": "a86be81d9a0f",
+        "name": "camellia-d159-e7f6c01177-a86be81d9a0f-app-1",
+        "status": "Up 4 minutes (healthy)"
+      }
+    ]
+  },
+  "duringStop": {
+    "collectedAt": "2026-10-02T12:48:14.719Z",
+    "containers": [
+      {
+        "id": "94f018b6089c",
+        "image": "a86be81d9a0f",
+        "name": "camellia-d164-e7f6c01177-a86be81d9a0f-app-1",
+        "status": "Up About a minute (healthy)"
+      },
+      {
+        "id": "7772b22405ec",
+        "image": "a86be81d9a0f",
+        "name": "camellia-d159-e7f6c01177-a86be81d9a0f-app-1",
+        "status": "Up 4 minutes (healthy)"
+      }
+    ]
+  },
+  "after": {
+    "collectedAt": "2026-10-02T12:48:45.086Z",
+    "containers": [
+      {
+        "id": "94f018b6089c",
+        "image": "a86be81d9a0f",
+        "name": "camellia-d164-e7f6c01177-a86be81d9a0f-app-1",
+        "status": "Up 2 minutes (healthy)"
+      },
+      {
+        "id": "7772b22405ec",
+        "image": "a86be81d9a0f",
+        "name": "camellia-d159-e7f6c01177-a86be81d9a0f-app-1",
+        "status": "Up 4 minutes (healthy)"
+      }
+    ]
+  },
+  "healthWhileStopped": {
+    "checkedAt": "2026-10-02T12:48:14.958Z",
+    "status": 0,
+    "error": "Command failed: curl -fsS -o /dev/null -w %{http_code} https://service-6.camellia-deploy.app/health\ncurl: (56) The requested URL returned error: 530\n"
+  },
+  "healthAfterRestart": {
+    "checkedAt": "2026-10-02T12:48:45.384Z",
+    "status": 200
+  },
+  "serviceRunning": true,
+  "preservedContainerCount": 2,
+  "passed": false
+}

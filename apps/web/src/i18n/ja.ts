@@ -145,12 +145,10 @@ export const ja: Messages = {
   settings: {
     title: '環境設定',
     close: '閉じる',
-    display: '表示',
+    tabs: { display: '表示', notifications: '通知', deploy: 'デプロイ' },
     sound: '効果音',
-    notifications: '通知',
     notify: 'デプロイが終わったら通知する',
     notifyCopy: '別の画面を見ていても、完了・失敗を右下に表示します。',
-    deploy: 'デプロイ',
     defaultTarget: '既定のデプロイ先',
     reviewFirst: 'デプロイ前に検出されたポートを確認する',
     reviewFirstCopy: 'オンにすると、かんたんデプロイでこの項目があらかじめ選択されます。',

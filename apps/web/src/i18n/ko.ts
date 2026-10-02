@@ -143,12 +143,10 @@ export const ko = {
   settings: {
     title: '환경설정',
     close: '닫기',
-    display: '화면',
+    tabs: { display: '화면', notifications: '알림', deploy: '배포' },
     sound: '효과음',
-    notifications: '알림',
     notify: '배포가 끝나면 알림 띄우기',
     notifyCopy: '다른 화면을 보고 있어도 완료 · 실패를 오른쪽 아래에 알려 줘요.',
-    deploy: '배포',
     defaultTarget: '기본 배포할 곳',
     reviewFirst: '배포 전에 감지한 포트 확인하기',
     reviewFirstCopy: '켜 두면 간단 배포에서 이 항목이 미리 선택돼요.',

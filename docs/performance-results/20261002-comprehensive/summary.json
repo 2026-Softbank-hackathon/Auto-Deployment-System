@@ -1,0 +1,1565 @@
+{
+  "generatedAt": "2026-10-02T12:50:12.347Z",
+  "scope": "실서비스 API + 실제 AWS/On-Prem 런타임",
+  "totals": {
+    "scenarioCount": 13,
+    "runCount": 35,
+    "requestCount": 64,
+    "acceptedCount": 61,
+    "rejectedCount": 3,
+    "deploymentCount": 61,
+    "expectedOutcomeCount": 60,
+    "unexpectedOutcomeCount": 1
+  },
+  "health": {
+    "successRate": 1,
+    "p95Ms": 144.34444999999997
+  },
+  "transition": {
+    "deploymentCount": 6,
+    "uniqueDigestCount": 1,
+    "digests": [
+      {
+        "deployment_id": "128",
+        "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "platform": "linux/amd64",
+        "strategy": "dockerfile"
+      },
+      {
+        "deployment_id": "130",
+        "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "platform": "linux/amd64",
+        "strategy": "dockerfile"
+      },
+      {
+        "deployment_id": "132",
+        "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "platform": "linux/amd64",
+        "strategy": "dockerfile"
+      },
+      {
+        "deployment_id": "129",
+        "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "platform": "linux/amd64",
+        "strategy": "dockerfile"
+      },
+      {
+        "deployment_id": "131",
+        "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "platform": "linux/amd64",
+        "strategy": "dockerfile"
+      },
+      {
+        "deployment_id": "133",
+        "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+        "platform": "linux/amd64",
+        "strategy": "dockerfile"
+      }
+    ]
+  },
+  "agentRestart": {
+    "collectedAt": "2026-10-02T12:48:45.384Z",
+    "settleMs": 20000,
+    "publicHealthUrl": "https://service-6.camellia-deploy.app/health",
+    "before": {
+      "collectedAt": "2026-10-02T12:48:13.621Z",
+      "containers": [
+        {
+          "id": "94f018b6089c",
+          "image": "a86be81d9a0f",
+          "name": "camellia-d164-e7f6c01177-a86be81d9a0f-app-1",
+          "status": "Up About a minute (healthy)"
+        },
+        {
+          "id": "7772b22405ec",
+          "image": "a86be81d9a0f",
+          "name": "camellia-d159-e7f6c01177-a86be81d9a0f-app-1",
+          "status": "Up 4 minutes (healthy)"
+        }
+      ]
+    },
+    "duringStop": {
+      "collectedAt": "2026-10-02T12:48:14.719Z",
+      "containers": [
+        {
+          "id": "94f018b6089c",
+          "image": "a86be81d9a0f",
+          "name": "camellia-d164-e7f6c01177-a86be81d9a0f-app-1",
+          "status": "Up About a minute (healthy)"
+        },
+        {
+          "id": "7772b22405ec",
+          "image": "a86be81d9a0f",
+          "name": "camellia-d159-e7f6c01177-a86be81d9a0f-app-1",
+          "status": "Up 4 minutes (healthy)"
+        }
+      ]
+    },
+    "after": {
+      "collectedAt": "2026-10-02T12:48:45.086Z",
+      "containers": [
+        {
+          "id": "94f018b6089c",
+          "image": "a86be81d9a0f",
+          "name": "camellia-d164-e7f6c01177-a86be81d9a0f-app-1",
+          "status": "Up 2 minutes (healthy)"
+        },
+        {
+          "id": "7772b22405ec",
+          "image": "a86be81d9a0f",
+          "name": "camellia-d159-e7f6c01177-a86be81d9a0f-app-1",
+          "status": "Up 4 minutes (healthy)"
+        }
+      ]
+    },
+    "healthWhileStopped": {
+      "checkedAt": "2026-10-02T12:48:14.958Z",
+      "status": 0,
+      "error": "Command failed: curl -fsS -o /dev/null -w %{http_code} https://service-6.camellia-deploy.app/health\ncurl: (56) The requested URL returned error: 530\n"
+    },
+    "healthAfterRestart": {
+      "checkedAt": "2026-10-02T12:48:45.384Z",
+      "status": 200
+    },
+    "serviceRunning": true,
+    "preservedContainerCount": 2,
+    "passed": false
+  },
+  "scenarios": [
+    {
+      "id": "aws-cold",
+      "name": "AWS 신규 이미지",
+      "match": {},
+      "expected": "success",
+      "runCount": 2,
+      "requests": 2,
+      "accepted": 2,
+      "rejected": 0,
+      "deployments": 2,
+      "expectedOutcomes": 2,
+      "unexpectedOutcomes": 0,
+      "medianMs": 121672.5,
+      "p95Ms": 164425.65,
+      "minMs": 74169,
+      "maxMs": 169176,
+      "requestP95Ms": 198.05720000000002,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T114200Z-aws-cold-v2",
+          "directory": "docs/performance-results/20261002T114200Z-aws-cold-v2",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 198.717,
+          "deployments": [
+            {
+              "id": "101",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 74169,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 198.717
+          }
+        },
+        {
+          "id": "20261002T114400Z-aws-cold-v3",
+          "directory": "docs/performance-results/20261002T114400Z-aws-cold-v3",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 185.521,
+          "deployments": [
+            {
+              "id": "102",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 169176,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 185.521
+          }
+        }
+      ]
+    },
+    {
+      "id": "aws-warm",
+      "name": "AWS 동일 이미지 재배포",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 3,
+      "accepted": 3,
+      "rejected": 0,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 20315,
+      "p95Ms": 22921.4,
+      "minMs": 19457,
+      "maxMs": 23211,
+      "requestP95Ms": 222.2864,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T114800Z-aws-warm-v1",
+          "directory": "docs/performance-results/20261002T114800Z-aws-warm-v1",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 228.416,
+          "deployments": [
+            {
+              "id": "103",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 23211,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 228.416
+          }
+        },
+        {
+          "id": "20261002T114900Z-aws-warm-v2",
+          "directory": "docs/performance-results/20261002T114900Z-aws-warm-v2",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 167.12,
+          "deployments": [
+            {
+              "id": "104",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20315,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 167.12
+          }
+        },
+        {
+          "id": "20261002T115000Z-aws-warm-v3",
+          "directory": "docs/performance-results/20261002T115000Z-aws-warm-v3",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 160.996,
+          "deployments": [
+            {
+              "id": "105",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 19457,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 160.996
+          }
+        }
+      ]
+    },
+    {
+      "id": "onprem-cold",
+      "name": "On-Prem 신규 이미지",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 3,
+      "accepted": 3,
+      "rejected": 0,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 27263,
+      "p95Ms": 54675.2,
+      "minMs": 26634,
+      "maxMs": 57721,
+      "requestP95Ms": 186.91719999999998,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T115200Z-onprem-cold-v4",
+          "directory": "docs/performance-results/20261002T115200Z-onprem-cold-v4",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 136.69,
+          "deployments": [
+            {
+              "id": "106",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 57721,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 136.69
+          }
+        },
+        {
+          "id": "20261002T115400Z-onprem-cold-v5",
+          "directory": "docs/performance-results/20261002T115400Z-onprem-cold-v5",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 192.498,
+          "deployments": [
+            {
+              "id": "107",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 26634,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 192.498
+          }
+        },
+        {
+          "id": "20261002T115500Z-onprem-cold-v6",
+          "directory": "docs/performance-results/20261002T115500Z-onprem-cold-v6",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 115.228,
+          "deployments": [
+            {
+              "id": "108",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 27263,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 115.228
+          }
+        }
+      ]
+    },
+    {
+      "id": "onprem-warm",
+      "name": "On-Prem 동일 이미지 재배포",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 3,
+      "accepted": 3,
+      "rejected": 0,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 19915,
+      "p95Ms": 21208.3,
+      "minMs": 16643,
+      "maxMs": 21352,
+      "requestP95Ms": 196.05749999999998,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T115600Z-onprem-warm-v1",
+          "directory": "docs/performance-results/20261002T115600Z-onprem-warm-v1",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 111.332,
+          "deployments": [
+            {
+              "id": "109",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 19915,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 111.332
+          }
+        },
+        {
+          "id": "20261002T115700Z-onprem-warm-v2",
+          "directory": "docs/performance-results/20261002T115700Z-onprem-warm-v2",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 196.64,
+          "deployments": [
+            {
+              "id": "110",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 16643,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 196.64
+          }
+        },
+        {
+          "id": "20261002T115800Z-onprem-warm-v3",
+          "directory": "docs/performance-results/20261002T115800Z-onprem-warm-v3",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 190.815,
+          "deployments": [
+            {
+              "id": "111",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 21352,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 190.815
+          }
+        }
+      ]
+    },
+    {
+      "id": "aws-aws",
+      "name": "AWS 2건 동시",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 6,
+      "accepted": 6,
+      "rejected": 0,
+      "deployments": 6,
+      "expectedOutcomes": 6,
+      "unexpectedOutcomes": 0,
+      "medianMs": 25180.5,
+      "p95Ms": 31077.75,
+      "minMs": 17929,
+      "maxMs": 31214,
+      "requestP95Ms": 207.790165,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T120600Z-aws-aws-burst2-r1",
+          "directory": "docs/performance-results/20261002T120600Z-aws-aws-burst2-r1",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 210.4726,
+          "deployments": [
+            {
+              "id": "113",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 17929,
+              "error": null
+            },
+            {
+              "id": "114",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 30669,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 210.4726
+          }
+        },
+        {
+          "id": "20261002T120700Z-aws-aws-burst2-r2",
+          "directory": "docs/performance-results/20261002T120700Z-aws-aws-burst2-r2",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 183.64825,
+          "deployments": [
+            {
+              "id": "115",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 19188,
+              "error": null
+            },
+            {
+              "id": "116",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 29525,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 183.64825
+          }
+        },
+        {
+          "id": "20261002T120800Z-aws-aws-burst2-r3",
+          "directory": "docs/performance-results/20261002T120800Z-aws-aws-burst2-r3",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 167.6615,
+          "deployments": [
+            {
+              "id": "117",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20836,
+              "error": null
+            },
+            {
+              "id": "118",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 31214,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 167.6615
+          }
+        }
+      ]
+    },
+    {
+      "id": "aws-onprem",
+      "name": "AWS + On-Prem 동시",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 6,
+      "accepted": 6,
+      "rejected": 0,
+      "deployments": 6,
+      "expectedOutcomes": 6,
+      "unexpectedOutcomes": 0,
+      "medianMs": 21311.5,
+      "p95Ms": 33644.25,
+      "minMs": 17523,
+      "maxMs": 34912,
+      "requestP95Ms": 210.66545000000002,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T121000Z-aws-onprem-burst2-r1",
+          "directory": "docs/performance-results/20261002T121000Z-aws-onprem-burst2-r1",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 170.6144,
+          "deployments": [
+            {
+              "id": "119",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 18797,
+              "error": null
+            },
+            {
+              "id": "120",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 34912,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 170.6144
+          }
+        },
+        {
+          "id": "20261002T121100Z-aws-onprem-burst2-r2",
+          "directory": "docs/performance-results/20261002T121100Z-aws-onprem-burst2-r2",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 211.2307,
+          "deployments": [
+            {
+              "id": "121",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 17523,
+              "error": null
+            },
+            {
+              "id": "122",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 29841,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 211.2307
+          }
+        },
+        {
+          "id": "20261002T121200Z-aws-onprem-burst2-r3",
+          "directory": "docs/performance-results/20261002T121200Z-aws-onprem-burst2-r3",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 205.5782,
+          "deployments": [
+            {
+              "id": "123",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 19104,
+              "error": null
+            },
+            {
+              "id": "124",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 23519,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 205.5782
+          }
+        }
+      ]
+    },
+    {
+      "id": "onprem-onprem",
+      "name": "On-Prem 2건 동시",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 6,
+      "accepted": 6,
+      "rejected": 0,
+      "deployments": 6,
+      "expectedOutcomes": 5,
+      "unexpectedOutcomes": 1,
+      "medianMs": 34089,
+      "p95Ms": 51795.25,
+      "minMs": 15731,
+      "maxMs": 53590,
+      "requestP95Ms": 207.26693,
+      "remainingLocks": 0,
+      "passed": false,
+      "runs": [
+        {
+          "id": "20261002T123100Z-onprem-onprem-burst2-r1",
+          "directory": "docs/performance-results/20261002T123100Z-onprem-onprem-burst2-r1",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 209.06945,
+          "deployments": [
+            {
+              "id": "138",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 16096,
+              "error": null
+            },
+            {
+              "id": "139",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 46411,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 209.06945
+          }
+        },
+        {
+          "id": "20261002T123200Z-onprem-onprem-burst2-r2",
+          "directory": "docs/performance-results/20261002T123200Z-onprem-onprem-burst2-r2",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 179.60235,
+          "deployments": [
+            {
+              "id": "140",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 15731,
+              "error": null
+            },
+            {
+              "id": "141",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 22038,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 179.60235
+          }
+        },
+        {
+          "id": "20261002T123300Z-onprem-onprem-burst2-r3",
+          "directory": "docs/performance-results/20261002T123300Z-onprem-onprem-burst2-r3",
+          "accepted": 2,
+          "rejected": 0,
+          "requestP95Ms": 191.04425,
+          "deployments": [
+            {
+              "id": "142",
+              "status": "failed",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 46140,
+              "error": "dns_error"
+            },
+            {
+              "id": "143",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 53590,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 191.04425
+          }
+        }
+      ]
+    },
+    {
+      "id": "burst5",
+      "name": "혼합 5건 동시",
+      "match": {},
+      "expected": "success",
+      "runCount": 2,
+      "requests": 10,
+      "accepted": 10,
+      "rejected": 0,
+      "deployments": 10,
+      "expectedOutcomes": 10,
+      "unexpectedOutcomes": 0,
+      "medianMs": 34232,
+      "p95Ms": 63511.349999999984,
+      "minMs": 16272,
+      "maxMs": 69585,
+      "requestP95Ms": 296.58789,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T124500Z-burst5-mixed-r1",
+          "directory": "docs/performance-results/20261002T124500Z-burst5-mixed-r1",
+          "accepted": 5,
+          "rejected": 0,
+          "requestP95Ms": 302.07480000000004,
+          "deployments": [
+            {
+              "id": "146",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 16272,
+              "error": null
+            },
+            {
+              "id": "147",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20740,
+              "error": null
+            },
+            {
+              "id": "148",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 35149,
+              "error": null
+            },
+            {
+              "id": "149",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 69585,
+              "error": null
+            },
+            {
+              "id": "150",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 49575,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "146",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "147",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/37@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "148",
+              "image_digest": "sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/36@sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "149",
+              "image_digest": "sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/35@sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "150",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/34@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 302.07480000000004
+          }
+        },
+        {
+          "id": "20261002T125000Z-burst5-mixed-r2",
+          "directory": "docs/performance-results/20261002T125000Z-burst5-mixed-r2",
+          "accepted": 5,
+          "rejected": 0,
+          "requestP95Ms": 192.3366,
+          "deployments": [
+            {
+              "id": "151",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 26923,
+              "error": null
+            },
+            {
+              "id": "152",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20874,
+              "error": null
+            },
+            {
+              "id": "153",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 33315,
+              "error": null
+            },
+            {
+              "id": "154",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 43757,
+              "error": null
+            },
+            {
+              "id": "155",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 56088,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "151",
+              "image_digest": "sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/35@sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "152",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/34@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "153",
+              "image_digest": "sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/36@sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "154",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/37@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "155",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 192.3366
+          }
+        }
+      ]
+    },
+    {
+      "id": "arrival",
+      "name": "5분 지속 요청",
+      "match": {},
+      "expected": "success",
+      "runCount": 1,
+      "requests": 10,
+      "accepted": 10,
+      "rejected": 0,
+      "deployments": 10,
+      "expectedOutcomes": 10,
+      "unexpectedOutcomes": 0,
+      "medianMs": 20740.5,
+      "p95Ms": 30542.35,
+      "minMs": 17346,
+      "maxMs": 31333,
+      "requestP95Ms": 156.11915,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T125500Z-arrival-mixed-5m",
+          "directory": "docs/performance-results/20261002T125500Z-arrival-mixed-5m",
+          "accepted": 10,
+          "rejected": 0,
+          "requestP95Ms": 156.11915,
+          "deployments": [
+            {
+              "id": "156",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20064,
+              "error": null
+            },
+            {
+              "id": "157",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20406,
+              "error": null
+            },
+            {
+              "id": "158",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20986,
+              "error": null
+            },
+            {
+              "id": "159",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 17346,
+              "error": null
+            },
+            {
+              "id": "160",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 29576,
+              "error": null
+            },
+            {
+              "id": "161",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20046,
+              "error": null
+            },
+            {
+              "id": "162",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20516,
+              "error": null
+            },
+            {
+              "id": "163",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 20965,
+              "error": null
+            },
+            {
+              "id": "164",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 23289,
+              "error": null
+            },
+            {
+              "id": "165",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 31333,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "156",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/34@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "157",
+              "image_digest": "sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/36@sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "158",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/37@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "159",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "160",
+              "image_digest": "sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/35@sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "161",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/34@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "162",
+              "image_digest": "sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/36@sha256:16774d69eefe9dc9c3ce74bb400252497227d8169c786742155506054f3a280f",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "163",
+              "image_digest": "sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/37@sha256:ef19696654ff767926f57e076a808918a0d8ae9c3727de7819dee800dc4d8ce4",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "164",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            },
+            {
+              "deployment_id": "165",
+              "image_digest": "sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/35@sha256:448ea3443d98832fbd7be0e67c8258534e9fe0f3d66ba949485502517025c936",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 156.11915
+          }
+        }
+      ]
+    },
+    {
+      "id": "lock",
+      "name": "동일 프로젝트 잠금",
+      "match": {},
+      "expected": "lock",
+      "runCount": 3,
+      "requests": 6,
+      "accepted": 3,
+      "rejected": 3,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 18469,
+      "p95Ms": 19408.6,
+      "minMs": 18220,
+      "maxMs": 19513,
+      "requestP95Ms": 174.44254,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T121300Z-same-project-lock-r1",
+          "directory": "docs/performance-results/20261002T121300Z-same-project-lock-r1",
+          "accepted": 1,
+          "rejected": 1,
+          "requestP95Ms": 179.25045,
+          "deployments": [
+            {
+              "id": "125",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 19513,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 0.5,
+            "p95Ms": 179.25045
+          }
+        },
+        {
+          "id": "20261002T121400Z-same-project-lock-r2",
+          "directory": "docs/performance-results/20261002T121400Z-same-project-lock-r2",
+          "accepted": 1,
+          "rejected": 1,
+          "requestP95Ms": 131.17135,
+          "deployments": [
+            {
+              "id": "126",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 18220,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 0.5,
+            "p95Ms": 131.17135
+          }
+        },
+        {
+          "id": "20261002T121500Z-same-project-lock-r3",
+          "directory": "docs/performance-results/20261002T121500Z-same-project-lock-r3",
+          "accepted": 1,
+          "rejected": 1,
+          "requestP95Ms": 127.311,
+          "deployments": [
+            {
+              "id": "127",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 18469,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 0.5,
+            "p95Ms": 127.311
+          }
+        }
+      ]
+    },
+    {
+      "id": "to-aws",
+      "name": "On-Prem → AWS 전환",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 3,
+      "accepted": 3,
+      "rejected": 0,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 26554,
+      "p95Ms": 131402.19999999998,
+      "minMs": 19592,
+      "maxMs": 143052,
+      "requestP95Ms": 198.15390000000002,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T121600Z-switch-onprem-to-aws-r1",
+          "directory": "docs/performance-results/20261002T121600Z-switch-onprem-to-aws-r1",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 108.629,
+          "deployments": [
+            {
+              "id": "128",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 143052,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "128",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 108.629
+          }
+        },
+        {
+          "id": "20261002T122000Z-switch-onprem-to-aws-r2",
+          "directory": "docs/performance-results/20261002T122000Z-switch-onprem-to-aws-r2",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 203.372,
+          "deployments": [
+            {
+              "id": "130",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 26554,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "130",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 203.372
+          }
+        },
+        {
+          "id": "20261002T122200Z-switch-onprem-to-aws-r3",
+          "directory": "docs/performance-results/20261002T122200Z-switch-onprem-to-aws-r3",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 151.191,
+          "deployments": [
+            {
+              "id": "132",
+              "status": "succeeded",
+              "targetProfile": "aws-ecs-basic",
+              "totalMs": 19592,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "132",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 151.191
+          }
+        }
+      ]
+    },
+    {
+      "id": "to-onprem",
+      "name": "AWS → On-Prem 전환",
+      "match": {},
+      "expected": "success",
+      "runCount": 3,
+      "requests": 3,
+      "accepted": 3,
+      "rejected": 0,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 19002,
+      "p95Ms": 19386.3,
+      "minMs": 17979,
+      "maxMs": 19429,
+      "requestP95Ms": 215.91,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T121900Z-switch-aws-to-onprem-r1",
+          "directory": "docs/performance-results/20261002T121900Z-switch-aws-to-onprem-r1",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 200.529,
+          "deployments": [
+            {
+              "id": "129",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 19429,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "129",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 200.529
+          }
+        },
+        {
+          "id": "20261002T122100Z-switch-aws-to-onprem-r2",
+          "directory": "docs/performance-results/20261002T122100Z-switch-aws-to-onprem-r2",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 217.619,
+          "deployments": [
+            {
+              "id": "131",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 17979,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "131",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 217.619
+          }
+        },
+        {
+          "id": "20261002T122300Z-switch-aws-to-onprem-r3",
+          "directory": "docs/performance-results/20261002T122300Z-switch-aws-to-onprem-r3",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 174.081,
+          "deployments": [
+            {
+              "id": "133",
+              "status": "succeeded",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 19002,
+              "error": null
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [
+            {
+              "deployment_id": "133",
+              "image_digest": "sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "immutable_ref": "725072160743.dkr.ecr.ap-northeast-2.amazonaws.com/camellia/projects/6@sha256:a86be81d9a0fe99b145db6c6b60ebe9a85716f133f18f12ca3c50f4ab4b9817b",
+              "platform": "linux/amd64",
+              "strategy": "dockerfile"
+            }
+          ],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 174.081
+          }
+        }
+      ]
+    },
+    {
+      "id": "rollback",
+      "name": "검증 실패·롤백",
+      "match": {},
+      "expected": "failure",
+      "runCount": 3,
+      "requests": 3,
+      "accepted": 3,
+      "rejected": 0,
+      "deployments": 3,
+      "expectedOutcomes": 3,
+      "unexpectedOutcomes": 0,
+      "medianMs": 63980,
+      "p95Ms": 180723.5,
+      "minMs": 58928,
+      "maxMs": 193695,
+      "requestP95Ms": 204.25969999999998,
+      "remainingLocks": 0,
+      "passed": true,
+      "runs": [
+        {
+          "id": "20261002T122400Z-failure-rollback-r1",
+          "directory": "docs/performance-results/20261002T122400Z-failure-rollback-r1",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 175.376,
+          "deployments": [
+            {
+              "id": "134",
+              "status": "failed",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 63980,
+              "error": "health_check_failed"
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 175.376
+          }
+        },
+        {
+          "id": "20261002T122600Z-failure-rollback-r2",
+          "directory": "docs/performance-results/20261002T122600Z-failure-rollback-r2",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 207.469,
+          "deployments": [
+            {
+              "id": "135",
+              "status": "failed",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 58928,
+              "error": "health_check_failed"
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 207.469
+          }
+        },
+        {
+          "id": "20261002T122800Z-failure-rollback-r3",
+          "directory": "docs/performance-results/20261002T122800Z-failure-rollback-r3",
+          "accepted": 1,
+          "rejected": 0,
+          "requestP95Ms": 129.133,
+          "deployments": [
+            {
+              "id": "136",
+              "status": "failed",
+              "targetProfile": "onprem-docker-basic",
+              "totalMs": 193695,
+              "error": "health_check_failed"
+            }
+          ],
+          "remainingLocks": 0,
+          "digests": [],
+          "health": {
+            "successRate": 1,
+            "p95Ms": 129.133
+          }
+        }
+      ]
+    }
+  ]
+}

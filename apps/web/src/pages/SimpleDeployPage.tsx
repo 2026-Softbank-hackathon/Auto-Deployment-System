@@ -5,6 +5,7 @@ import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { followAppLink, type Navigate } from '../app/navigation';
 import { ActiveDeploymentsBanner } from '../features/deployment-start/ActiveDeploymentsBanner';
 import { AppChooser, findAppByName, suggestAppName, type AppChoice } from '../features/deployment-start/AppChooser';
+import { suggestSubdomain, useSubdomainCheck } from '../features/app-address/subdomain';
 import { ConnectionPicker, type ConnectionOption } from '../features/deployment-start/ConnectionPicker';
 import { PipelineRail } from '../features/deployment-start/PipelineRail';
 import { useDeployProject, type DeployProject } from '../features/deployment-start/useDeployProject';
@@ -65,6 +66,13 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const selectedProject = choice.mode === 'existing' && projects ? projects.find((project) => project.id === choice.projectId) ?? null : null;
   const newName = choice.mode === 'new' ? choice.name.trim() : '';
   const appReady = choice.mode === 'new' ? newName !== '' && findAppByName(projects, newName) === null : selectedProject !== null;
+
+  // ── 새 앱의 주소 (#302) ── 직접 고치기 전에는 앱 이름으로 추천한 주소를 따라간다.
+  // 비었거나 쓸 수 없는 주소면 보내지 않아 서버가 기본 주소(service-{id})로 만든다 — 원클릭을 막지 않는다.
+  const [addressInput, setAddressInput] = useState<string | null>(null);
+  const address = addressInput ?? suggestSubdomain(newName);
+  const addressCheck = useSubdomainCheck(choice.mode === 'new' ? address : '');
+  const chosenSubdomain = addressCheck.phase === 'available' || addressCheck.phase === 'checking' ? address.trim().toLowerCase() : undefined;
 
   function chooseFile(next: File | null) {
     setFile(next);
@@ -160,7 +168,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
       let projectId: string;
       if (choice.mode === 'new') {
         try {
-          const created = await createDeployProject(newName);
+          const created = await createDeployProject(newName, chosenSubdomain);
           projectId = created.id;
         } catch (createError) {
           setError({ kind: 'app', error: createError });
@@ -194,7 +202,10 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const errorCopy = (() => {
     if (!error) return null;
     const cause = error.error;
-    if (error.kind === 'app') return cause instanceof DeploymentApiError && cause.status === 409 ? copy.app.nameTaken : errorMessage(cause, t, copy.app.createError);
+    if (error.kind === 'app') {
+      if (cause instanceof DeploymentApiError && cause.code === 'SUBDOMAIN_TAKEN') return t.address.taken;
+      return cause instanceof DeploymentApiError && cause.status === 409 ? copy.app.nameTaken : errorMessage(cause, t, copy.app.createError);
+    }
     if (cause instanceof DeploymentApiError && cause.code && connectionRejectedCodes.includes(cause.code)) return copy.startRejected;
     return cause instanceof DeploymentApiError && cause.serverMessage ? `${cause.serverMessage} (${cause.status})` : errorMessage(cause, t, t.errors.startFailed);
   })();
@@ -208,6 +219,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
       <PipelineRail sourceReady={Boolean(file)} />
       <ZipUploader file={file} onChange={chooseFile} disabled={isStarting} />
       <AppChooser projects={projects} loadError={projectsError} onRetry={loadApps} value={choice} onChange={changeApp}
+        address={{ value: address, onChange: (next) => { setAddressInput(next); setError(null); }, check: addressCheck }}
         envMissing={envMissing} disabled={isStarting} onNavigate={onNavigate} />
       <ConnectionPicker options={options} loadError={connectionState.phase === 'error' ? connectionState.error : null} onRetry={retryConnections}
         selectedId={selected?.connection.id ?? null} onSelect={setConnectionId} now={connectionState.phase === 'ready' ? connectionState.loadedAt : Date.now()}

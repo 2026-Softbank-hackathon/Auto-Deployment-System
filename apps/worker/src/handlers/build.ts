@@ -7,8 +7,9 @@ import { AwsRegistryError } from "@camellia/aws-registry";
 import { BuildError, type BuildResult } from "@camellia/build-handler";
 import { AwsConfigSchema } from "@camellia/contracts";
 import type { Pool } from "@camellia/db";
-import { IrSchema } from "@camellia/ir-schema";
+import { IrSchema, type Ir } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
+import { syncTargetProfile } from "../profile-sync.js";
 import { createStepLogger } from "../step-log.js";
 import { transitionTo, type Status } from "../state-machine.js";
 
@@ -78,12 +79,18 @@ export async function handleBuild(
 
     const required = requireBuildDependencies(deps);
     const projectId = parseProjectId(context.project_id);
-    const profileId = requireString(context.target_profile, "TARGET_PROFILE_MISSING");
+    const currentProfile = requireString(context.target_profile, "TARGET_PROFILE_MISSING");
     const sourceStorageKey = requireString(
       context.source_storage_key,
       "SOURCE_ARTIFACT_MISSING",
     );
-    const ir = IrSchema.parse(context.ir_json);
+    const { ir, profileId } = await ensureProfileMatchesIr(
+      deps,
+      deploymentId,
+      currentProfile,
+      IrSchema.parse(context.ir_json),
+      stepLog,
+    );
     const plan = createDeploymentPlan(ir, profileId);
     const awsConfig = AwsConfigSchema.parse(context.aws_config);
 
@@ -118,7 +125,11 @@ export async function handleBuild(
       required.registrySession.withAuthorization(
         authorization,
         async (commandEnvironment) => {
-          await stepLog.line("컨테이너 이미지 빌드 및 Registry push");
+          await stepLog.line(
+            plan.build.staticSite
+              ? "정적 사이트 이미지(nginx + 빌드 결과) 빌드 및 Registry push"
+              : "컨테이너 이미지 빌드 및 Registry push",
+          );
           return required.buildHandler.build({
             workspacePath,
             plan: plan.build,
@@ -198,6 +209,29 @@ async function loadBuildContext(
   const row = result.rows[0];
   if (!row) throw new Error("BUILD_CONTEXT_NOT_FOUND");
   return row;
+}
+
+/**
+ * 분석 뒤 사용자가 IR 을 고쳐 서비스 유형이 바뀌었을 수 있다 — 빌드 전에 프로필을 한 번 더 맞춘다 (#273).
+ * 바뀌면 deployments.target_profile 과 함께 deploy.profile 을 고친 IR 버전을 남긴다.
+ */
+async function ensureProfileMatchesIr(
+  deps: WorkerDeps,
+  deploymentId: number,
+  currentProfile: string,
+  ir: Ir,
+  stepLog: ReturnType<typeof createStepLogger>,
+): Promise<{ ir: Ir; profileId: string }> {
+  const { profile, changed } = await syncTargetProfile(deps.pool, deploymentId, currentProfile, ir);
+  const profileId = profile ?? currentProfile;
+  if (!changed && ir.deploy.profile === profileId) return { ir, profileId };
+  const synced: Ir = { ...ir, deploy: { ...ir.deploy, profile: profileId } };
+  await deps.pool.query(
+    `INSERT INTO ir_versions (deployment_id, ir_json, source) VALUES ($1, $2, 'profile_sync')`,
+    [deploymentId, JSON.stringify(synced)],
+  );
+  await stepLog.line(`IR 에 맞춰 배포 프로필을 ${profileId} 로 정했습니다.`);
+  return { ir: synced, profileId };
 }
 
 function requireBuildDependencies(deps: WorkerDeps) {

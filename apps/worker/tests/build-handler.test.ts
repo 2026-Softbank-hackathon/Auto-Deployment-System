@@ -34,6 +34,7 @@ function makeHarness(overrides: Partial<{
   autoApproveFailure: Error;
   reusableDigest: string;
   registryOwnerProjectId: string | null;
+  irJson: unknown;
 }> = {}) {
   let currentStatus = overrides.status ?? "queued";
   const queries: Array<{ sql: string; params: unknown[] }> = [];
@@ -84,7 +85,7 @@ function makeHarness(overrides: Partial<{
               project_id: "1",
               target_profile: "aws-ecs-basic",
               source_storage_key: "sources/demo.zip",
-              ir_json: IR,
+              ir_json: overrides.irJson ?? IR,
               registry_environment_type: "aws",
               registry_environment_project_id:
                 overrides.registryOwnerProjectId === undefined ? "1" : overrides.registryOwnerProjectId,
@@ -250,6 +251,35 @@ describe("handleBuild", () => {
     expect(harness.boss.send).toHaveBeenCalledWith("provision", {
       deployment_id: 42,
     });
+  });
+
+  it("정적 사이트 IR 이면 빌드 전에 프로필을 aws-static-basic 으로 맞추고 정적 이미지 plan 으로 빌드한다 (#273)", async () => {
+    const harness = makeHarness({
+      irJson: {
+        metadata: { name: "site", version: "1.0.0" },
+        services: {
+          site: { type: "static", port: 8080, health: { path: "/" }, static: { build_command: "npm run build", output_dir: "dist" } },
+        },
+        deploy: { profile: "aws-ecs-basic" },
+      },
+    });
+
+    await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+    const profileUpdate = harness.queries.find((q) => q.sql.includes("SET target_profile"));
+    expect(profileUpdate?.params).toEqual(["aws-static-basic", 42]);
+    const irVersion = harness.queries.find((q) => q.sql.includes("INSERT INTO ir_versions"));
+    expect(irVersion?.sql).toContain("profile_sync");
+    expect(JSON.parse(String(irVersion?.params[1])).deploy.profile).toBe("aws-static-basic");
+    expect(harness.buildHandler.build).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plan: {
+          context: ".",
+          staticSite: { buildCommand: "npm run build", outputDir: "dist", spaFallback: true, listenPort: 8080 },
+        },
+      }),
+    );
+    expect(harness.getStatus()).toBe("provisioning");
   });
 
   it("이미 저장된 artifact가 있으면 다시 build하지 않고 다음 단계로 간다", async () => {

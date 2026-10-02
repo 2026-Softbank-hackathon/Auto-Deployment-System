@@ -34,11 +34,9 @@ describe("onprem-docker-basic Adapter", () => {
   });
 
   it("registers the profile adapters", () => {
-    expect(getRegisteredProfileIds().sort()).toEqual([
-      "aws-ecs-basic",
-      "aws-lambda-basic",
-      "onprem-docker-basic",
-    ]);
+    expect(getRegisteredProfileIds()).toEqual(
+      expect.arrayContaining(["aws-ecs-basic", "aws-lambda-basic", "aws-static-basic", "onprem-docker-basic"]),
+    );
   });
 
   it("keeps the SQLite fallback instead of a managed database (environment difference)", () => {

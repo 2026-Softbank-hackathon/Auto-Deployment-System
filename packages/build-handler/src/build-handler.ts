@@ -4,6 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { BuildError, CommandExecutionError } from "./errors.js";
 import { NodeCommandRunner } from "./command-runner.js";
+import type { StaticSiteBuildPlan } from "@camellia/adapters";
+import {
+  normalizeStaticSite,
+  renderStaticSiteDockerfile,
+  renderStaticSiteDockerignore,
+} from "./static-site.js";
 import {
   LAMBDA_WEB_ADAPTER_COPY,
   LAMBDA_WEB_ADAPTER_VERSION,
@@ -54,7 +60,22 @@ export class BuildHandler {
     let digest: string;
     let strategy: BuildResult["strategy"];
 
-    if (request.plan.dockerfile) {
+    if (request.plan.staticSite) {
+      const site = normalizeStaticSite(request.plan.staticSite);
+      if (!site.buildCommand && site.outputDir !== ".") {
+        const servedCandidate = resolveInsideWorkspace(contextPath, site.outputDir);
+        await requireDirectory(servedCandidate);
+        await canonicalizeInsideWorkspace(workspacePath, servedCandidate);
+      }
+      digest = await this.buildStaticSite({
+        contextPath,
+        site,
+        taggedRef,
+        platform,
+        commandEnvironment: request.commandEnvironment,
+      });
+      strategy = "dockerfile";
+    } else if (request.plan.dockerfile) {
       const dockerfileCandidate = resolveInsideWorkspace(
         workspacePath,
         request.plan.dockerfile,
@@ -100,6 +121,35 @@ export class BuildHandler {
         immutableRef: `${repository}@${imageDigest}`,
       },
     };
+  }
+
+  /**
+   * 정적 사이트 (#273): 플랫폼이 만든 Dockerfile 로 nginx 이미지를 빌드한다.
+   * Dockerfile · 전용 dockerignore 는 사용자 소스 밖 임시 폴더에 두고 끝나면 지운다.
+   * 빌드는 일반 Dockerfile 과 같은 길(buildDockerfile)이라 Lambda Web Adapter 레이어도 같이 붙는다 (nginx 실행에는 영향 없음).
+   */
+  private async buildStaticSite(input: {
+    contextPath: string;
+    site: StaticSiteBuildPlan;
+    taggedRef: string;
+    platform: string;
+    commandEnvironment?: NodeJS.ProcessEnv;
+  }): Promise<string> {
+    const directory = await fs.mkdtemp(path.join(this.temporaryRoot, "camellia-static-"));
+    try {
+      const dockerfilePath = path.join(directory, "Dockerfile");
+      await fs.writeFile(dockerfilePath, renderStaticSiteDockerfile(input.site));
+      await fs.writeFile(`${dockerfilePath}.dockerignore`, renderStaticSiteDockerignore(input.site));
+      return await this.buildDockerfile({
+        contextPath: input.contextPath,
+        dockerfilePath,
+        taggedRef: input.taggedRef,
+        platform: input.platform,
+        commandEnvironment: input.commandEnvironment,
+      });
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   }
 
   /**

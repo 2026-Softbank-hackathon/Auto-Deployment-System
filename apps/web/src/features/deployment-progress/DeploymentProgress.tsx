@@ -337,10 +337,16 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure className="run-scene">
+        <figure className={`run-scene ${talk ? 'has-talk' : ''}`}>
           <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} />
-          {/* 코로의 말풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 넓은 화면에서는 코로 위에, 좁은 화면에서는 장면 아래에 둔다. */}
-          {talk && <p key={talk} className="koro-talk" style={{ '--koro-x': `${Math.min(88, Math.max(12, (koroX / SCENE_SIZE.width) * 100))}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 12) / SCENE_SIZE.height) * 100}%` } as CSSProperties}>{talk}</p>}
+          {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
+              풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
+              좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
+          {talk && <div className={`koro-think ${koroX > SCENE_SIZE.width * 0.82 ? 'is-left' : 'is-right'} ${koroX > SCENE_SIZE.width * 0.7 ? 'is-near-edge' : ''}`}
+            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2) / SCENE_SIZE.height) * 100}%` } as CSSProperties}>
+            <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
+            <p key={talk} className="koro-think__bubble">{talk}</p>
+          </div>}
         </figure>
 
         {/* 지금 서버가 하고 있는 일: 실시간으로 받은 최근 로그 몇 줄(시각은 떼고 화면 언어로 옮긴다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}

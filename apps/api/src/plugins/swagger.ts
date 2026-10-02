@@ -40,6 +40,7 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify) => {
         { name: "deployments", description: "배포 생성 · 진행 상태 · IR · 승인 · 로그" },
         { name: "secrets", description: "클라우드 시크릿" },
         { name: "environments", description: "배포 환경 (AWS · 온프레미스)" },
+        { name: "ops", description: "플랫폼 운영 상태 (작업 큐 · 서버 · AI 비용 · 자동 배포)" },
         { name: "system", description: "헬스 체크" },
       ],
       components: {

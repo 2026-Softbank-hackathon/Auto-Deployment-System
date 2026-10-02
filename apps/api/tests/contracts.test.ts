@@ -29,6 +29,10 @@ import {
   EnvVarListSchema,
   ErrorBodySchema,
   IrVersionSchema,
+  OpsAiUsageSchema,
+  OpsDeployListSchema,
+  OpsQueueSchema,
+  OpsServerSchema,
   DeleteProjectResponseSchema,
   ProjectDeploymentListSchema,
   ProjectListSchema,
@@ -894,3 +898,126 @@ function expectEvents(events: Array<{ event: string; data: unknown }>, names: st
     expectContract(DeploymentEventSchema, { event: e.event, data: JSON.parse(JSON.stringify(e.data)) });
   }
 }
+
+// ── 플랫폼 운영 (#308) ─────────────────────────────────────────────────────────
+
+describe("ops 응답 계약", () => {
+  it("GET /ops/queue — 큐별 개수 · 진행 중 작업 · 워커 (count · BIGINT 는 문자열)", async () => {
+    pool.on(/FROM pgboss\.queue q/, () => ({
+      rows: [
+        { name: "analyze", created: "1", retry: "0", active: "1", completed: "12", failed: "2", oldest_waiting_seconds: "35" },
+        { name: "teardown", created: "0", retry: "0", active: "0", completed: "0", failed: "0", oldest_waiting_seconds: null },
+      ],
+    }));
+    pool.on(/FROM pgboss\.job j/, () => ({
+      rows: [
+        { id: "8f6c2a8e-3a52-4d43-9f0c-3f3e7f1d2a10", name: "build", deployment_id: "42", project_id: "7", started_on: NOW, running_seconds: "90", retry_count: 0 },
+        { id: "0c6f9d4e-1111-4d43-9f0c-3f3e7f1d2a10", name: "teardown", deployment_id: null, project_id: "9", started_on: NOW, running_seconds: "5", retry_count: 1 },
+      ],
+    }));
+    pool.on(/FROM worker_heartbeats/, () => ({
+      rows: [
+        { worker_id: "w-1", hostname: "a1b2c3", commit_sha: "deadbeef", started_at: NOW, last_seen_at: NOW, uptime_seconds: "3600", last_seen_seconds_ago: "4", draining: false, active_jobs: 1 },
+        { worker_id: "w-0", hostname: "z9", commit_sha: null, started_at: NOW, last_seen_at: NOW, uptime_seconds: "7200", last_seen_seconds_ago: "300", draining: true, active_jobs: 0 },
+      ],
+    }));
+
+    const res = await call("GET", "/api/v1/ops/queue");
+    expect(res.statusCode).toBe(200);
+    expectContract(OpsQueueSchema, res.json());
+    expect(res.json().queues[0]).toEqual({ name: "analyze", created: 1, retry: 0, active: 1, completed24h: 12, failed24h: 2, oldestWaitingSeconds: 35 });
+    expect(res.json().activeJobs[0]).toMatchObject({ deploymentId: "42", projectId: "7", runningSeconds: 90 });
+    expect(res.json().workers.map((w: { online: boolean }) => w.online)).toEqual([true, false]);
+  });
+
+  it("GET /ops/server — 최신 값 · 빌드 캐시 · 24시간 추이 · 디스크 80% 경고", async () => {
+    pool.on(/FROM platform_metrics ORDER BY sampled_at DESC LIMIT 1/, () => ({
+      rows: [{
+        sampled_at: NOW, sampled_seconds_ago: "12", cpu_percent: 12.345, mem_used_bytes: "4000000000", mem_total_bytes: "8000000000",
+        load1: 0.5, load5: 0.25, load15: 0.1, disk_used_bytes: "33000000000", disk_total_bytes: "40000000000",
+      }],
+    }));
+    pool.on(/WHERE build_cache_bytes IS NOT NULL/, () => ({ rows: [{ build_cache_bytes: "5622057098", sampled_at: NOW }] }));
+    pool.on(/date_bin/, () => ({ rows: [{ t: NOW, cpu: 10.04, mem: 50, disk: 82.5 }, { t: NOW, cpu: null, mem: 51, disk: 82.5 }] }));
+
+    const res = await call("GET", "/api/v1/ops/server");
+    expect(res.statusCode).toBe(200);
+    expectContract(OpsServerSchema, res.json());
+    expect(res.json().latest).toMatchObject({ cpuPercent: 12.3, memPercent: 50, diskPercent: 82.5 });
+    expect(res.json().buildCache.bytes).toBe(5622057098);
+    expect(res.json().warnings).toEqual([{ code: "DISK_HIGH", percent: 82.5, threshold: 80 }]);
+  });
+
+  it("GET /ops/server — 샘플이 아직 없으면 latest · buildCache null", async () => {
+    const res = await call("GET", "/api/v1/ops/server");
+    expect(res.statusCode).toBe(200);
+    expectContract(OpsServerSchema, res.json());
+    expect(res.json()).toMatchObject({ latest: null, buildCache: null, series: [], warnings: [] });
+  });
+
+  it("GET /ops/ai-usage — 오늘 · 7일 합계, 모델 · 목적별, 최근 호출 (NUMERIC 은 문자열)", async () => {
+    pool.on(/WITH bounds AS/, () => ({
+      rows: [{
+        today_start: new Date("2026-09-29T15:00:00.000Z"),
+        today_calls: "2", today_input: "1200", today_output: "300", today_cost: "0.0081",
+        week_calls: "5", week_input: "5000", week_output: "900", week_cost: "0.030000",
+      }],
+    }));
+    pool.on(/GROUP BY model/, () => ({ rows: [{ model: "claude-sonnet-5-5", calls: "5", input_tokens: "5000", output_tokens: "900", cost_usd: "0.030000" }] }));
+    pool.on(/COALESCE\(purpose, 'unknown'\) AS purpose/, () => ({
+      rows: [
+        { purpose: "diagnosis", calls: "3", input_tokens: "3000", output_tokens: "600", cost_usd: "0.02" },
+        { purpose: "unknown", calls: "2", input_tokens: "2000", output_tokens: "300", cost_usd: "0.01" },
+      ],
+    }));
+    pool.on(/FROM ai_usage u LEFT JOIN deployments d/, () => ({
+      rows: [
+        { id: "11", created_at: NOW, model: "claude-sonnet-5-5", purpose: "diagnosis", deployment_id: "42", project_id: "7", input_tokens: 100, output_tokens: 50, estimated_cost_usd: "0.000700" },
+        { id: "10", created_at: NOW, model: "claude-opus-5-5", purpose: null, deployment_id: null, project_id: null, input_tokens: 10, output_tokens: 5, estimated_cost_usd: "0.000140" },
+      ],
+    }));
+
+    const res = await call("GET", "/api/v1/ops/ai-usage");
+    expect(res.statusCode).toBe(200);
+    expectContract(OpsAiUsageSchema, res.json());
+    expect(res.json().today).toEqual({ calls: 2, inputTokens: 1200, outputTokens: 300, costUsd: 0.0081 });
+    expect(res.json().recent[1]).toMatchObject({ purpose: "unknown", deploymentId: null });
+  });
+
+  it("GET /ops/ai-usage — 기록이 없어도 0 합계", async () => {
+    const res = await call("GET", "/api/v1/ops/ai-usage");
+    expect(res.statusCode).toBe(200);
+    expectContract(OpsAiUsageSchema, res.json());
+    expect(res.json().last7d).toEqual({ calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+  });
+
+  it("GET /ops/deploys — 성공 · 진행 중 · 중단됨(75분 넘게 running), https 가 아닌 링크는 null", async () => {
+    pool.on(/FROM platform_deploys/, () => ({
+      rows: [
+        {
+          id: "3", status: "running", interrupted: false, ref: "abc", commit_sha: "abc1234", commit_subject: "웹 추가", commit_url: "https://github.com/o/r/commit/abc1234",
+          started_at: NOW, finished_at: null, duration_seconds: "40", disk_used_before_bytes: null, disk_used_after_bytes: null, disk_total_bytes: null,
+          run_id: "123", run_url: "https://github.com/o/r/actions/runs/123",
+        },
+        {
+          id: "2", status: "success", interrupted: false, ref: "def", commit_sha: "def5678", commit_subject: "API", commit_url: "javascript:alert(1)",
+          started_at: NOW, finished_at: NOW, duration_seconds: "312", disk_used_before_bytes: "14000000000", disk_used_after_bytes: "13000000000", disk_total_bytes: "40000000000",
+          run_id: null, run_url: null,
+        },
+        {
+          id: "1", status: "running", interrupted: true, ref: null, commit_sha: null, commit_subject: null, commit_url: null,
+          started_at: NOW, finished_at: null, duration_seconds: "99999", disk_used_before_bytes: null, disk_used_after_bytes: null, disk_total_bytes: null,
+          run_id: null, run_url: null,
+        },
+      ],
+    }));
+
+    const res = await call("GET", "/api/v1/ops/deploys");
+    expect(res.statusCode).toBe(200);
+    expectContract(OpsDeployListSchema, res.json());
+    const items = res.json().items;
+    expect(items.map((d: { status: string }) => d.status)).toEqual(["running", "success", "interrupted"]);
+    expect(items[1]).toMatchObject({ commitUrl: null, durationSeconds: 312, diskUsedBeforeBytes: 14000000000 });
+    expect(items[2].durationSeconds).toBeNull();
+  });
+});

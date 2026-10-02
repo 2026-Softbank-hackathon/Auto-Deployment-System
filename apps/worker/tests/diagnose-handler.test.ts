@@ -197,6 +197,7 @@ describe("handleDiagnose", () => {
     const usageParams = usageCall![1] as unknown[];
     expect(usageParams[1]).toBe("claude-sonnet-5-5");
     expect(usageParams[4]).toBeCloseTo((100 * 2 + 50 * 10) / 1_000_000, 10);
+    expect(usageParams[5]).toBe("diagnosis"); // purpose (#308)
   });
 
   it("AI_PROVIDER=bedrock 이면 Bedrock 모델 ID(global 추론 프로파일)를 쓴다", async () => {

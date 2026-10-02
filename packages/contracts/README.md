@@ -31,6 +31,7 @@ camellia API(`/api/v1`)의 요청 · 응답 · SSE 이벤트 계약. Zod 스키�
 | `deployments.ts` | `/deployments` — 업로드 · 조회 · IR · 누락 리소스 · 승인 · 분석 리포트 · 로그 · 헬스 · 진단 · AI 사용량 |
 | `secrets.ts` · `environments.ts` | `/secrets` · `/environments` |
 | `events.ts` | `GET /deployments/:id/events` SSE 이벤트 |
+| `ops.ts` | `/ops` — 플랫폼 운영 화면(작업 큐 · 워커 · 서버 지표 · AI 비용 추정 · 자동 배포 기록) |
 
 이름 규칙: 요청은 `XxxBodySchema` / `XxxQuerySchema`(타입은 보내는 형태 `z.input`), 응답은 `XxxSchema` + 같은 이름의 타입(`Deployment`, `Project` …).
 

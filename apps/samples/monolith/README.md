@@ -1,6 +1,6 @@
 # sample-monolith — 데모용 단일 서비스 샘플 앱
 
-camellia 데모(배포 갱신 v1 → v2 · 온프레미스 ↔ 클라우드 전환)에 올리는 앱입니다. 평가 대상은 배포 시스템이라 앱은 가볍게, 대신 **실제 빌드 단계(`tsc`)** 가 있게 만들었습니다.
+camellia 데모(배포 갱신 v1 → v2 · 온프레미스 ↔ 클라우드 전환)에 올리는 앱입니다. 평가 대상은 배포 시스템이라 앱은 가볍게, 대신 **실제 빌드 단계(`tsc` 타입 검사 + `esbuild` 번들)** 가 있게 만들었습니다.
 
 - Node 24 + TypeScript + [Hono](https://hono.dev) (런타임 의존성 2개: `hono`, `@hono/node-server`)
 - 실제 사용자 앱처럼 **독립 프로젝트**입니다. 자체 `package.json` · `package-lock.json`(npm)이 있고 모노레포 pnpm 워크스페이스에 속하지 않습니다. 이 폴더만 zip으로 올려도 `docker build`가 됩니다.
@@ -29,13 +29,15 @@ camellia 데모(배포 갱신 v1 → v2 · 온프레미스 ↔ 클라우드 전�
 
 ```bash
 npm ci
-npm run build          # tsc → dist/
+npm run build          # tsc 타입 검사 → esbuild 번들(dist/server.js 한 파일)
 npm start              # http://localhost:3000
 ```
 
 ## Docker
 
 ECS · 온프레미스(Intel Mac VM) 대상이라 `linux/amd64`로 빌드합니다.
+
+Fargate 시작 시간(이미지 pull)을 줄이려고 런타임 이미지를 작게 만들었습니다. 빌드 스테이지(`node:24-alpine`)에서 의존성까지 `dist/server.js` 한 파일로 번들하고, 런타임은 `alpine:3.24`에 alpine 패키지 `nodejs`(Node 24)만 설치합니다. npm · yarn · `node_modules`는 들어가지 않고 `node` 사용자(uid 1000)로 실행합니다. 이미지 크기는 압축 기준 약 31MB입니다(공식 `node:24-alpine` 런타임일 때 약 62MB).
 
 ```bash
 docker build --platform linux/amd64 -t camellia-sample-monolith:v1 .

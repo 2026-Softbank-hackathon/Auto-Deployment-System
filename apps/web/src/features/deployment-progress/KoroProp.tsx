@@ -3,7 +3,7 @@ import type { SceneTarget } from './DeployScene';
 /**
  * 단계마다 코로가 하는 일을 보여 주는 팔과 도구. 코로 그림(72×72) 기준 좌표로 그리고, 코로와 같이 움직인다.
  *   0 분석      — 돋보기로 설계도를 살펴본다
- *   1 빌드      — 안전모를 쓰고 망치로 집(이미지)을 짓는다
+ *   1 빌드      — 안전모를 쓰고 망치로 집(이미지)을 짓는다 · 이미지를 재사용하면 창고에서 집을 꺼낸다
  *   2 인프라 준비 — 렌치로 탈것을 조립한다 (AWS: 비행기 · 온프레미스: 수레)
  *   3 배포      — AWS: 비행기 등에 타고 손을 흔든다 · 온프레미스: 수레를 민다
  *   4 검증      — 점검표에 체크한다
@@ -17,7 +17,11 @@ const LeftIdle = () => <Arm d="M8 46 Q0 54 4 62" hand={[4, 62]} />;
 const RightIdle = () => <Arm d="M64 46 Q72 54 68 62" hand={[68, 62]} />;
 
 /** 코로 몸 뒤에 그리는 팔과 도구. stage = null 이면 팔만 내린다. */
-export function KoroProp({ stage, target }: { stage: number | null; target: SceneTarget }) {
+export function KoroProp({ stage, target, carrying = false }: { stage: number | null; target: SceneTarget; /** 빌드 단계에서 집을 짓지 않고 창고에서 꺼낸다 (이미지 재사용) */ carrying?: boolean }) {
+  if (stage === 1 && carrying) return <g className="koro-prop koro-prop--push">
+    <Arm d="M60 34 L84 30" hand={[84, 30]} />
+    <Arm d="M60 48 L84 46" hand={[84, 46]} />
+  </g>;
   switch (stage) {
     case 0:
       return <g className="koro-prop">

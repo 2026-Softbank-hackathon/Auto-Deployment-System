@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, listProjectDeployments, type DeploymentLogStep, type ProjectDeploymentSummary, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -11,6 +11,7 @@ import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/f
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { koroIdle, koroLine, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
@@ -106,6 +107,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [recentLines, setRecentLines] = useState<string[]>([]);
+  // 빌드 로그가 "이미지 재사용"을 알려 주면 그 원본 배포 번호 (재배포 · 롤백 · 환경 전환 장면에 쓴다)
+  const [reusedFrom, setReusedFrom] = useState<string | null>(null);
+  const [projectDeployments, setProjectDeployments] = useState<ProjectDeploymentSummary[] | null>(null);
   const [logs, setLogs] = useState<StepLog[] | null>(null);
   const [error, setError] = useState<ErrorState>(null);
   const [loading, setLoading] = useState(true);
@@ -128,6 +132,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         const entry = readLogLine(event.payload);
         if (!entry) return;
         setRecentLines((previous) => [...previous, entry.line].slice(-RECENT_LINES));
+        const reused = readReusedFrom(entry.line);
+        if (reused) setReusedFrom(reused);
         setLogs((previous) => (previous ? appendLogLine(previous, entry) : previous));
         return;
       }
@@ -141,6 +147,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     void Promise.allSettled(deploymentLogSteps.map((step) => getDeploymentLogs(deploymentId, step, RECENT_LINES))).then((results) => {
       if (!active) return;
       const lines = results.flatMap((result) => (result.status === 'fulfilled' && result.value ? result.value.trim().split('\n') : [])).filter(Boolean);
+      const reused = lines.map(readReusedFrom).find((value) => value !== null);
+      if (reused) setReusedFrom(reused);
       const newest = lines.sort((a, b) => lineTime(a) - lineTime(b)).slice(-RECENT_LINES);
       if (newest.length) setRecentLines((current) => (current.length ? current : newest));
     });
@@ -152,6 +160,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     if (!projectId) return;
     let active = true;
     getProject(projectId).then((project) => { if (active) setProjectName(project.name); }, () => { /* 이름은 없어도 진행 화면은 동작한다 */ });
+    // 이 앱에서 지금까지 서비스하던 버전을 찾는 데 쓴다. 못 받으면 처음 배포처럼 그린다.
+    listProjectDeployments(projectId, { limit: 50 }).then((page) => { if (active) setProjectDeployments(page.items); }, () => { /* 목록이 없어도 진행 화면은 동작한다 */ });
     return () => { active = false; };
   }, [projectId]);
 
@@ -245,7 +255,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     return () => { active = false; };
   }, [deploymentId, analysisDone]);
   const target = sceneTarget(text(status?.targetProfile));
-  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t) : null;
+  const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
+  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
   const [koroX, koroY] = koroSpot(view, target);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
@@ -333,12 +344,12 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
           {talk && <div className={`koro-think ${koroX > SCENE_SIZE.width * 0.85 ? 'is-left' : 'is-right'} ${koroX > SCENE_SIZE.width * 0.7 ? 'is-near-edge' : ''}`}
-            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - sceneBox(target).top) / sceneBox(target).height) * 100}%` } as CSSProperties}>
+            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - sceneBox(target, story).top) / sceneBox(target, story).height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}

@@ -775,7 +775,20 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-window { fill: var(--line); stroke: var(--ink); stroke-width: 2; }
 .jr-window.is-on { fill: var(--moss); }
 .jr-roof { fill: var(--brass); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
-.jr-flag__cloth { fill: var(--moss); stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
+.jr-sign--small { font-size: 12px; }
+.jr-warehouse__door { fill: var(--ink); }
+/* 이미지 이름표: 같은 이름표 = 같은 이미지 */
+.jr-tag { transform: translate(62px, -92px); }
+.jr-tag rect { fill: var(--ink); }
+.jr-tag text { fill: var(--on-ink); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+/* 지금까지 서비스하던 버전 */
+.jr-old-house { transition: opacity var(--dur-scene); }
+.jr-old-house.is-retired { opacity: .4; }
+.jr-old-house .jr-tag { transform: translate(0, 18px); }
+/* LIVE 표지: 서비스 중인 집 위. 성공하면 새 집으로 옮겨 간다 */
+.jr-live { transition: transform var(--dur-scene) var(--ease-roll); }
+.jr-live rect, .jr-live path { fill: var(--moss); }
+.jr-live text { fill: var(--surface); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
 /* 집 · 수레 · 비행기는 코로와 같은 박자로 자리를 옮긴다 */
 .jr-plane__body { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
 .jr-plane__tail, .jr-plane__wing { fill: var(--koro-tint); stroke: var(--koro); stroke-width: 2.5; stroke-linejoin: round; }
@@ -803,8 +816,9 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .jr-easel.is-working .jr-draft:nth-of-type(3) { animation-delay: .6s; }
   .jr-easel.is-working .jr-draft:nth-of-type(4) { animation-delay: .9s; }
   .jr-floor { transform-box: fill-box; transform-origin: 50% 100%; animation: floor-rise .5s var(--ease-roll) both; }
-  .jr-roof, .jr-flag { transform-box: fill-box; transform-origin: 50% 100%; animation: floor-rise .5s var(--ease-roll) both; }
+  .jr-roof { transform-box: fill-box; transform-origin: 50% 100%; animation: floor-rise .5s var(--ease-roll) both; }
   .jr-pad.is-building { animation: dash-march 1s linear infinite; }
+  .jr-live { animation: live-bob 1.4s ease-in-out infinite alternate; }
   .jr-plane.is-building .jr-plane__wing, .jr-plane.is-building .jr-plane__tail { animation: dash-march 1s linear infinite; }
   .jr-plane.is-flying .jr-plane__prop { transform-box: fill-box; transform-origin: 50% 50%; animation: prop-spin .16s linear infinite alternate; }
   .jr-plane.is-flying .jr-plane__wind { animation: wind-streak .7s ease-in-out infinite alternate; }
@@ -812,7 +826,6 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .jr-floor:nth-of-type(2) .jr-window.is-checking { animation-delay: .3s; }
   .jr-floor:nth-of-type(3) .jr-window.is-checking { animation-delay: .6s; }
   .jr-drift { animation: cloud-drift 14s ease-in-out infinite alternate; }
-  .jr-flag__cloth { transform-box: fill-box; transform-origin: 0% 50%; animation: flag-wave 1.2s ease-in-out infinite alternate; }
 }
 @keyframes prop-scan { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-16px, -14px); } }
 @keyframes prop-hammer { from { transform: rotate(-34deg); } to { transform: rotate(10deg); } }
@@ -825,6 +838,6 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @keyframes floor-rise { from { opacity: 0; transform: translateY(14px) scaleY(.4); } to { opacity: 1; transform: none; } }
 @keyframes prop-spin { from { transform: scaleY(1); } to { transform: scaleY(.12); } }
 @keyframes wind-streak { from { opacity: .2; transform: translateX(10px); } to { opacity: 1; transform: translateX(-6px); } }
+@keyframes live-bob { from { translate: 0 0; } to { translate: 0 -4px; } }
 @keyframes window-check { 0%, 100% { fill: var(--line); } 50% { fill: var(--brass); } }
 @keyframes cloud-drift { from { transform: translateX(-10px); } to { transform: translateX(26px); } }
-@keyframes flag-wave { from { transform: scaleX(1); } to { transform: scaleX(.78); } }

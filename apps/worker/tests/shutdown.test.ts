@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
-import { createShutdown, DRAIN_TIMEOUT_MS, trackActive } from "../src/shutdown.js";
+import { activeJobCount, createShutdown, DRAIN_TIMEOUT_MS, trackActive } from "../src/shutdown.js";
 
 function deferred() {
   let resolve!: () => void;
@@ -100,6 +100,49 @@ describe("worker graceful shutdown", () => {
       expect.any(String),
     );
     expect(h.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("드레인을 시작하면 하트비트에 draining 을 남기고, DB 연결을 닫기 전에 하트비트를 멈춘다 (#308)", async () => {
+    const h = makeHarness();
+    void h.startJob();
+    const heartbeat = {
+      markDraining: vi.fn(async () => { h.order.push("heartbeat draining"); }),
+      stop: vi.fn(async () => { h.order.push("heartbeat stopped"); }),
+    };
+    const shutdown = createShutdown({ boss: h.boss, pool: h.pool, log: h.log, exit: h.exit, heartbeat });
+
+    const done = shutdown("SIGTERM");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(heartbeat.markDraining).toHaveBeenCalledTimes(1);
+    expect(heartbeat.stop).not.toHaveBeenCalled();
+
+    h.job.resolve();
+    await done;
+    expect(h.order).toEqual(["heartbeat draining", "job finished", "boss stopped", "heartbeat stopped", "pool ended", "exit 0"]);
+  });
+
+  it("하트비트 기록이 실패해도 드레인 · 종료는 그대로 한다", async () => {
+    const h = makeHarness();
+    const heartbeat = {
+      markDraining: vi.fn(async () => { throw new Error("db down"); }),
+      stop: vi.fn(async () => { throw new Error("db down"); }),
+    };
+    const shutdown = createShutdown({ boss: h.boss, pool: h.pool, log: h.log, exit: h.exit, heartbeat });
+
+    await shutdown("SIGTERM");
+    expect(h.boss.stop).toHaveBeenCalled();
+    expect(h.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("진행 중인 작업 수를 하트비트용으로 읽을 수 있다", async () => {
+    const job = deferred();
+    const handler = trackActive(async () => { await job.promise; });
+    const before = activeJobCount();
+    const running = handler([]);
+    expect(activeJobCount()).toBe(before + 1);
+    job.resolve();
+    await running;
+    expect(activeJobCount()).toBe(before);
   });
 
   it("compose 의 worker stop_grace_period 가 드레인 시간보다 길다", async () => {

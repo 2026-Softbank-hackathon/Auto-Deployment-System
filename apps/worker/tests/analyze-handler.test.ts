@@ -344,6 +344,31 @@ describe("handleAnalyze", () => {
     expect(aiUsageRows.length).toBe(1);
     expect(aiUsageRows[0]?.params[0]).toBe(42); // deployment_id
     expect(aiUsageRows[0]?.params[1]).toBe("claude-sonnet-4-5"); // model
+    expect(aiUsageRows[0]?.params[7]).toBe("analysis_fill"); // purpose (#308)
+  });
+
+  it("SQLite 수정안을 만드는 AI 호출은 목적 sqlite_patch 로 남긴다 (#308)", async () => {
+    const pool = makeMockPool("received");
+    const { deps } = makeDeps(pool);
+    vi.mocked(analyzeWithAI).mockResolvedValue(makeAnalysisResult({
+      resources: [{ kind: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" }],
+    }) as any);
+    vi.mocked(createSqlitePatch).mockImplementation(async (_dir, _resource, opts) => {
+      await opts?.onUsage?.({
+        model: "claude-opus-5-5",
+        input_tokens: 10,
+        output_tokens: 5,
+        estimated_cost_usd: 0.0001,
+        timestamp: "2026-10-02T00:00:00.000Z",
+      });
+      return { status: "skipped", reason: "AI_DISABLED: test" };
+    });
+
+    await handleAnalyze(makeJob(), deps);
+
+    const aiUsageRows = pool.insertedRows.filter((r) => r.table === "ai_usage");
+    expect(aiUsageRows).toHaveLength(1);
+    expect(aiUsageRows[0]?.params[7]).toBe("sqlite_patch");
   });
 
   it("analyzeWithAI가 throw하면 재던지고 staged.cleanup을 여전히 호출한다", async () => {

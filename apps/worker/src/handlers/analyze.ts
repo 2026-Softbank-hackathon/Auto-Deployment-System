@@ -239,23 +239,24 @@ export async function handleAnalyze(
     });
 
     // 5. analyze + AI fill (제공자 · 모델은 env 로 결정: AI_PROVIDER · ANTHROPIC_API_KEY)
-    const opts: FillOptions = {
-      onUsage: async (u) => {
-        await pool.query(
-          `INSERT INTO ai_usage(deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [
-            deployment_id,
-            u.model,
-            u.input_tokens,
-            u.output_tokens,
-            u.cache_creation_input_tokens ?? 0,
-            u.cache_read_input_tokens ?? 0,
-            u.estimated_cost_usd,
-          ]
-        );
-      },
+    // purpose: 운영 화면의 목적별 AI 사용량 (#308)
+    const recordUsage = (purpose: "analysis_fill" | "sqlite_patch") => async (u: TokenUsage) => {
+      await pool.query(
+        `INSERT INTO ai_usage(deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd, purpose)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          deployment_id,
+          u.model,
+          u.input_tokens,
+          u.output_tokens,
+          u.cache_creation_input_tokens ?? 0,
+          u.cache_read_input_tokens ?? 0,
+          u.estimated_cost_usd,
+          purpose,
+        ]
+      );
     };
+    const opts: FillOptions = { onUsage: recordUsage("analysis_fill") };
     const analysis = await analyzeWithAI(staged.resolvedPath, opts);
 
     log?.info(
@@ -276,7 +277,7 @@ export async function handleAnalyze(
       deps,
       staged.resolvedPath,
       analysis,
-      (usage) => opts.onUsage?.(usage),
+      recordUsage("sqlite_patch"),
       stepLog,
     );
     if (sqlitePatch?.status === "skipped") {

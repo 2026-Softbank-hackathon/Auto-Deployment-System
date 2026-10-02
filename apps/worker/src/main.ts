@@ -6,12 +6,17 @@
  * 의존성을 초기화하고 pg-boss 워커를 시작한다.
  */
 
+import os from "node:os";
+import { randomUUID } from "node:crypto";
+import { readFile, statfs } from "node:fs/promises";
 import pino from "pino";
 import { createPool, createPgBoss, getEnv } from "@camellia/db";
 import { LocalStorage } from "@camellia/storage";
 import { createPgNotifier } from "./notifier.js";
 import { registerAll } from "./register.js";
-import { createShutdown } from "./shutdown.js";
+import { activeJobCount, createShutdown } from "./shutdown.js";
+import { createWorkerHeartbeat } from "./worker-heartbeat.js";
+import { createHostMetricsSampler, readBuildCacheBytes } from "./host-metrics.js";
 import { BuildHandler } from "@camellia/build-handler";
 import { AwsEcrRegistry } from "@camellia/aws-registry";
 import {
@@ -111,8 +116,42 @@ async function main(): Promise<void> {
 
   log.info("worker started — listening for jobs");
 
+  // 플랫폼 운영 화면 (#308): 워커 하트비트(10초) · 호스트 지표(30초, /proc 이 있는 리눅스 컨테이너에서만)
+  const heartbeat = createWorkerHeartbeat({
+    pool,
+    log,
+    workerId: randomUUID(),
+    hostname: os.hostname(),
+    commit: process.env["CAMELLIA_COMMIT"]?.trim() || null,
+    startedAt: new Date(),
+    activeJobs: activeJobCount,
+  });
+  await heartbeat.start();
+  const metricsSampler = process.platform === "linux"
+    ? createHostMetricsSampler({
+        pool,
+        log,
+        readText: (file) => readFile(file, "utf8"),
+        statfs: (dir) => statfs(dir),
+        buildCacheBytes: () => readBuildCacheBytes(),
+      })
+    : undefined;
+  metricsSampler?.start();
+
   // Graceful shutdown: 진행 중인 작업(Terraform apply 등)을 끝낸 뒤 종료 (#241)
-  const shutdown = createShutdown({ boss, pool, log, exit: (code) => process.exit(code) });
+  const shutdown = createShutdown({
+    boss,
+    pool,
+    log,
+    exit: (code) => process.exit(code),
+    heartbeat: {
+      markDraining: () => heartbeat.markDraining(),
+      stop: async () => {
+        metricsSampler?.stop();
+        await heartbeat.stop();
+      },
+    },
+  });
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

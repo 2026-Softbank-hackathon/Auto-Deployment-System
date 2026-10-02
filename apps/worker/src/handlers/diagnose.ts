@@ -267,9 +267,9 @@ export async function handleDiagnose(
     model,
   );
   await pool.query(
-    `INSERT INTO ai_usage(deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd)
-     VALUES ($1,$2,$3,$4,0,0,$5)`,
-    [deployment_id, model, inputTokens, outputTokens, estimatedCost],
+    `INSERT INTO ai_usage(deployment_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd, purpose)
+     VALUES ($1,$2,$3,$4,0,0,$5,$6)`,
+    [deployment_id, model, inputTokens, outputTokens, estimatedCost, "diagnosis"],
   );
 
   log?.info(

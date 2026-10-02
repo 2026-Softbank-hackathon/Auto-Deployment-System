@@ -20,7 +20,12 @@ export const DRAIN_TIMEOUT_MS = 25 * 60 * 1000;
 
 let activeJobs = 0;
 
-/** pg-boss work 콜백을 감싸 진행 중인 작업 수를 센다 (드레인 로그용). */
+/** 진행 중인 작업 수 (워커 하트비트용, #308) */
+export function activeJobCount(): number {
+  return activeJobs;
+}
+
+/** pg-boss work 콜백을 감싸 진행 중인 작업 수를 센다 (드레인 로그 · 하트비트용). */
 export function trackActive<T>(
   handler: (jobs: PgBoss.Job<T>[]) => Promise<void>,
 ): (jobs: PgBoss.Job<T>[]) => Promise<void> {
@@ -39,6 +44,8 @@ type ShutdownDeps = {
   pool: { end(): Promise<void> };
   log: Pick<Logger, "info" | "warn" | "error">;
   exit: (code: number) => void;
+  /** 워커 하트비트 (#308). 드레인 시작을 남기고, DB 연결을 닫기 전에 멈춘다. 실패해도 종료는 그대로 */
+  heartbeat?: { markDraining(): Promise<void>; stop(): Promise<void> };
 };
 
 export function createShutdown(deps: ShutdownDeps): (signal: string) => Promise<void> {
@@ -53,6 +60,9 @@ export function createShutdown(deps: ShutdownDeps): (signal: string) => Promise<
       { signal, activeJobs, drainTimeoutMs: DRAIN_TIMEOUT_MS },
       `draining ${activeJobs} active job(s) — no new jobs will be taken`,
     );
+    await deps.heartbeat?.markDraining().catch((err: unknown) => {
+      deps.log.warn({ err }, "worker heartbeat draining update failed");
+    });
     try {
       // graceful: 새 작업 fetch 를 멈추고 진행 중인 작업을 timeout 까지 기다린다.
       // timeout 이 지나도 남은 작업은 pg-boss 가 실패 처리해 재시도 큐로 돌려보낸다.
@@ -66,6 +76,9 @@ export function createShutdown(deps: ShutdownDeps): (signal: string) => Promise<
         deps.exit(1);
         return;
       }
+      await deps.heartbeat?.stop().catch((err: unknown) => {
+        deps.log.warn({ err }, "worker heartbeat stop failed");
+      });
       await deps.pool.end();
       deps.log.info("worker stopped");
       deps.exit(0);

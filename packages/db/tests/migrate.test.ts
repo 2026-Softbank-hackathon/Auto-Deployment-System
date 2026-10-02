@@ -47,6 +47,7 @@ describe("migration files", () => {
       "022_project_subdomain.sql",
       "023_project_address_change.sql",
       "024_source_patch_i18n.sql",
+      "025_platform_ops.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

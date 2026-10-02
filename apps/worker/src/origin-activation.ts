@@ -1,4 +1,5 @@
 import type { CloudflareClient } from "@camellia/cloudflare";
+import { projectSubdomain, serviceHostname as buildServiceHostname } from "@camellia/contracts";
 import type { Pool } from "@camellia/db";
 import {
   buildHealthUrl,
@@ -18,6 +19,8 @@ export type OriginActivationOptions = {
 
 type OriginContext = {
   project_id: number | string;
+  /** 앱 주소 (#300). 비어 있으면 service-{project_id} */
+  project_subdomain: string | null;
   target_environment_id: number | string;
   environment_type: string;
   status: string;
@@ -85,12 +88,14 @@ export class DeploymentOriginActivator {
 
   async activate(payload: VerifyJobPayload): Promise<OriginActivationReceipt | null> {
     const result = await this.pool.query<OriginContext>(
-      `SELECT deployment.project_id, deployment.target_environment_id,
+      `SELECT deployment.project_id, project.subdomain AS project_subdomain,
+              deployment.target_environment_id,
               environment.type AS environment_type, deployment.status,
               deployment.public_url, latest_verify.status AS verify_status,
               latest_verify.message AS verify_message,
               job.status AS agent_status, job.result AS agent_result
        FROM deployments AS deployment
+       JOIN projects AS project ON project.id = deployment.project_id
        JOIN environments AS environment ON environment.id = deployment.target_environment_id
        LEFT JOIN onprem_agent_jobs AS job
          ON job.deployment_id = deployment.id AND job.environment_id = environment.id
@@ -122,7 +127,7 @@ export class DeploymentOriginActivator {
     const projectId = String(row.project_id);
     if (!/^[1-9]\d*$/.test(projectId)) throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
     const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
-    const serviceHostname = `service-${projectId}.${domain}`;
+    const serviceHostname = projectServiceHostname(row.project_subdomain, projectId, domain);
     let originHostname: string;
     let tunnelIngress: { tunnelId: string; hostname: string; serviceUrl: string } | undefined;
 
@@ -216,20 +221,22 @@ export class DeploymentOriginActivator {
   }
 
   /**
-   * 앱 삭제 (#247) — 프로젝트 공개 주소(service-{projectId}) CNAME 을 지우고, 온프레미스에 배포한 적이 있으면
+   * 앱 삭제 (#247) — 프로젝트 공개 주소({subdomain}, #300) CNAME 을 지우고, 온프레미스에 배포한 적이 있으면
    * 검증용 주소(verify-d{deploymentId}) CNAME 과 프로젝트 Named Tunnel 의 ingress 규칙도 지운다.
    * best effort: 하나가 실패해도 나머지를 계속하고, 실패한 대상을 돌려준다.
    * Tunnel 자체는 남긴다 — 온프레미스 cloudflared 가 붙어 있을 수 있고, ingress 가 없으면 외부에서 닿지 않는다.
    */
   async removeProjectOrigins(input: {
     projectId: number;
+    /** 프로젝트 앱 주소 (#300). 비어 있으면 service-{projectId} */
+    subdomain?: string | null;
     onpremDeploymentIds: number[];
   }): Promise<string[]> {
     if (!Number.isSafeInteger(input.projectId) || input.projectId < 1) {
       throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
     }
     const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
-    const serviceHostname = `service-${input.projectId}.${domain}`;
+    const serviceHostname = projectServiceHostname(input.subdomain, input.projectId, domain);
     const verifyHostnames = input.onpremDeploymentIds.map((id) => `verify-d${id}.${domain}`);
     const failures: string[] = [];
 
@@ -304,6 +311,19 @@ export class DeploymentOriginActivator {
     }
     return { cloudflare, zoneId: normalizedZoneId, domain };
   }
+}
+
+/** 프로젝트 공개 호스트 이름 — 예전 row(subdomain 없음)는 service-{id}. DNS 레이블이 아니면 거부 */
+function projectServiceHostname(
+  subdomain: string | null | undefined,
+  projectId: number | string,
+  domain: string,
+): string {
+  const label = projectSubdomain(subdomain, projectId).toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
+    throw new OriginActivationError("ORIGIN_SUBDOMAIN_INVALID");
+  }
+  return buildServiceHostname(label, domain);
 }
 
 function isTargetVerified(

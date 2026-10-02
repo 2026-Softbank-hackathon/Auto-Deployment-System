@@ -29,6 +29,7 @@ function makeHarness(overrides: Partial<{
     target_profile: string | null;
     terraform_outputs: unknown;
   } | null;
+  subdomain: string | null;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   const order: string[] = [];
@@ -63,6 +64,7 @@ function makeHarness(overrides: Partial<{
           rows: [{
             status,
             project_id: "12",
+            project_subdomain: overrides.subdomain ?? null,
             target_profile: "aws-static-basic",
             target_environment_id: "34",
             target_environment_type: "aws",
@@ -243,6 +245,19 @@ describe("정적 사이트 provision (#274)", () => {
 
   it("버킷 이름 = 공개 호스트 이름", () => {
     expect(staticSiteBucketName(7, "Demo.Example.com.")).toBe("service-7.demo.example.com");
+    // 앱 주소를 고른 프로젝트 (#300)
+    expect(staticSiteBucketName(7, "Demo.Example.com.", "shop")).toBe("shop.demo.example.com");
+  });
+
+  it("앱 주소를 고른 프로젝트는 버킷 이름도 {subdomain}.{도메인} (#300)", async () => {
+    const harness = makeHarness({ subdomain: "landing-page" });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    const context = harness.queries.find((q) => q.sql.includes("SELECT d.status"));
+    expect(context?.sql).toMatch(/subdomain/);
+    const applyRequest = harness.terraformCli.apply.mock.calls[0]![0] as { variables: Record<string, unknown> };
+    expect(applyRequest.variables["bucket_name"]).toBe("landing-page.camellia.example.com");
   });
 
   describe("인프라 변경 없는 갱신의 Terraform 생략 (#299)", () => {

@@ -16,8 +16,10 @@ import type {
   ProjectDeployment,
   ProjectDeploymentList,
   ProjectList,
+  SubdomainAvailability,
   TargetVendor,
 } from "@camellia/contracts";
+import { projectSubdomain, servicePublicUrl, subdomainProblem } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 
 export interface ProjectRow {
@@ -28,6 +30,8 @@ export interface ProjectRow {
   updated_at: Date;
   /** 배포 형태 (#282). 읽지 않았으면 기본 container */
   deploy_mode?: DeployMode | null;
+  /** 앱 주소 (#300). 비어 있으면 service-{id} */
+  subdomain?: string | null;
   /** 삭제 요청 상태 (#247). POST /projects 의 RETURNING 처럼 읽지 않으면 undefined */
   deletion_status?: ProjectDeletionStatus | null;
   deletion_error?: string | null;
@@ -52,11 +56,33 @@ export interface ProjectSummaryRow extends ProjectRow {
 export interface CreateProjectInput {
   name: string;
   description?: string;
+  /** 앱 주소 (#300). 계약 스키마로 정리 · 검증한 값. 없으면 DB 가 service-{id} 로 채운다 */
+  subdomain?: string;
 }
 
-/** 프로젝트 공유 주소. 배포 응답(deployment-service)과 같은 규칙 — DB public_url 은 쓰지 않는다 */
-function servicePublicUrl(projectId: number | string, platformDomain?: string): string | null {
-  return platformDomain ? `https://service-${projectId}.${platformDomain}` : null;
+/** 주소 사용 여부 확인과 저장이 겹치지 않도록 거는 트랜잭션 advisory lock 키 */
+const SUBDOMAIN_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtext('projects.subdomain'))`;
+
+function subdomainTakenError(subdomain: string): ApiError {
+  return new ApiError(
+    409,
+    "SUBDOMAIN_TAKEN",
+    `주소 "${subdomain}" 는 다른 앱이 쓰고 있습니다.`,
+    "다른 주소를 입력하세요.",
+  );
+}
+
+/** 다른 앱이 이 주소를 쓰는지 (대소문자 무시). excludeProjectId 는 자기 자신 */
+async function isSubdomainTaken(
+  db: { query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }> },
+  subdomain: string,
+  excludeProjectId?: number,
+): Promise<boolean> {
+  const result = await db.query(
+    `SELECT id FROM projects WHERE lower(subdomain) = $1 AND ($2::bigint IS NULL OR id <> $2) LIMIT 1`,
+    [subdomain.toLowerCase(), excludeProjectId ?? null],
+  );
+  return result.rows.length > 0;
 }
 
 function idOrNull(value: number | string | null): string | null {
@@ -79,6 +105,8 @@ const FINISHED_DEPLOYMENT_STATUSES: DeploymentStatus[] = ["succeeded", "failed",
 /** POST /projects 처럼 요약 컬럼이 없는 row 는 live · latest 가 null */
 export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain?: string): Project {
   const summary = "live_deployment_id" in row ? row : null;
+  const subdomain = projectSubdomain(row.subdomain, row.id);
+  const publicUrl = servicePublicUrl(subdomain, platformDomain);
   return {
     id: String(row.id),
     name: row.name,
@@ -86,6 +114,8 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     deployMode: row.deploy_mode === "serverless" ? "serverless" : "container",
+    subdomain,
+    publicUrl,
     live:
       summary?.live_deployment_id != null
         ? {
@@ -94,7 +124,7 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
             environmentType: summary.live_environment_type,
             environmentName: summary.live_environment_name,
             targetProfile: summary.live_target_profile ?? null,
-            publicUrl: servicePublicUrl(row.id, platformDomain),
+            publicUrl,
             succeededAt: summary.live_succeeded_at?.toISOString() ?? null,
           }
         : null,
@@ -125,7 +155,7 @@ function liveDeploymentIdSql(p: string): string {
 
 /** 프로젝트 + live · latest 요약 — 프로젝트마다 쿼리를 따로 날리지 않도록 LATERAL 로 한 번에 읽는다 */
 const PROJECT_SUMMARY_SELECT = `
-  SELECT p.id, p.name, p.description, p.created_at, p.updated_at, p.deploy_mode,
+  SELECT p.id, p.name, p.description, p.created_at, p.updated_at, p.deploy_mode, p.subdomain,
          p.deletion_status, p.deletion_error, p.deletion_requested_at, p.deletion_warnings,
          live.id AS live_deployment_id,
          live.target_environment_id AS live_environment_id,
@@ -168,12 +198,16 @@ export interface ProjectDeploymentRow {
   is_live: boolean;
 }
 
-export function projectDeploymentToDto(row: ProjectDeploymentRow, platformDomain?: string): ProjectDeployment {
+export function projectDeploymentToDto(
+  row: ProjectDeploymentRow,
+  platformDomain?: string,
+  subdomain?: string | null,
+): ProjectDeployment {
   return {
     id: String(row.id),
     status: row.status,
     targetProfile: row.target_profile,
-    publicUrl: servicePublicUrl(row.project_id, platformDomain),
+    publicUrl: servicePublicUrl(projectSubdomain(subdomain, row.project_id), platformDomain),
     sourceVersion:
       row.source_version_id !== null
         ? { id: String(row.source_version_id), sha256: row.source_sha256 }
@@ -273,27 +307,49 @@ export class ProjectService {
   }
 
   async create(input: CreateProjectInput): Promise<Project> {
-    const { name, description } = input;
+    const { name, description, subdomain } = input;
+    const client = await this.pool.connect();
     try {
-      const res = await this.pool.query<ProjectRow>(
-        `INSERT INTO projects (name, description)
-         VALUES ($1, $2)
-         RETURNING id, name, description, created_at, updated_at, deploy_mode`,
-        [name, description ?? null]
+      await client.query("BEGIN");
+      if (subdomain !== undefined) {
+        await client.query(SUBDOMAIN_LOCK_SQL);
+        if (await isSubdomainTaken(client, subdomain)) throw subdomainTakenError(subdomain);
+      }
+      const res = await client.query<ProjectRow>(
+        `INSERT INTO projects (name, description, subdomain)
+         VALUES ($1, $2, $3)
+         RETURNING id, name, description, created_at, updated_at, deploy_mode, subdomain`,
+        [name, description ?? null, subdomain ?? null]
       );
       const row = res.rows[0];
       if (!row) throw new ApiError(500, "INTERNAL_ERROR", "프로젝트 생성에 실패했습니다.");
-      return projectToDto(row);
+      await client.query("COMMIT");
+      return projectToDto(row, this.platformDomain);
     } catch (err: unknown) {
-      // Postgres unique violation: code 23505
+      await client.query("ROLLBACK");
+      // Postgres unique violation: code 23505 — 이름 또는 주소(projects_subdomain_unique)
       if (
         err instanceof Error &&
         (err as NodeJS.ErrnoException & { code?: string }).code === "23505"
       ) {
+        if ((err as { constraint?: string }).constraint === "projects_subdomain_unique" && subdomain) {
+          throw subdomainTakenError(subdomain);
+        }
         throw new ApiError(409, "CONFLICT", `이름 "${name}"의 프로젝트가 이미 존재합니다.`, "다른 이름을 사용하세요.");
       }
       throw err;
+    } finally {
+      client.release();
     }
+  }
+
+  /** GET /projects/subdomain-availability — 형식 · 예약어는 DB 를 보지 않고 답한다 */
+  async subdomainAvailability(rawName: string): Promise<SubdomainAvailability> {
+    const name = rawName.trim().toLowerCase();
+    const problem = subdomainProblem(name);
+    if (problem) return { name, available: false, reason: problem };
+    if (await isSubdomainTaken(this.pool, name)) return { name, available: false, reason: "taken" };
+    return { name, available: true, reason: null };
   }
 
   async list(opts: { limit: number; cursor?: string }): Promise<ProjectList> {
@@ -334,7 +390,10 @@ export class ProjectService {
   ): Promise<ProjectDeploymentList> {
     const { limit, cursor, status } = opts;
 
-    const exists = await this.pool.query(`SELECT 1 FROM projects WHERE id = $1`, [projectId]);
+    const exists = await this.pool.query<{ subdomain: string | null }>(
+      `SELECT subdomain FROM projects WHERE id = $1`,
+      [projectId],
+    );
     if (exists.rows.length === 0) {
       throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${projectId}를 찾을 수 없습니다.`, "ID를 확인하세요.");
     }
@@ -363,7 +422,8 @@ export class ProjectService {
 
     const rows = res.rows;
     const hasMore = rows.length > limit;
-    const items = rows.slice(0, limit).map((r) => projectDeploymentToDto(r, this.platformDomain));
+    const subdomain = exists.rows[0]?.subdomain ?? null;
+    const items = rows.slice(0, limit).map((r) => projectDeploymentToDto(r, this.platformDomain, subdomain));
     const nextCursor = hasMore ? String(rows[limit - 1]!.id) : null;
 
     return { items, nextCursor };

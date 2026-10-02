@@ -18,12 +18,15 @@ import type {
   RedeployResponse,
   TargetVendor,
 } from "@camellia/contracts";
+import { projectSubdomain, servicePublicUrl } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import { resolveProfile } from "./profile-resolver.js";
 
 export interface DeploymentRow {
   id: number;
   project_id: number;
+  /** 프로젝트 앱 주소 (#300). 읽지 않았거나 비어 있으면 service-{project_id} */
+  project_subdomain?: string | null;
   status: DeploymentStatus;
   target_profile: string | null;
   target_environment_id: number | string | null;
@@ -53,7 +56,7 @@ export function deploymentToDto(
   row: DeploymentRow,
   step?: StepRow | null,
   approval?: ApprovalRow | null,
-  /** 플랫폼 도메인. 있으면 고정 서비스 URL 계산, 없으면 null.
+  /** 플랫폼 도메인. 있으면 프로젝트 앱 주소({subdomain}.{도메인}) 계산, 없으면 null.
    * DB public_url 컬럼은 origin endpoint 저장용으로 재해석 — 응답 publicUrl 은 여기서 계산. */
   platformDomain?: string,
 ): Deployment {
@@ -68,9 +71,7 @@ export function deploymentToDto(
       row.registry_environment_id == null
         ? null
         : String(row.registry_environment_id),
-    publicUrl: platformDomain
-      ? `https://service-${row.project_id}.${platformDomain}`
-      : null,
+    publicUrl: servicePublicUrl(projectSubdomain(row.project_subdomain, row.project_id), platformDomain),
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     succeededAt: row.succeeded_at?.toISOString() ?? null,
@@ -187,6 +188,7 @@ export class DeploymentService {
     const depRes = await this.pool.query<DeploymentRow>(
       `SELECT id, project_id, status, target_profile,
               target_environment_id, registry_environment_id, public_url,
+              (SELECT p.subdomain FROM projects p WHERE p.id = deployments.project_id) AS project_subdomain,
               created_at, updated_at, succeeded_at, failed_at, error
        FROM deployments WHERE id = $1`,
       [id]

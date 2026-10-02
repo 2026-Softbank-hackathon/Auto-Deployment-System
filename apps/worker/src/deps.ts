@@ -54,7 +54,7 @@ export type WorkerDeps = {
     "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
   >;
   finalUrlVerifier?: Pick<FinalUrlVerifier, "verify">;
-  /** 플랫폼 공개 도메인 (DEMO_PLATFORM_DOMAIN) — 정적 사이트 버킷 이름 = service-{projectId}.{도메인} (#274) */
+  /** 플랫폼 공개 도메인 (DEMO_PLATFORM_DOMAIN) — 정적 사이트 버킷 이름 = {앱 주소}.{도메인} (#274, #300) */
   platformDomain?: string;
   /** 정적 사이트: 이미지에서 파일을 꺼내 S3 와 맞춘다 (#274) */
   staticSitePublisher?: Pick<StaticSitePublisher, "publish">;

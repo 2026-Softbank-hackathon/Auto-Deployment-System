@@ -54,7 +54,7 @@ function awsEnv(overrides: Partial<EnvRow> = {}): EnvRow {
 }
 
 function harness(options: {
-  project?: { deletion_status: string | null; deletion_warnings?: string[] } | null;
+  project?: { deletion_status: string | null; deletion_warnings?: string[]; subdomain?: string } | null;
   inProgress?: boolean;
   envs?: EnvRow[];
   onpremDeploymentIds?: string[];
@@ -252,6 +252,28 @@ describe("handleTeardown", () => {
       spa_fallback: true,
     });
     expect(h.auditLog()).toMatchObject({ statusCode: 200, metadata: { destroyedEnvironments: ["5"] } });
+  });
+
+  it("앱 주소를 고른 프로젝트 — 그 주소의 레코드와 같은 이름의 정적 사이트 버킷을 지운다 (#300)", async () => {
+    const h = harness({
+      project: { deletion_status: "deleting", subdomain: "landing" },
+      envs: [awsEnv({
+        target_profile: "aws-static-basic",
+        ir_json: {
+          metadata: { name: "landing", version: "1.0.0" },
+          services: { site: { type: "static", port: 8080, health: { path: "/" }, static: { output_dir: "." } } },
+          deploy: { profile: "aws-static-basic" },
+        },
+      })],
+    });
+    Object.assign(h.deps, { platformDomain: "example.com" });
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
+    expect(h.sqls().find((s) => /FROM projects WHERE id = \$1/.test(s))).toMatch(/subdomain/);
+    expect(h.removeProjectOrigins).toHaveBeenCalledWith({ projectId: 24, subdomain: "landing", onpremDeploymentIds: [] });
+    const request = (h.destroy.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }])[0];
+    expect(request.variables["bucket_name"]).toBe("landing.example.com");
   });
 
   it("프로젝트 소유 연결이면 그 프로젝트 범위의 시크릿을 읽는다", async () => {

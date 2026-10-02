@@ -11,7 +11,10 @@ import {
   CreateEnvironmentBodySchema,
   CreateSecretBodySchema,
   DeleteProjectResponseSchema,
+  DEPLOY_MODES,
+  DeployModeSchema,
   DEPLOYMENT_EVENT_NAMES,
+  RedeployBodySchema,
   DeploymentEventSchema,
   DeploymentSchema,
   EnvironmentSchema,
@@ -33,6 +36,7 @@ const project = {
   name: "todo-app",
   createdAt: "2026-09-30T03:00:00.000Z",
   updatedAt: "2026-09-30T03:00:00.000Z",
+  deployMode: "container",
   live: null,
   latest: null,
   deletion: null,
@@ -52,6 +56,18 @@ describe("TARGET_VENDORS", () => {
   });
 });
 
+describe("배포 형태 (#282)", () => {
+  it("container 와 serverless 만 허용하고, 재배포 body 에서 고를 수 있다", () => {
+    expect([...DEPLOY_MODES]).toEqual(["container", "serverless"]);
+    expect(DeployModeSchema.safeParse("lambda").success).toBe(false);
+    expect(RedeployBodySchema.safeParse({ mode: "serverless" }).success).toBe(true);
+    expect(RedeployBodySchema.safeParse({ mode: "ecs" }).success).toBe(false);
+    expect(ProjectSchema.safeParse({ ...project, deployMode: "serverless" }).success).toBe(true);
+    const { deployMode: _mode, ...missing } = project;
+    expect(ProjectSchema.safeParse(missing).success).toBe(false);
+  });
+});
+
 describe("응답 스키마", () => {
   it("Project.live · latest — 서비스 중인 배포와 최근 배포 요약", () => {
     const withDeployments = {
@@ -61,6 +77,7 @@ describe("응답 스키마", () => {
         environmentId: "3",
         environmentType: "onprem",
         environmentName: "home-mac",
+        targetProfile: "onprem-docker-basic",
         publicUrl: "https://service-1.example.com",
         succeededAt: "2026-09-30T03:10:00.000Z",
       },

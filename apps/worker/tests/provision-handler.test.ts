@@ -44,13 +44,18 @@ function makeHarness(overrides: Partial<{
   taskDefinitionArn: string | null;
   resources: Record<string, unknown>;
   previousDatabase: boolean;
+  serverless: boolean;
+  lambdaWebAdapter: string | null;
+  lambdaRolloutFailure: Error;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
   const baseIr = overrides.resources ? { ...IR, resources: overrides.resources } : IR;
   const ir = overrides.targetType === "onprem"
     ? { ...baseIr, deploy: { profile: "onprem-docker-basic" } }
-    : baseIr;
+    : overrides.serverless
+      ? { ...baseIr, deploy: { profile: "aws-lambda-basic" } }
+      : baseIr;
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   const order: string[] = [];
   const agentJobQueries: Array<{ sql: string; params: unknown[] }> = [];
@@ -88,7 +93,9 @@ function makeHarness(overrides: Partial<{
             {
               status,
               project_id: "12",
-              target_profile: overrides.targetType === "onprem" ? "onprem-docker-basic" : "aws-ecs-basic",
+              target_profile: overrides.targetType === "onprem"
+                ? "onprem-docker-basic"
+                : overrides.serverless ? "aws-lambda-basic" : "aws-ecs-basic",
               target_environment_id: "34",
               target_environment_type: overrides.targetType ?? "aws",
               target_environment_project_id:
@@ -105,6 +112,7 @@ function makeHarness(overrides: Partial<{
               immutable_ref: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo@${IMAGE_DIGEST}`,
               image_digest: IMAGE_DIGEST,
               image_platform: overrides.imagePlatform ?? "linux/amd64",
+              lambda_web_adapter: overrides.lambdaWebAdapter === undefined ? "1.1.0" : overrides.lambdaWebAdapter,
               origin_url: overrides.originUrl ?? null,
             },
           ],
@@ -141,6 +149,8 @@ function makeHarness(overrides: Partial<{
       origin_url: { value: "http://alb.example.test", sensitive: false },
       cluster_name: { value: "cluster-from-output", sensitive: false },
       service_name: { value: "service-from-output", sensitive: false },
+      function_name: { value: "function-from-output", sensitive: false },
+      function_alias: { value: "live", sensitive: false },
       task_definition_arn: {
         value: overrides.taskDefinitionArn === undefined
           ? TASK_DEFINITION_ARN
@@ -159,6 +169,8 @@ function makeHarness(overrides: Partial<{
             origin_url: { value: "http://alb.example.test", sensitive: false },
             cluster_name: { value: "cluster-from-output", sensitive: false },
             service_name: { value: "service-from-output", sensitive: false },
+            function_name: { value: "function-from-output", sensitive: false },
+            function_alias: { value: "live", sensitive: false },
             task_definition_arn: {
               value: overrides.taskDefinitionArn === undefined
                 ? TASK_DEFINITION_ARN
@@ -173,6 +185,13 @@ function makeHarness(overrides: Partial<{
       order.push(`rollout:${status}`);
       await input.log("헬스체크 통과 (1/1)");
       if (overrides.rolloutFailure) throw overrides.rolloutFailure;
+    }),
+  };
+  const lambdaRolloutWaiter = {
+    wait: vi.fn(async (input: { log: (line: string) => Promise<void> }) => {
+      order.push(`lambda:${status}`);
+      await input.log("Lambda 갱신 완료 (2초) — 버전 3");
+      if (overrides.lambdaRolloutFailure) throw overrides.lambdaRolloutFailure;
     }),
   };
   const boss = {
@@ -205,6 +224,7 @@ function makeHarness(overrides: Partial<{
     secretReader,
     terraformCli,
     ecsRolloutWaiter,
+    lambdaRolloutWaiter,
     terraformBackend: {
       bucket: "camellia-state",
       region: "ap-northeast-2",
@@ -223,6 +243,7 @@ function makeHarness(overrides: Partial<{
     secretReader,
     terraformCli,
     ecsRolloutWaiter,
+    lambdaRolloutWaiter,
     order,
     queries,
     agentJobQueries,
@@ -662,6 +683,95 @@ describe("handleProvision", () => {
       expect(payload.environment).toEqual({ PUBLIC_MODE: "demo" });
       expect(payload.plan.service.environmentNames).not.toContain("DATABASE_URL");
       expect(harness.queries.some(({ sql }) => sql.includes("jsonb_each"))).toBe(false);
+    });
+  });
+
+  describe("서버리스 aws-lambda-basic (#282)", () => {
+    it("Lambda 프로필로 apply 하고 Lambda 갱신 완료를 기다린 뒤 origin 으로 Verify 를 큐잉한다", async () => {
+      const harness = makeHarness({ serverless: true });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const [applyInput] = harness.terraformCli.apply.mock.calls[0] as unknown as [{
+        moduleDirectory: string;
+        backend: { stateKey: string };
+        variables: Record<string, unknown>;
+      }];
+      expect(applyInput.moduleDirectory.replace(/\\/g, "/")).toMatch(/profiles\/aws-lambda-basic$/);
+      // 컨테이너와 같은 state key — 형태를 바꾸면 같은 state 에서 컴퓨트만 바뀐다
+      expect(applyInput.backend.stateKey).toBe("projects/12/environments/34/terraform.tfstate");
+      expect(applyInput.variables).toMatchObject({
+        container_image: expect.stringContaining(`@${IMAGE_DIGEST}`),
+        container_port: 3000,
+        memory_size: 512,
+        timeout: 30,
+        health_check_path: "/health",
+        environment_variables: { PUBLIC_MODE: "demo" },
+      });
+      expect(applyInput.variables).not.toHaveProperty("database_enabled");
+      expect(harness.ecsRolloutWaiter.wait).not.toHaveBeenCalled();
+      expect(harness.lambdaRolloutWaiter.wait).toHaveBeenCalledWith(expect.objectContaining({
+        region: "ap-northeast-2",
+        credentials: { accessKeyId: "access-key-value", secretAccessKey: "secret-key-value" },
+        functionName: "function-from-output",
+        alias: "live",
+        expectedDigest: IMAGE_DIGEST,
+      }));
+      expect(harness.order).toEqual(["apply", "lambda:deploying", "send:verify"]);
+      expect(harness.boss.send).toHaveBeenCalledWith("verify", expect.objectContaining({
+        environmentType: "aws",
+        targetUrl: "http://alb.example.test",
+        health: { path: "/health", expectedStatus: 200, timeoutMs: 3000 },
+        expectedDigest: IMAGE_DIGEST,
+      }));
+      expect(provisionLogLines(harness)).toContainEqual(expect.stringContaining("Lambda 갱신 완료"));
+      expect(harness.getStatus()).toBe("verifying");
+    });
+
+    it("deploying 에서 재시도되면 apply 없이 Lambda 갱신 확인만 다시 한다", async () => {
+      const harness = makeHarness({ serverless: true, status: "deploying", originUrl: "http://alb.example.test" });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+      expect(harness.order).toEqual(["lambda:deploying", "send:verify"]);
+    });
+
+    it("Lambda 갱신 실패는 코드와 Lambda 사유를 남기고 Verify 없이 실패 처리한다", async () => {
+      const { LambdaRolloutError } = await import("../src/lambda-rollout.js");
+      const detail = "Lambda 함수 갱신이 실패했습니다: ImageAccessDenied — no permission";
+      const harness = makeHarness({
+        serverless: true,
+        lambdaRolloutFailure: new LambdaRolloutError("LAMBDA_UPDATE_FAILED", detail),
+      });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.getStatus()).toBe("failed");
+      const failQuery = harness.queries.find(({ sql }) => sql.includes("SET status = 'failed'"));
+      expect(failQuery?.params[0]).toBe(`LAMBDA_UPDATE_FAILED\n${detail}`);
+      expect(harness.boss.send).not.toHaveBeenCalledWith("verify", expect.anything());
+    });
+
+    it("이 환경에 만든 PostgreSQL 이 있으면 지우지 않도록 Terraform 전에 멈춘다", async () => {
+      const harness = makeHarness({ serverless: true, previousDatabase: true });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+      expect(harness.getStatus()).toBe("failed");
+      const failQuery = harness.queries.find(({ sql }) => sql.includes("SET status = 'failed'"));
+      expect(failQuery?.params[0]).toMatch(/^SERVERLESS_DATABASE_PRESENT/);
+    });
+
+    it("Lambda Web Adapter 가 없는 예전 이미지는 Terraform 전에 거절한다", async () => {
+      const harness = makeHarness({ serverless: true, lambdaWebAdapter: null });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+      const failQuery = harness.queries.find(({ sql }) => sql.includes("SET status = 'failed'"));
+      expect(failQuery?.params[0]).toMatch(/^IMAGE_LAMBDA_ADAPTER_MISSING/);
     });
   });
 

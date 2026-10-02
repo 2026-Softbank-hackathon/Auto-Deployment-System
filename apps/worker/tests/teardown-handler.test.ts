@@ -210,6 +210,24 @@ describe("handleTeardown", () => {
     expect(h.stateStore.delete).toHaveBeenCalled();
   });
 
+  it("서버리스로 배포한 앱은 aws-lambda-basic 모듈 · 같은 state key 로 destroy 한다 (#282)", async () => {
+    const h = harness({
+      envs: [awsEnv({ target_profile: "aws-lambda-basic", ir_json: { ...IR, deploy: { profile: "aws-lambda-basic" } } })],
+    });
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
+    const request = (h.destroy.mock.calls[0] as unknown as [{
+      moduleDirectory: string;
+      backend: { stateKey: string };
+      variables: Record<string, unknown>;
+    }])[0];
+    expect(request.moduleDirectory.replaceAll("\\", "/")).toMatch(/\/repo\/infra\/terraform\/profiles\/aws-lambda-basic$/);
+    expect(request.backend.stateKey).toBe("projects/24/environments/5/terraform.tfstate");
+    expect(request.variables).toMatchObject({ memory_size: 512, timeout: 30, secret_references: {} });
+    expect(h.stateStore.delete).toHaveBeenCalled();
+  });
+
   it("프로젝트 소유 연결이면 그 프로젝트 범위의 시크릿을 읽는다", async () => {
     const h = harness({ envs: [awsEnv({ environment_id: "9", environment_project_id: "24" })] });
 

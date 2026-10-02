@@ -106,7 +106,7 @@ export const DeploymentStatusSchema = z.enum(DEPLOYMENT_STATUSES);
 export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
 
 /** 배포 대상 프로필 (POST /deployments 의 target) */
-export const TARGET_PROFILES = ["aws-ecs-basic", "onprem-docker-basic"] as const;
+export const TARGET_PROFILES = ["aws-ecs-basic", "aws-lambda-basic", "onprem-docker-basic"] as const;
 export const TargetProfileSchema = z.enum(TARGET_PROFILES);
 export type TargetProfile = z.infer<typeof TargetProfileSchema>;
 
@@ -114,6 +114,14 @@ export type TargetProfile = z.infer<typeof TargetProfileSchema>;
 export const TARGET_VENDORS = ["aws", "onprem"] as const;
 export const TargetVendorSchema = z.enum(TARGET_VENDORS);
 export type TargetVendor = z.infer<typeof TargetVendorSchema>;
+
+/**
+ * 배포 형태 — 기본은 컨테이너, 서버리스(AWS Lambda)는 고급 설정에서 고를 때만.
+ * 앱(프로젝트)에 저장돼 재배포 · 롤백 · 환경 전환이 같은 형태를 유지한다. 온프레미스는 형태와 관계없이 컨테이너.
+ */
+export const DEPLOY_MODES = ["container", "serverless"] as const;
+export const DeployModeSchema = z.enum(DEPLOY_MODES);
+export type DeployMode = z.infer<typeof DeployModeSchema>;
 
 /** 승인 게이트 */
 export const ApprovalGateSchema = z.enum(["target", "plan"]);

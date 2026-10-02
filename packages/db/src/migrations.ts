@@ -23,5 +23,6 @@ export const MIGRATION_FILES = [
   "016_terraform_inputs_hash.sql",
   "017_agent_runtime_inventory.sql",
   "018_onprem_agent_cleanup_jobs.sql",
+  "019_deploy_mode.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

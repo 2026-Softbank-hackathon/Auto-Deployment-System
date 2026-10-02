@@ -22,6 +22,7 @@ import type { PublicDnsActivationChecker } from "./public-dns-activation.js";
 import type { FinalUrlVerifier } from "./final-url-verifier.js";
 import type { TerraformStateStore } from "./terraform-state-store.js";
 import type { EcsRolloutWaiter } from "./ecs-rollout.js";
+import type { LambdaRolloutWaiter } from "./lambda-rollout.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -45,6 +46,8 @@ export type WorkerDeps = {
   terraformStateStore?: TerraformStateStore;
   /** Terraform apply 뒤 ECS 롤아웃 완료 대기 (#253) */
   ecsRolloutWaiter?: Pick<EcsRolloutWaiter, "wait">;
+  /** aws-lambda-basic: Terraform apply 뒤 Lambda 갱신 완료 대기 (#282) */
+  lambdaRolloutWaiter?: Pick<LambdaRolloutWaiter, "wait">;
   originActivator?: Pick<
     DeploymentOriginActivator,
     "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"

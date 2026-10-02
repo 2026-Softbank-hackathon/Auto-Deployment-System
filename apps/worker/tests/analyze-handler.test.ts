@@ -402,3 +402,66 @@ describe("handleAnalyze", () => {
     );
   });
 });
+
+describe("handleAnalyze — 서버리스 배포 형태 (#282)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(stage).mockResolvedValue({
+      resolvedPath: "/tmp/staged-src",
+      isDirectory: true,
+      cleanup: vi.fn(async () => {}),
+    });
+  });
+
+  function serverlessPool() {
+    const pool = makeMockPool();
+    const updates: unknown[][] = [];
+    const base = pool.query;
+    pool.query = vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes("SELECT target_profile FROM deployments")) {
+        return { rows: [{ target_profile: "aws-lambda-basic" }] };
+      }
+      if (sql.includes("UPDATE deployments SET target_profile")) updates.push(params ?? []);
+      return base(sql, params);
+    }) as typeof pool.query;
+    return { pool, updates };
+  }
+
+  function insertedIrProfile(pool: ReturnType<typeof makeMockPool>) {
+    const row = pool.insertedRows.find((inserted) => inserted.table === "ir_versions")!;
+    return JSON.parse(row.params[1] as string).deploy.profile;
+  }
+
+  it("Lambda 로 띄울 수 있는 HTTP 앱이면 서버리스 프로필을 그대로 IR 에 남긴다", async () => {
+    const { pool, updates } = serverlessPool();
+    const ir = { services: { web: { type: "http", port: 3000 } }, deploy: { profile: "aws-ecs-basic" } };
+    vi.mocked(analyzeWithAI).mockResolvedValue(makeAnalysisResult({ ai: { ir_after: ir, ir_valid_after: true, skipped: false } }) as any);
+    const { deps } = makeDeps(pool);
+
+    await handleAnalyze(makeJob(), deps);
+
+    expect(updates).toEqual([]);
+    expect(insertedIrProfile(pool)).toBe("aws-lambda-basic");
+  });
+
+  it("DB 같은 리소스가 있는 앱은 컨테이너(aws-ecs-basic)로 되돌리고 이유를 로그에 남긴다", async () => {
+    const { pool, updates } = serverlessPool();
+    const ir = {
+      services: { web: { type: "http", port: 3000 } },
+      resources: { db: { type: "postgres", local_fallback: "sqlite" } },
+      deploy: { profile: "aws-ecs-basic" },
+    };
+    vi.mocked(analyzeWithAI).mockResolvedValue(makeAnalysisResult({ ai: { ir_after: ir, ir_valid_after: true, skipped: false } }) as any);
+    const notifierCalls: unknown[][] = [];
+    const { deps } = makeDeps(pool, notifierCalls);
+
+    await handleAnalyze(makeJob(), deps);
+
+    expect(updates).toEqual([["aws-ecs-basic", 42]]);
+    expect(insertedIrProfile(pool)).toBe("aws-ecs-basic");
+    const lines = notifierCalls
+      .filter(([, event]) => event === "log.line")
+      .map(([, , payload]) => (payload as { line: string }).line);
+    expect(lines.some((line) => line.includes("컨테이너로 배포합니다"))).toBe(true);
+  });
+});

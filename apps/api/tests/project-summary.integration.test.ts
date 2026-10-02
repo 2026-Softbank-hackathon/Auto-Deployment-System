@@ -100,9 +100,12 @@ describe.skipIf(!databaseUrl)("프로젝트 요약 · 배포 이력: 실제 Post
       environmentId: String(onpremEnv),
       environmentType: "onprem",
       environmentName: "home-mac",
+      targetProfile: null,
       publicUrl: `https://service-${appA}.camellia-deploy.app`,
       succeededAt: "2026-09-30T02:05:00.000Z",
     });
+    // 배포 형태를 고른 적 없는 앱은 컨테이너 (#282)
+    expect(a!.deployMode).toBe("container");
     expect(a!.latest).toEqual({
       deploymentId: String(building),
       status: "building",

@@ -107,7 +107,9 @@ function projectSummaryRow(id: number, description: string | null = null, deploy
     live_environment_id: deployed ? "3" : null,
     live_environment_type: deployed ? "onprem" : null,
     live_environment_name: deployed ? "home-mac" : null,
+    live_target_profile: deployed ? "onprem-docker-basic" : null,
     live_succeeded_at: deployed ? NOW : null,
+    deploy_mode: "serverless",
     latest_deployment_id: deployed ? "8" : null,
     latest_status: deployed ? "building" : null,
     latest_environment_type: deployed ? "aws" : null,
@@ -150,6 +152,7 @@ describe("projects 응답 계약", () => {
 
     const noDesc = await call("POST", "/api/v1/projects", { name: "app-1" });
     expect(noDesc.json()).not.toHaveProperty("description");
+    expect(noDesc.json().deployMode).toBe("container");
     expectContract(ProjectSchema, noDesc.json());
   });
 
@@ -176,6 +179,9 @@ describe("projects 응답 계약", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().live.deploymentId).toBe("7");
+    // 배포 형태(#282) · 서비스 중인 배포의 프로필
+    expect(res.json().deployMode).toBe("serverless");
+    expect(res.json().live.targetProfile).toBe("onprem-docker-basic");
     expectContract(ProjectSchema, res.json());
   });
 

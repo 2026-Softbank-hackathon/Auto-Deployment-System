@@ -90,11 +90,19 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
  * 배포 생성. environment_id는 고른 연결(공용 연결 또는 이 프로젝트의 연결)이고, 연결의 종류가 배포할 곳(aws | onprem)을 정한다 (#215).
  * 온프레미스면 서버가 이미지 저장소로 쓸 AWS 연결(프로젝트 기본 → 공용 기본)을 따로 고른다.
  */
-export async function createDeployment(source: File, projectId: string, environmentId: string): Promise<CreateDeploymentResponse> {
+/** 배포 형태 (#282). 컨테이너가 기본이고 서버리스(AWS Lambda)는 고급 설정에서 고를 때만. 앱에 저장된다 */
+export type DeployMode = 'container' | 'serverless';
+
+/** 서버리스로 배포한 프로필 — 배포 내역 · 앱 상세의 "서버리스" 표시 */
+export const SERVERLESS_PROFILE = 'aws-lambda-basic';
+
+/** mode 를 주면 앱의 배포 형태도 바뀐다. 없으면 앱에 저장된 형태(새 앱은 컨테이너)로 배포한다 */
+export async function createDeployment(source: File, projectId: string, environmentId: string, mode?: DeployMode): Promise<CreateDeploymentResponse> {
   const form = new FormData();
   form.append('source', source);
   form.append('project_id', projectId);
   form.append('environment_id', environmentId);
+  if (mode) form.append('mode', mode);
 
   const response = await fetch(endpoint('/api/v1/deployments'), {
     method: 'POST',
@@ -190,11 +198,11 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
  * targetEnvironmentId를 주면 그 환경으로 배포한다(다른 환경으로 배포, #220). 이전 배포를 그대로 재배포하면 롤백이 된다.
  * 소스 배포가 진행 중이거나 환경이 사용 중이면 409, 분석 결과가 없거나 다른 프로젝트의 환경이면 400.
  */
-export async function redeployDeployment(deploymentId: string, targetEnvironmentId?: string): Promise<{ deploymentId: string }> {
+export async function redeployDeployment(deploymentId: string, targetEnvironmentId?: string, mode?: DeployMode): Promise<{ deploymentId: string }> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/redeploy`), {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-    // 서버 계약은 숫자 문자열 ID (RedeployBodySchema)
-    body: JSON.stringify(targetEnvironmentId ? { targetEnvironmentId } : {}),
+    // 서버 계약은 숫자 문자열 ID (RedeployBodySchema). mode 를 주면 앱의 배포 형태도 바뀐다 (#282)
+    body: JSON.stringify({ ...(targetEnvironmentId ? { targetEnvironmentId } : {}), ...(mode ? { mode } : {}) }),
   });
   const body = asRecord(await readJson(response), '재배포');
   const id = typeof body.deploymentId === 'string' || typeof body.deploymentId === 'number' ? String(body.deploymentId) : '';
@@ -440,6 +448,8 @@ export interface ProjectLiveDeployment {
   deploymentId: string;
   environmentType: 'aws' | 'onprem' | null;
   environmentName: string | null;
+  /** 서비스 중인 배포의 프로필 (aws-lambda-basic 이면 서버리스) */
+  targetProfile: string | null;
   publicUrl: string | null;
   succeededAt: string | null;
 }
@@ -468,6 +478,8 @@ export interface ProjectSummary {
   id: string;
   name: string;
   createdAt: string;
+  /** 앱의 배포 형태 — 고르지 않은 배포 · 재배포 · 롤백이 따른다 */
+  deployMode: DeployMode;
   /** 서비스 중인 배포가 없으면 null */
   live: ProjectLiveDeployment | null;
   /** 배포가 하나도 없으면 null */
@@ -528,10 +540,12 @@ function parseProject(value: unknown): ProjectSummary | null {
   const latestCreatedAt = optionalString(latest?.createdAt);
   return {
     id, name, createdAt,
+    deployMode: record.deployMode === 'serverless' ? 'serverless' : 'container',
     live: live && liveId ? {
       deploymentId: liveId,
       environmentType: environmentTypeOf(live.environmentType),
       environmentName: optionalString(live.environmentName),
+      targetProfile: optionalString(live.targetProfile),
       publicUrl: optionalString(live.publicUrl),
       succeededAt: optionalString(live.succeededAt),
     } : null,

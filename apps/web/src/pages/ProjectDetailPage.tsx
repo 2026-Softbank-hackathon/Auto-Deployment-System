@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getProject, listProjectDeployments, type EnvironmentSummary, type ProjectDeploymentSummary, type ProjectLiveDeployment } from '../api/deployment-api';
+import { getProject, listProjectDeployments, SERVERLESS_PROFILE, type EnvironmentSummary, type ProjectDeploymentSummary, type ProjectLiveDeployment } from '../api/deployment-api';
 import { followAppLink, type Navigate } from '../app/navigation';
 import type { ProjectTab } from '../app/routes';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
@@ -61,6 +61,7 @@ function LiveSummary({ projectId }: { projectId: string }) {
   return <p className="project-live">
     {live.environmentType && <EnvironmentIcon type={live.environmentType} />}
     <strong>{t.versions.liveOn(live.environmentType ? t.deploy.targets[live.environmentType] : t.versions.unknownEnvironment)}</strong>
+    {live.targetProfile === SERVERLESS_PROFILE && <span className="serverless-badge">{t.deploy.serverlessBadge}</span>}
     {url && <a href={url} target="_blank" rel="noreferrer">{hostOf(url)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
     <span className="project-live__no">{t.dashboard.deploymentNo(live.deploymentId)}</span>
   </p>;

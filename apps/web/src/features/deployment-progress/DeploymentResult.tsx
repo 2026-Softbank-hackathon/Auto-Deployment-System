@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getDeploymentStatus, getProject, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { getDeploymentStatus, getProject, SERVERLESS_PROFILE, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { DeployKeycap } from '../../components/ui/DeployKeycap';
 import { Keycap } from '../../components/ui/Keycap';
 import { Confetti } from './Confetti';
@@ -108,7 +108,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       : <p className="result-card__note">{t.result.urlPending}</p>}
 
     <dl className="result-facts">
-      {target && <div><dt>{t.result.factTarget}</dt><dd>{target}</dd></div>}
+      {target && <div><dt>{t.result.factTarget}</dt><dd>{target}{status.targetProfile === SERVERLESS_PROFILE && <> <span className="serverless-badge">{t.deploy.serverlessBadge}</span></>}</dd></div>}
       {createdAt && succeededAt && <div><dt>{t.result.factDuration}</dt><dd>{elapsed(createdAt, Date.parse(succeededAt))}</dd></div>}
       {succeededAt && <div><dt>{t.result.factFinished}</dt><dd>{new Date(succeededAt).toLocaleString(t.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>}
     </dl>

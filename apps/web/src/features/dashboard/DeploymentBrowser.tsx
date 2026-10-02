@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { cancelDeployment, listEnvironments, listSharedEnvironments, redeployDeployment, type EnvironmentSummary } from '../../api/deployment-api';
+import { cancelDeployment, listEnvironments, listSharedEnvironments, redeployDeployment, SERVERLESS_PROFILE, type DeployMode, type EnvironmentSummary } from '../../api/deployment-api';
+
+/** 배포 형태로 서로 바뀌는 AWS 프로필 (컨테이너 · 서버리스) */
+const AWS_COMPUTE_PROFILES = new Set(['aws-ecs-basic', SERVERLESS_PROFILE]);
 import type { Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { redeployReasonText, serverReasonText, useI18n } from '../../i18n/I18nProvider';
@@ -127,12 +130,12 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     }
   }
   /** 재배포 · 롤백(같은 환경) · 다른 환경으로 배포. 새 배포가 만들어지면 그 진행 화면으로 간다. */
-  async function redeploy(item: DeploymentListItem, failedTitle: string, targetEnvironmentId?: string) {
+  async function redeploy(item: DeploymentListItem, failedTitle: string, targetEnvironmentId?: string, mode?: DeployMode) {
     if (starting) return;
     setStarting(item.id);
     setFailure(null);
     try {
-      const created = await redeployDeployment(item.id, targetEnvironmentId);
+      const created = await redeployDeployment(item.id, targetEnvironmentId, mode);
       onNavigate(`/deployments/${encodeURIComponent(created.deploymentId)}`);
     } catch (error) {
       setFailure({ id: item.id, title: failedTitle, reason: redeployReasonText(error, t, failedTitle) });
@@ -156,6 +159,21 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     ];
   }
 
+  /**
+   * AWS 배포의 형태 바꾸기 (#282) — 컨테이너 ↔ 서버리스로 같은 소스를 다시 배포하고 앱의 형태도 바꾼다.
+   * 고급 동작이라 기본 버튼이 아닌 메뉴에만 둔다.
+   */
+  function modeItems(item: DeploymentListItem): RowMenuItem[] {
+    if (item.environmentType !== 'aws' || !item.targetProfile || !AWS_COMPUTE_PROFILES.has(item.targetProfile)) return [];
+    const serverless = item.targetProfile === SERVERLESS_PROFILE;
+    const label = serverless ? t.redeploy.toContainer : t.redeploy.toServerless;
+    return [{
+      key: 'mode', label,
+      onSelect: () => void redeploy(item, t.redeploy.failed, undefined, serverless ? 'container' : 'serverless'),
+      disabledReason: blocked(item) ? t.redeploy.blocked : undefined,
+    }];
+  }
+
   // 메뉴에는 행의 기본 버튼과 겹치지 않는 동작만 둔다. 기본 버튼이 이미 진행 화면(지켜보기 · 원인 보기 · 자세히)이나
   // 결과 화면으로 가므로, 같은 곳으로 가는 항목은 넣지 않는다.
   function menuItems(item: DeploymentListItem): RowMenuItem[] {
@@ -169,6 +187,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
       { key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item, t.redeploy.failed), disabledReason: blockedReason },
       // 분석까지 끝난 배포만 다시 배포할 수 있다. 실패한 배포도 분석 뒤에 실패했으면 된다 (분석 결과가 없으면 서버가 거절).
       ...(projectId && (outcome === 'success' || outcome === 'failed') ? switchItems(item) : []),
+      ...(outcome === 'success' || outcome === 'failed' ? modeItems(item) : []),
       // 지금 서비스 중이 아닌 성공 배포만 롤백할 수 있다.
       ...(outcome === 'success' && !item.isLive ? [{ key: 'rollback', label: t.versions.rollback, onSelect: () => ask({ rollback: item }), disabledReason: blockedReason }] : []),
       // 성공한 배포의 기본 버튼이 "열기"(배포된 앱)일 때만, 결과 화면으로 가는 길을 메뉴에 둔다.

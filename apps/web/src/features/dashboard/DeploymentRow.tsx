@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { SERVERLESS_PROFILE } from '../../api/deployment-api';
 import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { StatusTape } from '../../components/ui/StatusTape';
@@ -60,6 +61,7 @@ export function DeploymentRow({ deployment, now, onNavigate, menu }: { deploymen
       {environment && <span className="deployment-row__env" title={deployment.environmentName ?? undefined}>
         <EnvironmentIcon type={environment} />{t.deploy.targets[environment]}
       </span>}
+      {deployment.targetProfile === SERVERLESS_PROFILE && <span className="serverless-badge">{t.deploy.serverlessBadge}</span>}
     </div>
     <MiniRail view={view} />
     <div className="deployment-row__stage">

@@ -96,6 +96,26 @@ function AppCard({ project, now, onDeploy, onNavigate }: { project: ProjectSumma
     </div>;
   })();
 
+  // 삭제 요청한 앱 (#249): 삭제 중이면 정리 중이라고만, 실패하면 이유를 보러 설정 탭으로. 삭제가 끝나면 목록에서 빠진다.
+  const { deletion } = project;
+  if (deletion) {
+    const settingsPath = `${detailPath}/settings`;
+    const failed = deletion.status === 'failed';
+    return <li className={`app-card is-deleting ${failed ? 'is-delete-failed' : ''}`} aria-labelledby={titleId}>
+      <div className="app-card__head">
+        <h2 id={titleId} title={project.name}><a href={detailPath} onClick={(event) => followAppLink(event, onNavigate)}>{name}</a></h2>
+        <StatusTape tone={failed ? 'failed' : 'running'}>{failed ? copy.deleteFailed : copy.deleting}</StatusTape>
+      </div>
+      <p className={failed ? 'app-card__delete-error' : 'app-card__muted'}>
+        {failed ? copy.deleteFailedCopy : copy.deletingCopy}
+        {!failed && <span className="app-card__time"> {elapsed(deletion.requestedAt, now)}</span>}
+      </p>
+      <div className="app-card__actions">
+        <Keycap variant="secondary" href={settingsPath} onClick={(event) => followAppLink(event, onNavigate)}>{failed ? copy.retryDelete : copy.appDetail}{context}</Keycap>
+      </div>
+    </li>;
+  }
+
   return <li className={`app-card ${latestActive(project, now) ? 'is-active' : ''}`} aria-labelledby={titleId}>
     <div className="app-card__head">
       <h2 id={titleId} title={project.name}><a href={detailPath} onClick={(event) => followAppLink(event, onNavigate)}>{name}</a></h2>
@@ -127,8 +147,10 @@ function AppCard({ project, now, onDeploy, onNavigate }: { project: ProjectSumma
   </li>;
 }
 
-function Counts({ projects, now }: { projects: ProjectSummary[]; now: number }) {
+function Counts({ projects: all, now }: { projects: ProjectSummary[]; now: number }) {
   const { t } = useI18n();
+  // 삭제를 요청한 앱은 세지 않는다 (#249)
+  const projects = all.filter((project) => !project.deletion);
   const latestOutcome = (project: ProjectSummary) => project.latest ? deploymentStatusView(project.latest.status).outcome : null;
   const active = projects.filter((project) => latestActive(project, now)).length;
   const stalled = projects.filter((project) => project.latest && isStalled(latestOutcome(project) === 'active', project.latest.createdAt, now)).length;

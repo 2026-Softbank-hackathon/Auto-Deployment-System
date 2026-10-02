@@ -3,6 +3,8 @@
  *   POST   /secrets                      → 201 Secret
  *   GET    /secrets?projectId=<N>        → 200 Secret[] (이름순)
  *   DELETE /secrets/:name?projectId=<N>  → 204 (빈 바디)
+ *
+ * projectId 를 생략하면(요청 바디 · 쿼리 모두) 공용 시크릿 — 공용 연결이 참조한다(#215).
  */
 
 import { z } from "zod";
@@ -11,7 +13,8 @@ import { IsoDateTimeSchema, PgBigIntSchema } from "./common.js";
 // ── 요청 ──────────────────────────────────────────────────────────────────────
 
 export const CreateSecretBodySchema = z.object({
-  projectId: z.number().int().positive(),
+  /** 생략하면 공용 시크릿(#215) */
+  projectId: z.number().int().positive().optional(),
   name: z
     .string()
     .min(1)
@@ -29,8 +32,10 @@ export type SecretNameParams = z.input<typeof SecretNameParamsSchema>;
 export const SecretSchema = z
   .object({
     name: z.string(),
-    /** POST 응답은 number, GET 목록은 문자열 (PgBigIntSchema 참고) */
-    projectId: PgBigIntSchema,
+    /** POST 응답은 number, GET 목록은 문자열 (PgBigIntSchema 참고). 공용 시크릿이면 null(#215) */
+    projectId: PgBigIntSchema.nullable(),
+    /** 공용 시크릿 여부 — projectId === null 과 같다(#215) */
+    shared: z.boolean(),
     createdAt: IsoDateTimeSchema,
   })
   .strict();

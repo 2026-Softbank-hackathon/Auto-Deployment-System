@@ -32,11 +32,16 @@ import {
  * multipart 필드. Zod 로 parse 하지 않고 라우트가 직접 검사한다 (문서 · 타입용).
  * 프론트: `FormData` 에 source(zip, 최대 100MB) · project_id · target 을 넣어 보낸다.
  * target 은 벤더 (aws/onprem), 서버가 default profile 매핑.
+ *
+ * environment_id(#215): 배포할 연결을 직접 고른다. 공용 연결이거나 이 프로젝트의 연결이어야 하고,
+ * 연결의 type 이 벤더를 정한다 (target 은 생략 가능, 같이 보내면 type 과 같아야 함 — 다르면 400).
+ * environment_id 가 없으면 target 필수 → 프로젝트 기본 연결, 없으면 공용 기본 연결을 쓴다.
  */
 export type CreateDeploymentFields = {
   source: Blob;
   project_id: string | number;
-  target: TargetVendor;
+  target?: TargetVendor;
+  environment_id?: string | number;
 };
 
 export const CreateDeploymentResponseSchema = z

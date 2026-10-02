@@ -7,7 +7,7 @@ import { CommandBlock } from '../setup/CommandBlock';
 /** apps/onprem-agent/README.md 의 Release 설치 · 등록 · 시작 절차 그대로. */
 const AGENT_BIN = '"$HOME/Library/Application Support/Camellia/onprem-agent/bin';
 /** 설치기가 Mac 아키텍처(Intel x86_64 · Apple Silicon arm64)를 감지해 맞는 Release 파일을 받는다. 버전을 올릴 때는 여기 한 곳만 바꾼다. */
-const AGENT_VERSION = 'v0.1.7';
+const AGENT_VERSION = 'v0.1.8';
 const installCommand = [
   'curl -fsSL \\',
   `  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-${AGENT_VERSION}/install-agent.sh \\`,

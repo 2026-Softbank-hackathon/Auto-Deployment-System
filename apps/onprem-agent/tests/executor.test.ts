@@ -403,6 +403,41 @@ describe("On-Prem job 실행", () => {
     expect(stateStore.records.size).toBe(0);
   });
 
+  it("요구 상태 밖 런타임 정리에 실패하면 상태를 보존하고 다음 heartbeat에서 재시도한다", async () => {
+    const stateStore = new FakeRuntimeStateStore();
+    const tunnel = new FakeTunnelProvider("https://fake.example.test");
+    let cleanupAttempts = 0;
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new FakeImageManager(),
+      runtimeManager: {
+        async start() {
+          return {
+            projectName: "camellia-d42-1234567890-aaaaaaaaaaaa",
+            localUrl: "http://127.0.0.1:49152",
+            isRunning: async () => true,
+            isHealthy: async () => true,
+            cleanup: async () => {
+              cleanupAttempts += 1;
+              if (cleanupAttempts === 1) throw new Error("docker unavailable");
+            },
+          };
+        },
+      },
+      tunnelProvider: tunnel,
+      stateStore,
+    });
+
+    await executor.execute(createJob());
+    await expect(executor.reconcile([])).rejects.toThrow("docker unavailable");
+    expect(stateStore.records.has(createJob().deploymentId)).toBe(true);
+    await expect(executor.inventory()).resolves.toHaveLength(1);
+
+    await expect(executor.reconcile([])).resolves.toBeUndefined();
+    expect(cleanupAttempts).toBe(2);
+    expect(stateStore.records.size).toBe(0);
+    await expect(executor.inventory()).resolves.toEqual([]);
+  });
+
   it("cleanup Job은 Tunnel·Compose·로컬 상태를 배포 ID 기준으로 멱등 정리한다", async () => {
     const runtime = new FakeRuntimeManager();
     const tunnel = new FakeTunnelProvider("https://fake.example.test");

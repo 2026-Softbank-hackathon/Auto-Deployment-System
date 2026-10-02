@@ -201,23 +201,23 @@ describe("AgentService.recordHeartbeat", () => {
     );
   });
 
-  it("보고된 런타임 중 해당 환경에서 유지할 배포만 반환한다", async () => {
+  it("보고된 런타임 중 cleanup 시각 전 standby와 active만 유지 대상으로 반환한다", async () => {
     const pool = makePool(async (sql) => {
       if (/FROM deployments/.test(sql)) return { rows: [{ id: 42 }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     });
     const svc = new AgentService(pool);
-    const runtimes = [{
-      deploymentId: "42",
+    const runtimes = ["41", "42"].map((deploymentId) => ({
+      deploymentId,
       digest: `sha256:${"a".repeat(64)}`,
       status: "running" as const,
       health: "healthy" as const,
-    }];
+    }));
 
     await expect(svc.recordHeartbeat(1, 7, runtimes)).resolves.toEqual(["42"]);
-    expect(pool.query).toHaveBeenLastCalledWith(
-      expect.stringContaining("target_environment_id = $1"),
-      [7, ["42"]],
-    );
+    const desiredQuery = vi.mocked(pool.query).mock.calls.at(-1);
+    expect(String(desiredQuery?.[0])).toContain("LEFT JOIN onprem_agent_cleanup_jobs");
+    expect(String(desiredQuery?.[0])).toContain("cleanup.attempt = 0");
+    expect(desiredQuery?.[1]).toEqual([7, ["41", "42"]]);
   });
 });

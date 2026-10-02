@@ -339,8 +339,8 @@ async function scheduleOnpremRuntimeCleanup(
     return;
   }
 
-  // 새 Origin 검증까지 성공한 시점부터 15분 동안만 직전 On-Prem 런타임을
-  // rollback 후보로 보존한다. 오래된 런타임도 함께 예약해 최대 2개 정책의 기반을 만든다.
+  // 새 Origin 검증까지 성공한 시점부터 직전 On-Prem 하나만 15분 rollback 후보로 둔다.
+  // 그보다 오래된 런타임은 즉시 정리해 프로젝트별 active + standby 최대 2개를 지킨다.
   const previous = await deps.pool.query<{ id: number | string }>(
     `SELECT previous.id
      FROM deployments current
@@ -353,12 +353,14 @@ async function scheduleOnpremRuntimeCleanup(
      ORDER BY previous.succeeded_at DESC NULLS LAST, previous.id DESC`,
     [deploymentId],
   );
-  const availableAt = new Date(Date.now() + ONPREM_ROLLBACK_GRACE_MS);
-  for (const row of previous.rows) {
+  const now = Date.now();
+  const standbyAvailableAt = new Date(now + ONPREM_ROLLBACK_GRACE_MS);
+  const immediateAvailableAt = new Date(now);
+  for (const [index, row] of previous.rows.entries()) {
     await enqueueOnpremCleanup(deps.pool, {
       deploymentId: Number(row.id),
       reason: "superseded",
-      availableAt,
+      availableAt: index === 0 ? standbyAvailableAt : immediateAvailableAt,
     });
   }
 }

@@ -380,16 +380,13 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
 
   async reconcile(desiredDeploymentIds: string[]): Promise<void> {
     const desired = new Set(desiredDeploymentIds);
-    const obsolete = [...this.activeDeployments.entries()].filter(
-      ([, deployment]) => !desired.has(String(deployment.deploymentId)),
+    const obsoleteDeploymentIds = new Set(
+      [...this.activeDeployments.values()]
+        .filter((deployment) => !desired.has(String(deployment.deploymentId)))
+        .map((deployment) => deployment.deploymentId),
     );
     await Promise.all(
-      obsolete.map(async ([key, deployment]) => {
-        await this.tunnelProvider?.stop(deployment.deploymentId).catch(() => undefined);
-        await deployment.resources.cleanup().catch(() => undefined);
-        await this.stateStore?.remove(deployment.deploymentId).catch(() => undefined);
-        this.activeDeployments.delete(key);
-      }),
+      [...obsoleteDeploymentIds].map((deploymentId) => this.cleanup(deploymentId)),
     );
   }
 

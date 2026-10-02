@@ -342,3 +342,61 @@ describe("IrSchema — resources 연결 환경변수 · 로컬 대체 저장소"
     ).toThrow(z.ZodError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Group: 정적 사이트 (services.*.static)
+// ---------------------------------------------------------------------------
+
+describe("IrSchema — 정적 사이트", () => {
+  const base = {
+    metadata: { name: "site", version: "1.0.0" },
+    deploy: { profile: "aws-static-basic" },
+  };
+
+  it("static 서비스 + 빌드 정보 파싱 성공", () => {
+    const result: Ir = IrSchema.parse({
+      ...base,
+      services: {
+        web: {
+          type: "static",
+          port: 8080,
+          health: { path: "/" },
+          static: { build_command: "npm run build", output_dir: "dist", spa_fallback: true },
+        },
+      },
+    });
+    expect(result.services["web"].static).toEqual({
+      build_command: "npm run build",
+      output_dir: "dist",
+      spa_fallback: true,
+    });
+  });
+
+  it("static 미지정 필드는 기본값 (output_dir '.', spa_fallback true)", () => {
+    const result: Ir = IrSchema.parse({
+      ...base,
+      services: { web: { type: "static", static: {} } },
+    });
+    expect(result.services["web"].static).toEqual({ output_dir: ".", spa_fallback: true });
+  });
+
+  it("output_dir 이 소스 밖을 가리키면 ZodError", () => {
+    for (const output_dir of ["../dist", "/abs", "dist/../../x", "C:\\dist"]) {
+      expect(() =>
+        IrSchema.parse({
+          ...base,
+          services: { web: { type: "static", static: { output_dir } } },
+        }),
+      ).toThrow();
+    }
+  });
+
+  it("build_command 에 줄바꿈이 있으면 ZodError", () => {
+    expect(() =>
+      IrSchema.parse({
+        ...base,
+        services: { web: { type: "static", static: { build_command: "npm run build\nRUN x" } } },
+      }),
+    ).toThrow();
+  });
+});

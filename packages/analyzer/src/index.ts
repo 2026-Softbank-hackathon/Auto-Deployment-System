@@ -18,6 +18,7 @@ import { detectPython } from "./detectors/python.js";
 import { detectDocker } from "./detectors/docker.js";
 import { detectDatabase } from "./detectors/database.js";
 import { detectEnvNames } from "./detectors/env.js";
+import { detectStatic } from "./detectors/static.js";
 import { checkRisks } from "./risk-checker.js";
 import { buildIr, sanitizeName } from "./ir-builder.js";
 import type {
@@ -46,6 +47,9 @@ export type {
 } from "./ai/anthropic-client.js";
 export { redact, redactPayload } from "./ai/redact.js";
 export { estimateCost } from "./ai/tokens.js";
+
+/** 정적 사이트 이미지(nginx)가 듣는 포트 (#272) */
+export const STATIC_SITE_PORT = 8080;
 
 /**
  * 소스 경로를 스캔해서 IR 초안을 생성한다.
@@ -152,8 +156,36 @@ export async function analyze(sourcePath: string): Promise<AnalysisResult> {
       "express", "fastify", "hono", "nestjs", "next",
       "fastapi", "flask", "django", "starlette", "koa", "tornado",
     ]);
-    const serviceType: ServiceCandidate["type"] =
-      framework && HTTP_FRAMEWORKS.has(framework) ? "http" : "unknown";
+    const hasServerFramework = framework !== undefined && HTTP_FRAMEWORKS.has(framework);
+
+    // 정적 사이트 (#272): 서버 없이 index.html 또는 프론트엔드 빌드 결과만 서빙
+    const staticResult = await detectStatic(svcDir, {
+      hasServerFramework,
+      hasPython: pyResult.detected,
+      hasDockerfile: dockerResult.detected,
+    });
+
+    if (staticResult.detected) {
+      services.push({
+        name: svcRoot.name,
+        path: svcRoot.relPath,
+        type: "static",
+        framework,
+        language,
+        // 빌드 결과를 담는 nginx 이미지가 듣는 포트 (서버 코드가 없으니 감지할 포트도 없다)
+        port: STATIC_SITE_PORT,
+        env_names: [],
+        detected_from: [...new Set([...staticResult.detectedFrom, ...(nodeResult.detected ? ["package.json"] : [])])],
+        static: {
+          ...(staticResult.buildCommand ? { build_command: staticResult.buildCommand } : {}),
+          output_dir: staticResult.outputDir,
+          spa_fallback: staticResult.spaFallback,
+        },
+      });
+      continue;
+    }
+
+    const serviceType: ServiceCandidate["type"] = hasServerFramework ? "http" : "unknown";
 
     // Collect unresolved from detectors.
     // 감지기는 서비스 이름을 몰라 "services.<name>.…" 자리표시자를 쓴다 → IR 서비스 키로 바꾼다

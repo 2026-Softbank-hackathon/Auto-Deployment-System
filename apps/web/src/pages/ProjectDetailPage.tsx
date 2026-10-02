@@ -10,6 +10,7 @@ import { displayProjectName, hostOf, safeHttpUrl } from '../features/dashboard/f
 import { AgentState } from '../features/connections/AgentState';
 import { useDeployProject } from '../features/deployment-start/useDeployProject';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
+import { DeleteAppCard } from '../features/project-delete/DeleteAppCard';
 import { readCache, writeCache } from '../lib/page-cache';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -95,7 +96,7 @@ function AppConnections({ environments, onNavigate }: { environments: Environmen
 }
 
 /**
- * 프로젝트 상세 (#150): 한 프로젝트의 배포 내역 · 환경변수 · 설정(이 앱에만 묶인 연결)을 탭으로 본다.
+ * 프로젝트 상세 (#150): 한 프로젝트의 배포 내역 · 환경변수 · 설정(이 앱에만 묶인 연결 · 앱 삭제)을 탭으로 본다.
  * 설정 탭은 "지금 고른 프로젝트"의 연결을 보여 주므로, 이 화면에 들어오면 그 프로젝트를 고른 것으로 맞춘다.
  */
 export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: string; tab: ProjectTab; onNavigate: Navigate }) {
@@ -137,6 +138,9 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
     {tab === 'env' && selectedHere && <section className="setup-card" aria-label={t.setup.env.title}>
       <div className="setup-card__body"><EnvVarsCard projectId={projectId} awsRegion={appAws?.region ?? null} /></div>
     </section>}
-    {tab === 'settings' && selectedHere && <AppConnections environments={state.environments} onNavigate={onNavigate} />}
+    {tab === 'settings' && selectedHere && <>
+      <AppConnections environments={state.environments} onNavigate={onNavigate} />
+      <DeleteAppCard projectId={projectId} appName={displayProjectName(known.name)} onDeleted={() => void refresh()} onNavigate={onNavigate} />
+    </>}
   </>;
 }

@@ -447,6 +447,28 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .app-card__time { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
 .app-card__latest-line a { margin-left: auto; }
 .app-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 삭제 요청한 앱 (#249) */
+.app-card.is-deleting { background: var(--paper-sunken); border-style: dashed; box-shadow: none; }
+.app-card.is-deleting .app-card__head h2 { color: var(--ink-soft); }
+.app-card.is-delete-failed { border-color: var(--brick); }
+.app-card__delete-error { font-size: 14px; font-weight: 700; color: var(--brick-text); }
+
+/* 앱 삭제 영역 (#249) */
+.delete-app { border-color: var(--brick); }
+.delete-app .setup-card__head h2 { color: var(--brick-text); }
+.delete-app__list { display: grid; gap: 4px; margin: 0; padding-left: 20px; color: var(--ink); }
+.delete-app__note { font-size: 14px; }
+.delete-app__button.keycap--primary:not(:disabled) { background: var(--brick-text); box-shadow: 0 4px 0 color-mix(in srgb, var(--brick-text) 60%, black); }
+.delete-app__button.keycap--primary:not(:disabled):hover { box-shadow: 0 6px 0 color-mix(in srgb, var(--brick-text) 60%, black); }
+.delete-app__button.keycap--primary:not(:disabled):active { box-shadow: 0 1px 0 color-mix(in srgb, var(--brick-text) 60%, black); }
+.delete-app__progress, .delete-app__done { display: grid; gap: 8px; }
+.delete-app__state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--ink); }
+.delete-app__time { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
+.delete-app__failed-copy { margin-top: 6px; }
+.delete-app__detail { margin-top: 8px; }
+.delete-app__detail summary { width: fit-content; cursor: pointer; font-weight: 700; }
+.delete-app__detail summary:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.delete-app__detail pre { max-height: 220px; overflow: auto; margin: 8px 0 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; background: var(--surface); border-radius: var(--radius-input); }
 
 /* 배포 완료 · 실패 전역 알림 */
 .toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }

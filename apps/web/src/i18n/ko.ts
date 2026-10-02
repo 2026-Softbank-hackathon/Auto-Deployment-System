@@ -134,6 +134,51 @@ export const ko = {
     cancelling: '취소하고 있어요…',
     failed: '배포를 취소하지 못했어요.',
   },
+  /** 앱 삭제 (#247): 프로젝트 설정 탭의 삭제 영역 */
+  deleteApp: {
+    title: '앱 삭제',
+    intro: '앱을 지우면 아래 항목도 함께 정리돼요. 되돌릴 수 없어요.',
+    removes: [
+      'AWS 리소스 (ECS 서비스, 로드 밸런서, 네트워크)',
+      '공개 주소',
+      '배포 기록과 로그, 이 앱에만 쓰는 환경변수와 연결',
+    ],
+    keeps: '공용 연결과 AWS 키, 다른 앱은 그대로 남아요.',
+    onpremNote: '온프레미스 서버에서 실행 중인 컨테이너는 자동으로 지우지 못해요. 삭제한 뒤 서버에서 직접 내려 주세요.',
+    confirmLabel: (name: string) => `확인을 위해 앱 이름 ${name}을(를) 입력해 주세요`,
+    button: '앱 삭제',
+    requesting: '삭제를 요청하고 있어요…',
+    deletingTitle: '앱을 삭제하고 있어요',
+    deletingCopy: 'AWS 리소스를 정리하는 데 몇 분 걸려요. 이 화면을 떠나도 계속 진행돼요.',
+    elapsed: (time: string) => `${time} 지남`,
+    failedTitle: '앱을 삭제하지 못했어요',
+    failedCopy: '앱과 아직 지우지 못한 리소스는 그대로 있어요. 원인을 확인한 뒤 다시 시도해 주세요.',
+    retry: '다시 시도',
+    detail: '자세한 내용',
+    deletedTitle: '앱을 삭제했어요',
+    deletedCopy: 'AWS 리소스와 공개 주소, 배포 기록을 정리했어요.',
+    onpremWarning: '온프레미스 서버에서 돌던 이 앱의 컨테이너(camellia-d<배포 번호>-…)는 남아 있어요. 서버에서 직접 내려 주세요.',
+    toDashboard: '대시보드로',
+    requestFailed: '삭제를 시작하지 못했어요.',
+    /** 삭제 요청을 서버가 거절한 이유 (error.code) */
+    errors: {
+      PROJECT_DEPLOYMENT_IN_PROGRESS: '진행 중인 배포가 있어요. 배포가 끝나거나 취소한 뒤 다시 시도해 주세요.',
+      NOT_FOUND: '이미 삭제된 앱이에요.',
+    } as Record<string, string>,
+    /** 정리 중 실패한 이유 (deletion.error 의 첫 줄) */
+    reasons: {
+      TERRAFORM_DESTROY_FAILED: 'AWS 리소스를 지우지 못했어요.',
+      TERRAFORM_INIT_FAILED: 'Terraform 을 준비하지 못했어요.',
+      TERRAFORM_BINARY_UNAVAILABLE: '플랫폼에서 Terraform 을 실행하지 못했어요.',
+      TERRAFORM_DEPENDENCY_MISSING: '플랫폼에 Terraform 설정이 없어요.',
+      TERRAFORM_STATE_ACCESS_DENIED: 'AWS 키로 Terraform state 에 접근하지 못했어요. 키 권한을 확인해 주세요.',
+      PROJECT_SECRET_NOT_FOUND: 'AWS 키를 찾지 못했어요. 연결 화면에서 AWS 연결을 확인해 주세요.',
+      PROJECT_SECRET_DECRYPT_FAILED: 'AWS 키를 읽지 못했어요.',
+      AWS_CREDENTIALS_UNSUPPORTED: '이 AWS 연결의 인증 방식으로는 정리할 수 없어요.',
+      PROJECT_DEPLOYMENT_IN_PROGRESS: '삭제하는 동안 배포가 시작됐어요. 배포가 끝난 뒤 다시 시도해 주세요.',
+    } as Record<string, string>,
+    unknownReason: '정리하는 중에 문제가 생겼어요.',
+  },
   /** 배포 내역의 버전 · 환경 (#220) */
   versions: {
     previous: '이전 버전',
@@ -353,6 +398,11 @@ export const ko = {
     railActive: (total: number, step: number, label: string) => `${total}단계 중 ${step}단계(${label}) 진행 중`,
     railDone: (total: number) => `${total}단계 모두 완료`,
     railFailed: '배포 실패, 멈춘 단계 정보 없음',
+    deleting: '삭제 중',
+    deletingCopy: 'AWS 리소스와 공개 주소를 정리하고 있어요.',
+    deleteFailed: '삭제 실패',
+    deleteFailedCopy: '앱을 삭제하지 못했어요.',
+    retryDelete: '설정에서 다시 시도',
   },
   progress: {
     heading: '배포 진행',

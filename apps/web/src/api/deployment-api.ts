@@ -452,6 +452,18 @@ export interface ProjectLatestDeployment {
   createdAt: string;
 }
 
+/** 자동으로 정리하지 못해 사용자가 직접 해야 하는 일. ONPREM_MANUAL_CLEANUP: 온프레미스 컨테이너는 직접 내려야 한다 */
+export type ProjectDeletionWarning = 'ONPREM_MANUAL_CLEANUP';
+
+/** 앱 삭제 진행 상태 (#247). 정리가 끝나면 앱 자체가 목록에서 사라진다 */
+export interface ProjectDeletion {
+  status: 'deleting' | 'failed';
+  requestedAt: string;
+  /** 실패 이유 (오류 코드, 다음 줄부터 상세). 진행 중이면 null */
+  error: string | null;
+  warnings: ProjectDeletionWarning[];
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -460,6 +472,8 @@ export interface ProjectSummary {
   live: ProjectLiveDeployment | null;
   /** 배포가 하나도 없으면 null */
   latest: ProjectLatestDeployment | null;
+  /** 삭제를 요청하지 않았으면 null */
+  deletion: ProjectDeletion | null;
 }
 
 export type EnvironmentType = 'aws' | 'onprem';
@@ -486,6 +500,18 @@ export interface Page<T> { items: T[]; nextCursor: string | null; }
 function optionalString(value: unknown): string | null { return typeof value === 'string' ? value : null; }
 
 function environmentTypeOf(value: unknown): 'aws' | 'onprem' | null { return value === 'aws' || value === 'onprem' ? value : null; }
+
+function parseDeletion(value: unknown): ProjectDeletion | null {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  const status = record?.status;
+  const requestedAt = optionalString(record?.requestedAt);
+  if ((status !== 'deleting' && status !== 'failed') || !requestedAt) return null;
+  return {
+    status, requestedAt,
+    error: optionalString(record?.error),
+    warnings: (Array.isArray(record?.warnings) ? record.warnings : []).filter((warning): warning is ProjectDeletionWarning => warning === 'ONPREM_MANUAL_CLEANUP'),
+  };
+}
 
 /** GET /projects · /projects/:id 의 항목 한 개. id · name · createdAt이 없으면 null */
 function parseProject(value: unknown): ProjectSummary | null {
@@ -515,6 +541,7 @@ function parseProject(value: unknown): ProjectSummary | null {
       environmentType: environmentTypeOf(latest.environmentType),
       createdAt: latestCreatedAt,
     } : null,
+    deletion: parseDeletion(record.deletion),
   };
 }
 
@@ -571,4 +598,16 @@ export async function getProject(projectId: string): Promise<ProjectSummary> {
   const project = parseProject(asRecord(await readJson(response), '프로젝트'));
   if (!project) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
   return project;
+}
+
+/**
+ * DELETE /projects/:id (#247) — 앱 삭제를 시작한다 (202). AWS 리소스 · 공개 주소 · 배포 기록은 서버가 이어서 정리하고,
+ * 진행 상황은 getProject 의 deletion 으로 본다 (끝나면 404). 진행 중인 배포가 있으면 409 PROJECT_DEPLOYMENT_IN_PROGRESS.
+ */
+export async function deleteProject(projectId: string): Promise<ProjectDeletion> {
+  const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { method: 'DELETE', credentials: 'include' });
+  const body = asRecord(await readJson(response), '앱 삭제');
+  const deletion = parseDeletion(body.deletion);
+  if (!deletion) throw new Error('앱 삭제 응답 형식이 올바르지 않습니다.');
+  return deletion;
 }

@@ -1,4 +1,4 @@
-export type KoroMood = 'normal' | 'happy' | 'sleepy' | 'flustered';
+export type KoroMood = 'normal' | 'happy' | 'sleepy' | 'flustered' | 'curious' | 'yawn';
 
 interface KoroProps {
   mood?: KoroMood;
@@ -22,6 +22,17 @@ function Eyes({ mood }: { mood: KoroMood }) {
         <circle className="koro__eye" cx="21" cy="24" r="7" /><circle className="koro__eye" cx="39" cy="24" r="7" />
         <circle className="koro__pupil" cx="21" cy="24" r="2" /><circle className="koro__pupil" cx="39" cy="24" r="2" />
         <path className="koro__sweat" d="M50 8 Q54 14 50 17 Q46 14 50 8 Z" />
+      </>;
+    case 'curious':
+      // 두리번거린다 — 눈동자가 좌우로 움직인다 (움직임 줄이기 설정에서는 가만히 있다)
+      return <>
+        <circle className="koro__eye" cx="21" cy="24" r="7" /><circle className="koro__eye" cx="39" cy="24" r="7" />
+        <g className="koro__look"><circle className="koro__pupil" cx="21" cy="24.5" r="3.5" /><circle className="koro__pupil" cx="39" cy="24.5" r="3.5" /></g>
+      </>;
+    case 'yawn':
+      return <>
+        <path className="koro__stroke" d="M14 22 Q20 28 26 22" /><path className="koro__stroke" d="M34 22 Q40 28 46 22" />
+        <ellipse className="koro__mouth" cx="30" cy="40" rx="5.5" ry="7" />
       </>;
     default:
       return <>

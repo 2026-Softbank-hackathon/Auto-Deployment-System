@@ -53,6 +53,13 @@
 .koro__pupil { fill: var(--ink); }
 .koro__stroke { fill: none; stroke: var(--surface); stroke-width: 3.5; stroke-linecap: round; }
 .koro__sweat { fill: var(--koro-tint); }
+.koro__mouth { fill: var(--ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .koro__look { animation: koro-look 3s ease-in-out infinite; }
+  .koro__mouth { transform-box: fill-box; transform-origin: center; animation: koro-yawn 4s ease-in-out both; }
+}
+@keyframes koro-look { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 70% { transform: translateX(3px); } }
+@keyframes koro-yawn { 0% { transform: scale(0.2); } 35%, 70% { transform: scale(1); } 100% { transform: scale(0.3); } }
 
 /* Marble */
 .marble { display: inline-block; flex-shrink: 0; border-radius: 50%; box-shadow: inset -3px -3px 0 var(--marble-shade); }

@@ -387,6 +387,11 @@ export const ja: Messages = {
     },
     failureUnknown: 'デプロイ中に問題が発生しました。下のAI診断と作業ノートで詳細を確認してください。',
     failureCode: (code) => `エラーコード: ${code}`,
+    failureDetailToggle: '詳しいエラーを見る',
+    failureReasonsWithDetail: {
+      build: 'イメージの作成中に失敗しました。下の詳しいエラーを確認してください。',
+      infra: 'デプロイ環境の作成中に失敗しました。下の詳しいエラーを確認してください。',
+    },
     fixAwsKey: 'プロジェクト設定へ',
     viewResult: '結果を見る',
     healthTitle: 'ヘルスチェック',

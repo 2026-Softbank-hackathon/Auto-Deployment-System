@@ -66,9 +66,24 @@ const kinds: Record<string, FailureKind> = {
   AUTO_APPROVE_STATE_INVALID: 'server',
 };
 
+/**
+ * 서버가 준 실패 사유(deployments.error)를 코드와 상세로 나눈다. 서버는 이런 모양으로 준다:
+ *   "TERRAFORM_APPLY_FAILED"                         코드만
+ *   "TERRAFORM_APPLY_FAILED\n<Terraform 오류 원문>"   코드 + 줄바꿈 + 상세 (apps/worker handlers/provision.ts failProvisionStage)
+ *   "PROJECT_ENV_VAR_NOT_FOUND: A,B"                  코드 + 콜론 + 설명
+ * 첫머리가 코드 모양(대문자 · 숫자 · 밑줄)이 아니면 전체를 상세로 본다.
+ */
+export function parseFailure(raw: string | null): { code: string | null; detail: string | null } {
+  const text = raw?.trim() ?? '';
+  if (!text) return { code: null, detail: null };
+  const match = /^([A-Z][A-Z0-9_]*)(?:\s*:\s*|\s*\n|$)([\s\S]*)$/.exec(text);
+  if (!match) return { code: null, detail: text };
+  return { code: match[1], detail: match[2].trim() || null };
+}
+
 export function failureKind(code: string | null): FailureKind | null {
-  // 서버가 코드 뒤에 설명을 붙이기도 한다 (예: "PROJECT_ENV_VAR_NOT_FOUND: A,B"). 분류는 코드 부분만 본다.
-  return code ? kinds[code.split(':')[0].trim()] ?? null : null;
+  const parsed = parseFailure(code).code;
+  return parsed ? kinds[parsed] ?? null : null;
 }
 
 /** 연결 설정에서 풀 수 있는 실패인지 — 연결 설정으로 가는 버튼을 보여 줄지 정한다. */

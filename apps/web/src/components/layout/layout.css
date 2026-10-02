@@ -31,10 +31,12 @@
 .sidebar__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--paper-side); border: 2px solid var(--line-muted); }
 .sidebar__link:hover .sidebar__dot { border-color: var(--brass); }
 
-.app-body { display: flex; flex-direction: column; min-width: 0; }
+.app-body { --content-max: 1180px; display: flex; flex-direction: column; min-width: 0; }
 .app-header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   height: 64px; flex-shrink: 0; padding: 0 48px;
+  /* 넓은 화면에서 본문(.content)과 같은 세로줄에 맞춘다. 배경과 아래 선은 화면 끝까지 간다. */
+  padding-inline: max(48px, calc((100% - var(--content-max)) / 2 + 48px));
   background: var(--paper); border-bottom: var(--border);
 }
 .app-header__title { font-size: 14px; font-weight: 700; }
@@ -42,7 +44,8 @@
 
 .content {
   display: flex; flex-direction: column; gap: 28px;
-  width: 100%; max-width: 1180px; padding: 40px 48px 64px;
+  /* 본문 폭은 고정하고, 넓은 화면에서 남는 공간은 좌우로 똑같이 나눈다(한쪽만 비어 보이지 않게). */
+  width: 100%; max-width: var(--content-max); margin-inline: auto; padding: 40px 48px 64px;
 }
 
 @media (max-width: 760px) {

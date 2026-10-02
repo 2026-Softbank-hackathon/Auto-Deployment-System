@@ -56,6 +56,15 @@ export const ko = {
     hintPickConnection: '배포할 연결을 골라 주세요.',
     hintNoConnections: '배포할 연결이 없어요. 연결 화면에서 AWS 계정을 먼저 등록해 주세요.',
     reviewFirst: '배포 전에 감지한 포트 확인하기',
+    advanced: {
+      summary: '고급 설정',
+      modeLabel: '배포 형태',
+      modes: { container: '컨테이너 (기본)', serverless: '서버리스 (AWS Lambda)' },
+      modeHint: '서버리스는 같은 이미지를 요청이 올 때만 실행해요. 공개 HTTP 서비스 하나이고 DB가 없는 앱만 서버리스로 실행되고, 아니면 컨테이너로 배포해요.',
+      keepNote: '고른 형태는 앱에 저장돼 재배포 · 롤백에도 그대로 써요.',
+      onpremNote: '온프레미스는 형태와 관계없이 컨테이너로 배포해요.',
+    },
+    serverlessBadge: '서버리스(Lambda)',
     app: {
       label: '앱',
       new: '새 앱',
@@ -114,6 +123,8 @@ export const ko = {
   },
   redeploy: {
     button: '재배포',
+    toServerless: '서버리스로 재배포',
+    toContainer: '컨테이너로 재배포',
     starting: '재배포를 시작하고 있어요…',
     failed: '재배포를 시작하지 못했어요.',
     blocked: '이 프로젝트에 진행 중인 배포가 있어 재배포할 수 없어요.',

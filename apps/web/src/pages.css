@@ -547,6 +547,16 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .deploy-option input { width: 18px; height: 18px; accent-color: var(--koro); }
 .deploy-option input:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
 
+/* 고급 설정: 배포 형태 (#282) — 기본은 접혀 있다 */
+.deploy-advanced { font-size: 14px; color: var(--ink-soft); }
+.deploy-advanced summary { width: fit-content; font-weight: 700; cursor: pointer; }
+.deploy-advanced summary:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.deploy-advanced__body { display: grid; gap: 8px; margin: 10px 0 0; padding: 0 0 0 4px; border: 0; min-width: 0; }
+.deploy-advanced__body legend { padding: 0; margin-bottom: 4px; font-weight: 700; color: var(--ink); }
+.deploy-advanced__hint { margin: 2px 0 0; font-size: 13px; }
+/* 서버리스로 배포한 배포 · 앱 표시 */
+.serverless-badge { display: inline-block; padding: 1px 7px; font-size: 12px; font-weight: 700; color: var(--brass-deep); border: 1px solid var(--brass); border-radius: var(--radius-tape); white-space: nowrap; }
+
 /* 배포 현황: 검색 · 상태 필터 · 페이지 */
 .dashboard-tools { display: flex; align-items: end; gap: 12px 16px; flex-wrap: wrap; }
 .dashboard-tools__search { flex: 1 1 260px; }

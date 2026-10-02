@@ -58,6 +58,15 @@ export const ja: Messages = {
     hintPickConnection: 'デプロイ先の接続を選んでください。',
     hintNoConnections: 'デプロイできる接続がありません。接続画面で先にAWSアカウントを登録してください。',
     reviewFirst: 'デプロイ前に検出されたポートを確認する',
+    advanced: {
+      summary: '詳細設定',
+      modeLabel: 'デプロイ形態',
+      modes: { container: 'コンテナ（既定）', serverless: 'サーバーレス（AWS Lambda）' },
+      modeHint: 'サーバーレスは同じイメージをリクエストがあるときだけ実行します。公開 HTTP サービスが1つで DB のないアプリだけがサーバーレスで動き、それ以外はコンテナでデプロイします。',
+      keepNote: '選んだ形態はアプリに保存され、再デプロイやロールバックでもそのまま使います。',
+      onpremNote: 'オンプレミスは形態にかかわらずコンテナでデプロイします。',
+    },
+    serverlessBadge: 'サーバーレス(Lambda)',
     app: {
       label: 'アプリ',
       new: '新しいアプリ',
@@ -116,6 +125,8 @@ export const ja: Messages = {
   },
   redeploy: {
     button: '再デプロイ',
+    toServerless: 'サーバーレスで再デプロイ',
+    toContainer: 'コンテナで再デプロイ',
     starting: '再デプロイを開始しています…',
     failed: '再デプロイを開始できませんでした。',
     blocked: 'このプロジェクトには進行中のデプロイがあるため、再デプロイできません。',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
-import { createDeployment, DeploymentApiError, listEnvironments, listProjectEnv, type EnvironmentSummary } from '../api/deployment-api';
+import { createDeployment, DeploymentApiError, listEnvironments, listProjectEnv, type DeployMode, type EnvironmentSummary } from '../api/deployment-api';
 import { loadEnvPlan, missingEnvNames } from '../features/setup/env-plan';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { followAppLink, type Navigate } from '../app/navigation';
@@ -42,10 +42,16 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   // ── 앱 ──
   const [projects, setProjects] = useState<DeployProject[] | null>(null);
   const [projectsError, setProjectsError] = useState<unknown>(null);
+  // 앱마다 저장된 배포 형태 (#282). 고급 설정에서 바꾸지 않으면 이 형태로 배포한다.
+  const [appModes, setAppModes] = useState<Record<string, DeployMode>>({});
   const loadApps = useCallback(() => {
     setProjectsError(null);
     // 삭제 중이거나 삭제에 실패한 앱에는 배포할 수 없다 (#247)
-    loadProjects().then((items) => setProjects(items.filter((project) => !project.deletion).map(({ id, name }) => ({ id, name }))), (loadError) => setProjectsError(loadError));
+    loadProjects().then((items) => {
+      const deployable = items.filter((project) => !project.deletion);
+      setProjects(deployable.map(({ id, name }) => ({ id, name })));
+      setAppModes(Object.fromEntries(deployable.map((project) => [project.id, project.deployMode])));
+    }, (loadError) => setProjectsError(loadError));
   }, []);
   useEffect(() => { loadApps(); }, [loadApps]);
 
@@ -134,6 +140,16 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const selected = connectionId !== null ? enabled.find((option) => option.connection.id === connectionId) ?? null : autoPick;
   const noConnections = options !== null && options.length === 0;
 
+  // ── 배포 형태 (고급 설정, #282) ──
+  // 9/30 합의: 프로필은 시스템이 고르고 사용자는 AWS/온프레미스만 고른다. 형태는 필수 선택이 아니라 고급 설정이다.
+  // 고르지 않으면(null) 서버에 보내지 않아 앱에 저장된 형태(새 앱은 컨테이너)를 쓴다.
+  const [modeChoice, setModeChoice] = useState<DeployMode | null>(null);
+  const appMode: DeployMode = selectedProject ? appModes[selectedProject.id] ?? 'container' : 'container';
+  const mode = modeChoice ?? appMode;
+  // 고른 앱이 이미 서버리스면 고급 설정을 펼쳐 지금 형태가 보이게 한다
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  useEffect(() => { if (appMode === 'serverless') setAdvancedOpen(true); }, [appMode]);
+
   const canDeploy = Boolean(file) && appReady && selected !== null && !isStarting;
 
   async function startDeployment() {
@@ -157,7 +173,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
       } else {
         projectId = selectedProject!.id;
       }
-      const deployment = await createDeployment(file, projectId, selected.connection.id);
+      const deployment = await createDeployment(file, projectId, selected.connection.id, modeChoice ?? undefined);
       if (reviewFirst) requestReview(deployment.deploymentId);
       onStarted(deployment.deploymentId);
     } catch (requestError) {
@@ -200,6 +216,19 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
         <input type="checkbox" checked={reviewFirst} onChange={(event) => setReviewFirst(event.target.checked)} disabled={isStarting} />
         <span>{copy.reviewFirst}</span>
       </label>
+      <details className="deploy-advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+        <summary>{copy.advanced.summary}</summary>
+        <fieldset className="deploy-advanced__body" disabled={isStarting}>
+          <legend>{copy.advanced.modeLabel}</legend>
+          {(['container', 'serverless'] as const).map((value) => <label key={value} className="deploy-option">
+            <input type="radio" name="deploy-mode" value={value} checked={mode === value} onChange={() => setModeChoice(value)} />
+            <span>{copy.advanced.modes[value]}</span>
+          </label>)}
+          <p className="deploy-advanced__hint">
+            {selected?.connection.type === 'onprem' ? copy.advanced.onpremNote : `${copy.advanced.modeHint} ${copy.advanced.keepNote}`}
+          </p>
+        </fieldset>
+      </details>
       {errorCopy !== null && <div className="notice error" role="alert"><strong>{error?.kind === 'app' ? copy.app.createError : copy.startError}</strong><br />{errorCopy}</div>}
       <div className="deploy-card__footer">
         <p className={`deploy-card__hint ${canDeploy ? 'is-ready' : ''}`} aria-live="polite">{hint}</p>

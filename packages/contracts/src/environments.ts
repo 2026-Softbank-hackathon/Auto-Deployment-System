@@ -4,7 +4,9 @@
  *   GET    /environments?projectId=<N>  → 200 Environment[] (이름순, agentRegistrationToken 없음)
  *   GET    /environments                → 200 Environment[] (projectId 생략 = 공용 연결 목록, #215)
  *   GET    /environments/:id            → 200 Environment (agentRegistrationToken 없음)
- *   DELETE /environments/:id            → 204 (빈 바디, 진행 중 배포 · 배포 기록이 있으면 409)
+ *   PATCH  /environments/:id            → 200 Environment ({ isDefault: true } 로 기본 연결 변경, #228)
+ *   DELETE /environments/:id            → 204 (빈 바디, 진행 중 배포 · 배포 기록이 있으면 409.
+ *                                          기본 연결을 지우면 같은 범위 · 종류의 가장 오래된 연결이 기본이 됨)
  *
  * projectId 없이 등록한 연결은 공용 연결(projectId=null, shared=true)이라 모든 프로젝트가 배포 때 고를 수 있다(#215).
  *
@@ -50,6 +52,17 @@ export const CreateEnvironmentBodySchema = z.object({
   onpremConfig: OnpremConfigSchema.optional(),
 });
 export type CreateEnvironmentBody = z.input<typeof CreateEnvironmentBodySchema>;
+
+/**
+ * PATCH /environments/:id — 이 연결을 같은 소유 범위(프로젝트 또는 공용) · 종류의 기본 연결로 바꾼다(#228).
+ * 기존 기본은 자동으로 풀린다. 기본 해제(false)는 받지 않는다 — 다른 연결을 기본으로 지정하면 된다
+ */
+export const UpdateEnvironmentBodySchema = z
+  .object({
+    isDefault: z.literal(true),
+  })
+  .strict();
+export type UpdateEnvironmentBody = z.infer<typeof UpdateEnvironmentBodySchema>;
 
 // ── 응답 ──────────────────────────────────────────────────────────────────────
 

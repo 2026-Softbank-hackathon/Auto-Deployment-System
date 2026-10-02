@@ -6,7 +6,8 @@
  *   GET    /environments?projectId=<N>        → 200 [환경 목록]
  *   GET    /environments                      → 200 [공용 연결 목록] (#215)
  *   GET    /environments/:id                  → 200 { ... }
- *   DELETE /environments/:id                  → 204 (진행 중 배포 · 배포 기록 있으면 409)
+ *   PATCH  /environments/:id                  → 200 { ... } ({ isDefault: true } 로 기본 연결 변경, #228)
+ *   DELETE /environments/:id                  → 204 (진행 중 배포 · 배포 기록 있으면 409, 기본이면 다른 연결이 승계)
  *
  * POST 바디에 projectId 를 생략하면 공용 연결 — 모든 프로젝트가 배포 때 고를 수 있다(#215).
  */
@@ -15,6 +16,7 @@ import { type FastifyPluginAsync } from "fastify";
 import {
   CreateEnvironmentBodySchema as CreateBody,
   OptionalProjectIdQuerySchema as ProjectIdQuery,
+  UpdateEnvironmentBodySchema as UpdateBody,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import type { EnvironmentService } from "../services/environment-service.js";
@@ -51,8 +53,24 @@ const environmentsRoutes: FastifyPluginAsync<{ environmentService: EnvironmentSe
     return svc.get(id);
   });
 
+  fastify.patch<{ Params: { id: string } }>("/:id", {
+    schema: {
+      tags: ["environments"],
+      summary: "기본 연결로 지정 (같은 범위 · 종류의 기존 기본은 해제)",
+      params: idParams,
+      body: toJsonSchema(UpdateBody),
+    },
+  }, async (request) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new ApiError(400, "VALIDATION_ERROR", "환경 ID 는 양수 정수여야 합니다.");
+    }
+    UpdateBody.parse(request.body);
+    return svc.setDefault(id);
+  });
+
   fastify.delete<{ Params: { id: string } }>("/:id", {
-    schema: { tags: ["environments"], summary: "배포 환경 삭제 (진행 중 배포 있으면 409)", params: idParams },
+    schema: { tags: ["environments"], summary: "배포 환경 삭제 (진행 중 배포 있으면 409, 기본 연결이면 가장 오래된 연결이 승계)", params: idParams },
   }, async (request, reply) => {
     const id = Number(request.params.id);
     if (!Number.isFinite(id) || id <= 0) {

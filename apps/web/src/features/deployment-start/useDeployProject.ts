@@ -47,9 +47,12 @@ function useDeployProjectState() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  /** 앱 이름으로 프로젝트를 만들고 그 앱으로 바꾼다. 같은 이름이 있으면 서버가 409를 돌려준다. */
-  const createDeployProject = useCallback(async (name: string) => {
-    const project = await createProject(name);
+  /**
+   * 앱 이름으로 프로젝트를 만들고 그 앱으로 바꾼다. 같은 이름이 있으면 서버가 409를 돌려준다.
+   * subdomain 을 주면 그 주소로 만든다 (#302). 다른 앱이 쓰는 주소면 409 SUBDOMAIN_TAKEN.
+   */
+  const createDeployProject = useCallback(async (name: string, subdomain?: string) => {
+    const project = await createProject(name, subdomain);
     storeId(project.id);
     setState((current) => ({ phase: 'ready', projects: [project, ...(current.phase === 'ready' ? current.projects : [])], project, environments: [] }));
     return project;

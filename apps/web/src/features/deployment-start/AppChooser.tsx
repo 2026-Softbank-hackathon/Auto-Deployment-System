@@ -3,6 +3,8 @@ import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 import { displayProjectName } from '../dashboard/format';
+import { AddressField } from '../app-address/AddressField';
+import type { SubdomainCheck } from '../app-address/subdomain';
 import type { DeployProject } from './useDeployProject';
 
 /** 서버 계약과 같은 길이 제한 (packages/contracts CreateProjectBodySchema) */
@@ -24,12 +26,14 @@ export function findAppByName(projects: DeployProject[] | null, name: string): D
 
 /**
  * 간단 배포의 "앱" 칸: 새 앱(이름은 ZIP 파일 이름으로 미리 채움) 또는 기존 앱 고르기.
- * 새 앱은 배포하기를 누를 때 만든다.
+ * 새 앱은 배포하기를 누를 때 만든다. 새 앱의 주소는 이름으로 추천하고 바꿀 수 있다 (#302).
  */
-export function AppChooser({ projects, loadError, onRetry, value, onChange, envMissing, disabled, onNavigate }: {
+export function AppChooser({ projects, loadError, onRetry, value, onChange, address, envMissing, disabled, onNavigate }: {
   /** 기존 앱 목록. 읽는 중이면 null */
   projects: DeployProject[] | null; loadError: unknown; onRetry: () => void;
   value: AppChoice; onChange: (next: AppChoice, edited: 'mode' | 'name' | 'pick') => void;
+  /** 새 앱의 주소 칸 */
+  address: { value: string; onChange: (next: string) => void; check: SubdomainCheck };
   /** 고른 기존 앱에 등록이 필요한 환경변수 개수 */
   envMissing: number; disabled?: boolean; onNavigate: Navigate;
 }) {
@@ -67,6 +71,8 @@ export function AppChooser({ projects, loadError, onRetry, value, onChange, envM
         {sameName ? copy.nameTaken : copy.nameHint}
         {sameName && <> <button type="button" className="dashboard-tools__clear" disabled={disabled} onClick={() => onChange({ mode: 'existing', projectId: sameName.id }, 'pick')}>{copy.useExisting}</button></>}
       </p>
+      {!sameName && <AddressField value={address.value} onChange={address.onChange} check={address.check} disabled={disabled}
+        label={t.address.newLabel} emptyHint={t.address.newEmpty} unavailableHint={t.address.newFallback} />}
     </div>}
 
     {value.mode === 'existing' && <div className="app-chooser__field">

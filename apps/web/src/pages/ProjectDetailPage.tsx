@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getProject, listProjectDeployments, SERVERLESS_PROFILE, STATIC_SITE_PROFILE, type EnvironmentSummary, type ProjectDeploymentSummary, type ProjectLiveDeployment } from '../api/deployment-api';
 import { followAppLink, type Navigate } from '../app/navigation';
 import type { ProjectTab } from '../app/routes';
@@ -11,6 +11,7 @@ import { AgentState } from '../features/connections/AgentState';
 import { useDeployProject } from '../features/deployment-start/useDeployProject';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { DeleteAppCard } from '../features/project-delete/DeleteAppCard';
+import { AddressCard } from '../features/app-address/AddressCard';
 import { readCache, writeCache } from '../lib/page-cache';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -44,8 +45,11 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
     searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} projectId={projectId} />;
 }
 
-/** 지금 이 앱이 어디서(AWS / 온프레미스) 서비스 중인지와 주소 (#220). 읽지 못하면 아무것도 보여 주지 않는다. */
-function LiveSummary({ projectId }: { projectId: string }) {
+/**
+ * 지금 이 앱이 어디서(AWS / 온프레미스) 서비스 중인지와 주소 (#220). 읽지 못하면 아무것도 보여 주지 않는다.
+ * 주소를 바꾸면(#302) reloadKey 가 바뀌어 새 주소를 다시 읽는다.
+ */
+function LiveSummary({ projectId, reloadKey }: { projectId: string; reloadKey: number }) {
   const { t } = useI18n();
   const cacheKey = `project-live:${projectId}`;
   const [live, setLive] = useState<ProjectLiveDeployment | null | undefined>(() => readCache<ProjectLiveDeployment | null>(cacheKey));
@@ -53,7 +57,7 @@ function LiveSummary({ projectId }: { projectId: string }) {
     let active = true;
     getProject(projectId).then((project) => { writeCache(cacheKey, project.live); if (active) setLive(project.live); }, () => { /* 없어도 화면은 동작한다 */ });
     return () => { active = false; };
-  }, [projectId, cacheKey]);
+  }, [projectId, cacheKey, reloadKey]);
 
   if (live === undefined) return null;
   if (live === null) return <p className="project-live">{t.versions.notLive}</p>;
@@ -107,6 +111,9 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
   const { state, refresh, selectProject } = useDeployProject();
   const known = state.phase === 'ready' ? state.projects.find((project) => project.id === projectId) ?? null : null;
   const selectedHere = state.phase === 'ready' && state.project?.id === projectId;
+  // 설정 탭에서 주소를 바꾸면 머리의 주소를 다시 읽는다 (#302)
+  const [addressVersion, setAddressVersion] = useState(0);
+  const addressChanged = useCallback(() => setAddressVersion((version) => version + 1), []);
 
   // 목록이 준비되면 이 프로젝트를 고른다. 목록에 없는 ID면 고르지 않는다.
   const shouldSelect = known !== null && !selectedHere;
@@ -124,7 +131,7 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
   return <>
     {back}
     <div className="page-head">
-      <div><h1>{displayProjectName(known.name)}</h1><p>{copy.detailDescription}</p><LiveSummary projectId={projectId} /></div>
+      <div><h1>{displayProjectName(known.name)}</h1><p>{copy.detailDescription}</p><LiveSummary projectId={projectId} reloadKey={addressVersion} /></div>
       {/* 연결은 간단 배포에서 고른다. 이 앱을 골라 둔 채로 간다. */}
       <DeployKeycap href={`/deploy?project=${encodeURIComponent(projectId)}`} onClick={(event) => followAppLink(event, onNavigate)}>{copy.deploy}</DeployKeycap>
     </div>
@@ -141,6 +148,7 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
       <div className="setup-card__body"><EnvVarsCard projectId={projectId} awsRegion={appAws?.region ?? null} /></div>
     </section>}
     {tab === 'settings' && selectedHere && <>
+      <AddressCard projectId={projectId} onChanged={addressChanged} />
       <AppConnections environments={state.environments} onNavigate={onNavigate} />
       <DeleteAppCard projectId={projectId} appName={displayProjectName(known.name)} onDeleted={() => void refresh()} onNavigate={onNavigate} />
     </>}

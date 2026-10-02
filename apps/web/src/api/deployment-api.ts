@@ -120,12 +120,16 @@ export async function createDeployment(source: File, projectId: string, environm
   return { deploymentId, status, eventsUrl };
 }
 
-/** API-02 — 프로젝트 생성. 프로젝트는 한 애플리케이션의 배포 이력을 묶는 단위라 처음 한 번만 만든다. */
-export async function createProject(name: string): Promise<CreateProjectResponse> {
+/**
+ * API-02 — 프로젝트 생성. 프로젝트는 한 애플리케이션의 배포 이력을 묶는 단위라 처음 한 번만 만든다.
+ * subdomain 을 주면 앱 주소가 {subdomain}.{플랫폼 도메인} (#302), 없으면 서버가 service-{id} 로 정한다.
+ * 다른 앱이 쓰는 주소면 409 SUBDOMAIN_TAKEN.
+ */
+export async function createProject(name: string, subdomain?: string): Promise<CreateProjectResponse> {
   const response = await fetch(endpoint('/api/v1/projects'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(subdomain ? { name, subdomain } : { name }),
     credentials: 'include',
   });
   const body = asRecord(await readJson(response), '프로젝트 생성');
@@ -520,10 +524,27 @@ export interface ProjectDeletion {
   warnings: ProjectDeletionWarning[];
 }
 
+/** 앱 주소 변경 (#301) 진행 상태 */
+export interface ProjectAddressChange {
+  status: 'changing' | 'succeeded' | 'failed';
+  from: string;
+  to: string;
+  requestedAt: string;
+  finishedAt: string | null;
+  /** 실패 이유 (오류 코드, 다음 줄부터 상세). 실패가 아니면 null */
+  error: string | null;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
   createdAt: string;
+  /** 앱 주소의 앞부분 (#300). 예전 서버 응답에는 없어서 null */
+  subdomain: string | null;
+  /** 앱 공개 주소. 서버에 플랫폼 도메인 설정이 없으면 null */
+  publicUrl: string | null;
+  /** 마지막 주소 변경. 바꾼 적이 없으면 null */
+  addressChange: ProjectAddressChange | null;
   /** 앱의 배포 형태 — 고르지 않은 배포 · 재배포 · 롤백이 따른다 */
   deployMode: DeployMode;
   /** 서비스 중인 배포가 없으면 null */
@@ -571,6 +592,16 @@ function parseDeletion(value: unknown): ProjectDeletion | null {
   };
 }
 
+function parseAddressChange(value: unknown): ProjectAddressChange | null {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  const status = record?.status;
+  const from = optionalString(record?.from);
+  const to = optionalString(record?.to);
+  const requestedAt = optionalString(record?.requestedAt);
+  if ((status !== 'changing' && status !== 'succeeded' && status !== 'failed') || from === null || to === null || !requestedAt) return null;
+  return { status, from, to, requestedAt, finishedAt: optionalString(record?.finishedAt), error: optionalString(record?.error) };
+}
+
 /** GET /projects · /projects/:id 의 항목 한 개. id · name · createdAt이 없으면 null */
 function parseProject(value: unknown): ProjectSummary | null {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
@@ -586,6 +617,9 @@ function parseProject(value: unknown): ProjectSummary | null {
   const latestCreatedAt = optionalString(latest?.createdAt);
   return {
     id, name, createdAt,
+    subdomain: optionalString(record.subdomain),
+    publicUrl: optionalString(record.publicUrl),
+    addressChange: parseAddressChange(record.addressChange),
     deployMode: record.deployMode === 'serverless' ? 'serverless' : 'container',
     live: live && liveId ? {
       deploymentId: liveId,
@@ -670,4 +704,32 @@ export async function deleteProject(projectId: string): Promise<ProjectDeletion>
   const deletion = parseDeletion(body.deletion);
   if (!deletion) throw new Error('앱 삭제 응답 형식이 올바르지 않습니다.');
   return deletion;
+}
+
+export type SubdomainUnavailableReason = 'format' | 'reserved' | 'taken';
+export interface SubdomainAvailability { name: string; available: boolean; reason: SubdomainUnavailableReason | null }
+
+/** GET /projects/subdomain-availability (#300) — 앱 주소를 쓸 수 있는지 (형식 · 예약어 · 다른 앱 사용 중) */
+export async function checkSubdomain(name: string, signal?: AbortSignal): Promise<SubdomainAvailability> {
+  const query = new URLSearchParams({ name });
+  const response = await fetch(endpoint(`/api/v1/projects/subdomain-availability?${query}`), { credentials: 'include', signal });
+  const body = asRecord(await readJson(response), '주소 확인');
+  const reason = body.reason === 'format' || body.reason === 'reserved' || body.reason === 'taken' ? body.reason : null;
+  return { name: optionalString(body.name) ?? name, available: body.available === true, reason };
+}
+
+/**
+ * PATCH /projects/:id/subdomain (#301) — 앱 주소 변경. 서비스 중인 배포가 있으면 202 로 받고 서버가 새 주소를 연결 · 확인한 뒤
+ * 바꾼다(진행은 getProject 의 addressChange). 서비스 중인 배포가 없으면 바로 바뀐다(200).
+ */
+export async function changeProjectSubdomain(projectId: string, subdomain: string): Promise<ProjectSummary> {
+  const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}/subdomain`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subdomain }),
+    credentials: 'include',
+  });
+  const project = parseProject(asRecord(await readJson(response), '주소 변경'));
+  if (!project) throw new Error('주소 변경 응답 형식이 올바르지 않습니다.');
+  return project;
 }

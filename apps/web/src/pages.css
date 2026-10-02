@@ -768,6 +768,32 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .app-chooser__field { display: grid; gap: 8px; max-width: 520px; }
 .app-chooser__hint { margin: 0; font-size: 13px; color: var(--ink-soft); }
 .app-chooser__hint.is-missing { color: var(--brick-text); font-weight: 700; }
+.app-chooser__hint.is-ok { color: var(--moss-text); font-weight: 700; }
+
+/* 앱 주소 입력 (#302): [입력].camellia-deploy.app */
+.address-field { display: grid; gap: 6px; min-width: 0; max-width: 520px; }
+.address-field > label { font-size: 13px; font-weight: 700; color: var(--ink); }
+.address-field__input {
+  display: flex; align-items: center; min-width: 0; height: 44px; overflow: hidden;
+  background: var(--surface); border: var(--border); border-radius: var(--radius-input);
+}
+.address-field__input:focus-within { outline: 3px solid var(--koro); outline-offset: 2px; }
+.address-field__input input {
+  flex: 1 1 auto; min-width: 0; height: 100%; padding: 0 4px 0 12px; border: 0; background: transparent;
+  font: inherit; font-family: var(--font-mono); font-size: 14px; color: var(--ink); outline: none;
+}
+.address-field__suffix {
+  flex: 0 1 auto; padding: 0 12px 0 0; font-family: var(--font-mono); font-size: 14px; color: var(--ink-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.address-card__current { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin: 0; }
+.address-card__current > span { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+.address-card__current a, .address-card__current code { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.setup-form.address-card__form { display: grid; gap: 10px; justify-items: start; }
+.address-card__form .address-field { width: 100%; }
+.address-card__confirm { display: grid; gap: 8px; border-color: var(--koro); }
+.address-card__confirm p { margin: 0; }
+.address-card__done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .connection-picker { display: grid; gap: 12px; }
 .connection-picker__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .connection-picker__head h2 { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); }

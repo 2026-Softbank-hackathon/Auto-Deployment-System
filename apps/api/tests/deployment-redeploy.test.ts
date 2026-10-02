@@ -133,21 +133,32 @@ describe("POST /deployments/:id/redeploy — 라우트", () => {
 import { DeploymentService } from "../src/services/deployment-service.js";
 import { MockPool, MockPgBoss, MockStorage } from "./mocks/db.js";
 
-function makeService(pool: MockPool) {
+function makeService(pool: MockPool, boss: MockPgBoss) {
   return new DeploymentService(
     pool as unknown as import("@camellia/db").Pool,
-    new MockPgBoss() as unknown as import("pg-boss").default,
+    boss as unknown as import("pg-boss").default,
     new MockStorage() as unknown as import("@camellia/storage").Storage,
   );
 }
 
+type QueryCall = { sql: string; params: unknown[] };
+
 describe("DeploymentService.redeploy", () => {
   let pool: MockPool;
+  let calls: QueryCall[];
+  let boss: MockPgBoss;
   let svc: DeploymentService;
 
   beforeEach(() => {
     pool = new MockPool();
-    svc = makeService(pool);
+    calls = [];
+    const query = pool.query.bind(pool);
+    pool.query = async (sql: string, params: unknown[] = []) => {
+      calls.push({ sql: sql.replace(/\s+/g, " ").trim(), params });
+      return query(sql, params);
+    };
+    boss = new MockPgBoss();
+    svc = makeService(pool, boss);
   });
 
   function setupSucceededDeployment() {
@@ -158,18 +169,71 @@ describe("DeploymentService.redeploy", () => {
         target_profile: "aws-ecs-basic",
         target_environment_id: 10,
         registry_environment_id: 10,
+        project_id: 1,
       }],
     }));
   }
 
-  function setupIr() {
+  function setupSource(row: {
+    target_profile: string;
+    target_environment_id: string | null;
+    registry_environment_id: string | null;
+  }) {
+    pool.on(/SELECT id, status, target_profile, target_environment_id/, () => ({
+      rows: [{ id: "42", status: "succeeded", project_id: "1", ...row }],
+    }));
+  }
+
+  type Env = { id: number; type: "aws" | "onprem"; project_id: number | null; is_default?: boolean };
+
+  function setupEnvironments(envs: Env[]) {
+    // 대상 환경 단건 조회
+    pool.on(/SELECT id, type, project_id FROM environments WHERE id = \$1$/, (params) => ({
+      rows: envs
+        .filter((env) => String(env.id) === String(params[0]))
+        .map(({ id, type, project_id }) => ({
+          id: String(id),
+          type,
+          project_id: project_id == null ? null : String(project_id),
+        })),
+    }));
+    // 온프레미스 대상의 Registry(AWS) 환경 — 원본 Registry > 프로젝트 기본 > 공용 기본
+    pool.on(/FROM environments WHERE type = 'aws'/, (params) => {
+      const [projectId, keepId] = params as [unknown, unknown];
+      const keep = (env: Env) => (keepId != null && String(env.id) === String(keepId) ? 0 : 1);
+      const shared = (env: Env) => (env.project_id === null ? 1 : 0);
+      const candidates = envs
+        .filter((env) => env.type === "aws")
+        .filter((env) => env.project_id === null || String(env.project_id) === String(projectId))
+        .filter((env) => keep(env) === 0 || env.is_default)
+        .sort((a, b) => keep(a) - keep(b) || shared(a) - shared(b) || a.id - b.id);
+      return { rows: candidates.slice(0, 1).map((env) => ({ id: String(env.id) })) };
+    });
+  }
+
+  function insertedDeploymentParams() {
+    return calls.find((c) => /INSERT INTO deployments/.test(c.sql))?.params;
+  }
+
+  function setupIr(profile = "aws-ecs-basic") {
+    const sourceIr = {
+      "$ir_version": "0.1.0",
+      metadata: { name: "app", version: "1.0.0" },
+      services: { api: { type: "http", port: 3000 } },
+      deploy: { profile, region: "ap-northeast-2" },
+    };
     pool.on(/FROM ir_versions/, () => ({
       rows: [{
         id: 1,
-        ir_json: { "$ir_version": "0.1.0", metadata: { name: "app" } },
+        ir_json: sourceIr,
         source: "analyzer",
       }],
     }));
+    return sourceIr;
+  }
+
+  function insertedIr() {
+    return JSON.parse(calls.find((call) => /INSERT INTO ir_versions/.test(call.sql))!.params[1] as string);
   }
 
   function setupSourceVersion() {
@@ -280,14 +344,156 @@ describe("DeploymentService.redeploy", () => {
     await expect(svc.redeploy(42)).rejects.toMatchObject({ statusCode: 409, code: "DEPLOYMENT_LOCKED" });
   });
 
-  it("targetEnvironmentId override — 새 환경으로 큐잉", async () => {
+  it("같은 환경 재배포 — 원본 프로필 · Registry 그대로, build job 에 원본 ID 전달", async () => {
+    setupSucceededDeployment();
+    const sourceIr = setupIr();
+    setupSourceVersion();
+    setupNoLock();
+    setupTransaction();
+
+    await svc.redeploy(42);
+
+    expect(insertedDeploymentParams()).toEqual([42, "aws-ecs-basic", 10, 10]);
+    expect(insertedIr()).toEqual(sourceIr);
+    expect(boss.sentJobs).toEqual([
+      { name: "build", data: { deployment_id: 99, redeployed_from: 42 } },
+    ]);
+  });
+
+  it("AWS → 온프레미스 전환 — 프로필 onprem-docker-basic 재선정, Registry 는 원본 AWS 환경 유지", async () => {
+    setupSucceededDeployment();
+    const sourceIr = setupIr();
+    setupSourceVersion();
+    setupNoLock();
+    setupTransaction();
+    setupEnvironments([
+      { id: 10, type: "aws", project_id: 1, is_default: true },
+      { id: 20, type: "onprem", project_id: 1, is_default: true },
+    ]);
+
+    const result = await svc.redeploy(42, { targetEnvironmentId: 20 });
+
+    expect(result.status).toBe("queued");
+    expect(insertedDeploymentParams()).toEqual([42, "onprem-docker-basic", "20", "10"]);
+    expect(insertedIr()).toEqual({ ...sourceIr, deploy: { ...sourceIr.deploy, profile: "onprem-docker-basic" } });
+    expect(sourceIr.deploy.profile).toBe("aws-ecs-basic");
+  });
+
+  it("온프레미스 → AWS 전환 — 프로필 aws-ecs-basic 재선정, Registry 는 대상 AWS 환경", async () => {
+    setupSource({
+      target_profile: "onprem-docker-basic",
+      target_environment_id: "20",
+      registry_environment_id: "10",
+    });
+    const sourceIr = setupIr("onprem-docker-basic");
+    setupSourceVersion();
+    setupNoLock();
+    setupTransaction();
+    setupEnvironments([
+      { id: 10, type: "aws", project_id: 1, is_default: true },
+      { id: 11, type: "aws", project_id: 1 },
+      { id: 20, type: "onprem", project_id: 1, is_default: true },
+    ]);
+
+    await svc.redeploy(42, { targetEnvironmentId: 11 });
+
+    expect(insertedDeploymentParams()).toEqual([42, "aws-ecs-basic", "11", "11"]);
+    expect(insertedIr()).toEqual({ ...sourceIr, deploy: { ...sourceIr.deploy, profile: "aws-ecs-basic" } });
+    expect(sourceIr.deploy.profile).toBe("onprem-docker-basic");
+  });
+
+  it("온프레미스 전환 시 원본 Registry 가 없으면 프로젝트 기본 AWS 환경 사용", async () => {
+    setupSource({
+      target_profile: "onprem-docker-basic",
+      target_environment_id: "20",
+      registry_environment_id: null,
+    });
+    setupIr();
+    setupSourceVersion();
+    setupNoLock();
+    setupTransaction();
+    setupEnvironments([
+      { id: 5, type: "aws", project_id: null, is_default: true },
+      { id: 11, type: "aws", project_id: 1, is_default: true },
+      { id: 21, type: "onprem", project_id: 1 },
+    ]);
+
+    await svc.redeploy(42, { targetEnvironmentId: 21 });
+
+    expect(insertedDeploymentParams()).toEqual([42, "onprem-docker-basic", "21", "11"]);
+  });
+
+  it("프로젝트 AWS 환경이 없으면 공용 기본 AWS 환경(project_id NULL)을 Registry 로 사용", async () => {
+    setupSource({
+      target_profile: "onprem-docker-basic",
+      target_environment_id: "20",
+      registry_environment_id: null,
+    });
+    setupIr();
+    setupSourceVersion();
+    setupNoLock();
+    setupTransaction();
+    setupEnvironments([
+      { id: 5, type: "aws", project_id: null, is_default: true },
+      { id: 30, type: "onprem", project_id: null },
+    ]);
+
+    await svc.redeploy(42, { targetEnvironmentId: 30 });
+
+    expect(insertedDeploymentParams()).toEqual([42, "onprem-docker-basic", "30", "5"]);
+  });
+
+  it("온프레미스 전환인데 쓸 수 있는 AWS 환경이 없으면 409 AWS_REGISTRY_ENVIRONMENT_REQUIRED", async () => {
+    setupSource({
+      target_profile: "onprem-docker-basic",
+      target_environment_id: "20",
+      registry_environment_id: null,
+    });
+    setupIr();
+    setupSourceVersion();
+    setupEnvironments([{ id: 21, type: "onprem", project_id: 1 }]);
+
+    await expect(svc.redeploy(42, { targetEnvironmentId: 21 })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "AWS_REGISTRY_ENVIRONMENT_REQUIRED",
+    });
+  });
+
+  it("없는 대상 환경 — 404", async () => {
+    setupSucceededDeployment();
+    setupIr();
+    setupSourceVersion();
+    setupEnvironments([]);
+
+    await expect(svc.redeploy(42, { targetEnvironmentId: 77 })).rejects.toMatchObject({
+      statusCode: 404,
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("다른 프로젝트의 대상 환경 — 400", async () => {
+    setupSucceededDeployment();
+    setupIr();
+    setupSourceVersion();
+    setupEnvironments([{ id: 20, type: "onprem", project_id: 2 }]);
+
+    await expect(svc.redeploy(42, { targetEnvironmentId: 20 })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+  });
+
+  it("잠금 확인은 같은 프로젝트의 진행 중 배포만 본다", async () => {
     setupSucceededDeployment();
     setupIr();
     setupSourceVersion();
     setupNoLock();
     setupTransaction();
 
-    const result = await svc.redeploy(42, { targetEnvironmentId: 20 });
-    expect(result.status).toBe("queued");
+    await svc.redeploy(42);
+
+    const lockQuery = calls.find((c) => /SELECT d\.id FROM deployments d/.test(c.sql));
+    expect(lockQuery?.sql).toContain("d.project_id = $4");
+    expect(lockQuery?.params[3]).toBe(1);
   });
 });

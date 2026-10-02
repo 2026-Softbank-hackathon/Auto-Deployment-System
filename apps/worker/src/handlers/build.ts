@@ -14,6 +14,8 @@ import { transitionTo, type Status } from "../state-machine.js";
 
 export type BuildJobPayload = {
   deployment_id: number;
+  /** 재배포(POST /deployments/:id/redeploy)의 원본 배포. 같은 Registry 환경이면 이미지를 재사용한다. */
+  redeployed_from?: number;
 };
 
 type BuildContextRow = {
@@ -23,6 +25,8 @@ type BuildContextRow = {
   source_storage_key: string | null;
   ir_json: unknown | null;
   registry_environment_type: string;
+  /** 레지스트리 연결의 소유 프로젝트 — 공용 연결(#215)이면 null */
+  registry_environment_project_id: number | string | null;
   aws_config: unknown | null;
   existing_artifact_id: number | string | null;
 };
@@ -60,6 +64,18 @@ export async function handleBuild(
       return;
     }
 
+    const redeployedFrom = job.data.redeployed_from;
+    if (redeployedFrom != null) {
+      const reusedDigest = await reuseSourceArtifact(deps, deploymentId, redeployedFrom);
+      if (reusedDigest !== null) {
+        await stepLog.line(
+          `빌드 생략 — 배포 #${redeployedFrom}의 이미지 재사용: ${reusedDigest}`,
+        );
+        await completeBuildStage(deps, deploymentId);
+        return;
+      }
+    }
+
     const required = requireBuildDependencies(deps);
     const projectId = parseProjectId(context.project_id);
     const profileId = requireString(context.target_profile, "TARGET_PROFILE_MISSING");
@@ -81,9 +97,14 @@ export async function handleBuild(
     }
 
     await stepLog.line("빌드 준비");
+    // 시크릿은 레지스트리 연결의 소유 범위에서 읽는다 (공용 연결이면 공용 시크릿, #215)
+    const secretOwnerId =
+      context.registry_environment_project_id === null
+        ? null
+        : parseProjectId(context.registry_environment_project_id);
     const [accessKeyId, secretAccessKey] = await Promise.all([
-      required.secretReader.read(projectId, awsConfig.accessKeyIdSecretName),
-      required.secretReader.read(projectId, awsConfig.secretAccessKeySecretName),
+      required.secretReader.read(secretOwnerId, awsConfig.accessKeyIdSecretName),
+      required.secretReader.read(secretOwnerId, awsConfig.secretAccessKeySecretName),
     ]);
     const registry = required.awsRegistryFactory({
       region: awsConfig.region,
@@ -150,6 +171,7 @@ async function loadBuildContext(
             source.storage_key AS source_storage_key,
             ir.ir_json,
             registry_environment.type AS registry_environment_type,
+            registry_environment.project_id AS registry_environment_project_id,
             registry_environment.aws_config,
             artifact.id AS existing_artifact_id
      FROM deployments d
@@ -243,6 +265,36 @@ async function saveBuildArtifact(
       result.strategy,
     ],
   );
+}
+
+/**
+ * 재배포 원본의 build artifact 를 새 배포로 복사한다 (같은 이미지 · 같은 digest).
+ * 같은 프로젝트 · 같은 Registry 환경일 때만 복사하고, 복사한 digest 를 돌려준다.
+ * 원본에 artifact 가 없거나 Registry 가 다르면 null → 평소처럼 빌드한다.
+ */
+async function reuseSourceArtifact(
+  deps: WorkerDeps,
+  deploymentId: number,
+  sourceDeploymentId: number,
+): Promise<string | null> {
+  const result = await deps.pool.query<{ image_digest: string }>(
+    `INSERT INTO build_artifacts
+       (deployment_id, repository_uri, image_tag, image_digest,
+        immutable_ref, platform, strategy)
+     SELECT target.id, artifact.repository_uri, artifact.image_tag,
+            artifact.image_digest, artifact.immutable_ref, artifact.platform,
+            artifact.strategy
+     FROM deployments target
+     JOIN deployments source ON source.id = $2
+     JOIN build_artifacts artifact ON artifact.deployment_id = source.id
+     WHERE target.id = $1
+       AND source.project_id = target.project_id
+       AND source.registry_environment_id = target.registry_environment_id
+     ON CONFLICT (deployment_id) DO NOTHING
+     RETURNING image_digest`,
+    [deploymentId, sourceDeploymentId],
+  );
+  return result.rows[0]?.image_digest ?? null;
 }
 
 async function completeBuildStage(

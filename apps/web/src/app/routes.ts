@@ -6,7 +6,7 @@ export type DeploymentTab = 'auto' | 'progress' | 'failure' | 'logs' | 'analysis
 export type Route =
   | { page: 'dashboard' }
   | { page: 'deploy' }
-  | { page: 'projects' }
+  | { page: 'connections' }
   | { page: 'project'; projectId: string; tab: ProjectTab }
   | { page: 'progress'; deploymentId: string; tab: DeploymentTab }
   | { page: 'result'; deploymentId: string };
@@ -17,9 +17,9 @@ export function routeFromLocation(): Route {
     const deploymentId = decodeURIComponent(match[1]);
     return match[2] === 'result' ? { page: 'result', deploymentId } : { page: 'progress', deploymentId, tab: (match[2] as DeploymentTab | undefined) ?? 'auto' };
   }
-  // 예전 연결 설정 주소. 설정은 프로젝트 상세의 설정 탭으로 옮겼다.
-  if (window.location.pathname === '/setup') return { page: 'projects' };
-  if (window.location.pathname === '/projects') return { page: 'projects' };
+  // 예전 주소. 연결 설정은 연결 화면으로 (#218), 내 프로젝트 목록은 대시보드로 합쳤다 (#219).
+  if (window.location.pathname === '/connections' || window.location.pathname === '/setup') return { page: 'connections' };
+  if (window.location.pathname === '/projects') return { page: 'dashboard' };
   const project = window.location.pathname.match(/^\/projects\/([^/]+)(?:\/(env|settings))?\/?$/);
   if (project) return { page: 'project', projectId: decodeURIComponent(project[1]), tab: (project[2] as ProjectTab | undefined) ?? 'deployments' };
   return window.location.pathname === '/deploy' ? { page: 'deploy' } : { page: 'dashboard' };

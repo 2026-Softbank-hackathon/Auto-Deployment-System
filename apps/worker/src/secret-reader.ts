@@ -2,7 +2,11 @@ import { createDecipheriv } from "node:crypto";
 import type { Pool } from "@camellia/db";
 
 export interface ProjectSecretReader {
-  read(projectId: number, name: string): Promise<string>;
+  /**
+   * ownerProjectId 는 시크릿을 참조하는 연결(environment)의 소유 범위 —
+   * 프로젝트 연결이면 그 프로젝트 ID, 공용 연결(#215)이면 null. 배포의 프로젝트가 아니다.
+   */
+  read(ownerProjectId: number | null, name: string): Promise<string>;
 }
 
 export class PostgresProjectSecretReader implements ProjectSecretReader {
@@ -15,7 +19,7 @@ export class PostgresProjectSecretReader implements ProjectSecretReader {
     }
   }
 
-  async read(projectId: number, name: string): Promise<string> {
+  async read(ownerProjectId: number | null, name: string): Promise<string> {
     const result = await this.pool.query<{
       ciphertext: Buffer;
       iv: Buffer;
@@ -23,8 +27,8 @@ export class PostgresProjectSecretReader implements ProjectSecretReader {
     }>(
       `SELECT ciphertext, iv, auth_tag
        FROM secrets
-       WHERE project_id = $1 AND name = $2`,
-      [projectId, name],
+       WHERE project_id IS NOT DISTINCT FROM $1::bigint AND name = $2`,
+      [ownerProjectId, name],
     );
     const row = result.rows[0];
     if (!row) throw new Error("PROJECT_SECRET_NOT_FOUND");

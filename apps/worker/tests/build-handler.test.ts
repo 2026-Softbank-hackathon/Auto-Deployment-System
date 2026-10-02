@@ -32,6 +32,8 @@ function makeHarness(overrides: Partial<{
   credentialsType: "access_key" | "assume_role";
   buildFailure: Error;
   autoApproveFailure: Error;
+  reusableDigest: string;
+  registryOwnerProjectId: string | null;
 }> = {}) {
   let currentStatus = overrides.status ?? "queued";
   const queries: Array<{ sql: string; params: unknown[] }> = [];
@@ -66,6 +68,13 @@ function makeHarness(overrides: Partial<{
     connect: vi.fn(async () => client),
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
       queries.push({ sql, params });
+      if (sql.includes("INSERT INTO build_artifacts") && sql.includes("SELECT")) {
+        return {
+          rows: overrides.reusableDigest
+            ? [{ image_digest: overrides.reusableDigest }]
+            : [],
+        };
+      }
       if (sql.includes("SELECT d.status")) {
         const credentialsType = overrides.credentialsType ?? "access_key";
         return {
@@ -77,6 +86,8 @@ function makeHarness(overrides: Partial<{
               source_storage_key: "sources/demo.zip",
               ir_json: IR,
               registry_environment_type: "aws",
+              registry_environment_project_id:
+                overrides.registryOwnerProjectId === undefined ? "1" : overrides.registryOwnerProjectId,
               aws_config:
                 credentialsType === "access_key"
                   ? {
@@ -115,7 +126,7 @@ function makeHarness(overrides: Partial<{
   const boss = { send: vi.fn(async () => "job-id") };
   const notifier = { notify: vi.fn(async () => {}) };
   const secretReader = {
-    read: vi.fn(async (_projectId: number, name: string) =>
+    read: vi.fn(async (_projectId: number | null, name: string) =>
       name === "aws-access" ? "access-value" : "secret-value",
     ),
   };
@@ -192,6 +203,18 @@ describe("handleBuild", () => {
       isDirectory: true,
       cleanup: vi.fn(async () => {}),
     });
+  });
+
+  it("레지스트리가 공용 연결이면 공용 시크릿을 읽고 ECR 저장소는 배포 프로젝트 것을 쓴다 (#215)", async () => {
+    const harness = makeHarness({ registryOwnerProjectId: null });
+
+    await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+    const context = harness.queries.find((q) => q.sql.includes("SELECT d.status"))!;
+    expect(context.sql).toContain("registry_environment.project_id AS registry_environment_project_id");
+    expect(harness.secretReader.read).toHaveBeenCalledWith(null, "aws-access");
+    expect(harness.secretReader.read).toHaveBeenCalledWith(null, "aws-secret");
+    expect(harness.registry.ensureProjectRepository).toHaveBeenCalledWith(1);
   });
 
   it("Secret reference로 ECR에 build하고 digest를 저장한다", async () => {
@@ -334,5 +357,70 @@ describe("handleBuild", () => {
       harness.queries.some((query) => query.sql.includes("DELETE FROM env_locks")),
     ).toBe(true);
     expect(harness.getStatus()).toBe("failed");
+  });
+
+  describe("재배포 이미지 재사용", () => {
+    const OLD_DIGEST = `sha256:${"b".repeat(64)}`;
+
+    it("원본 배포의 이미지를 복사하고 빌드 없이 다음 단계로 간다", async () => {
+      const harness = makeHarness({ reusableDigest: OLD_DIGEST });
+
+      await handleBuild(
+        { data: { deployment_id: 42, redeployed_from: 7 } },
+        harness.deps,
+      );
+
+      const copy = harness.queries.find(
+        (query) =>
+          query.sql.includes("INSERT INTO build_artifacts") &&
+          query.sql.includes("SELECT"),
+      );
+      expect(copy?.params).toEqual([42, 7]);
+      expect(harness.buildHandler.build).not.toHaveBeenCalled();
+      expect(harness.secretReader.read).not.toHaveBeenCalled();
+      expect(harness.getStatus()).toBe("provisioning");
+      expect(harness.boss.send).toHaveBeenCalledWith("provision", {
+        deployment_id: 42,
+      });
+      const stateChanges = harness.notifier.notify.mock.calls
+        .filter(([, event]) => event === "state_changed")
+        .map(([, , payload]) => (payload as { status: string }).status);
+      expect(stateChanges).toEqual([
+        "building",
+        "planning",
+        "awaiting_plan_approval",
+        "provisioning",
+      ]);
+      const logLines = harness.notifier.notify.mock.calls
+        .filter(([, event]) => event === "log.line")
+        .map(([, , payload]) => JSON.stringify(payload));
+      expect(logLines.some((line) => line.includes(OLD_DIGEST) && line.includes("#7"))).toBe(true);
+    });
+
+    it("재사용할 이미지가 없으면 지금처럼 빌드한다", async () => {
+      const harness = makeHarness();
+
+      await handleBuild(
+        { data: { deployment_id: 42, redeployed_from: 7 } },
+        harness.deps,
+      );
+
+      expect(harness.buildHandler.build).toHaveBeenCalledTimes(1);
+      const saved = harness.queries.find(
+        (query) =>
+          query.sql.includes("INSERT INTO build_artifacts") &&
+          query.sql.includes("VALUES"),
+      );
+      expect(saved?.params[3]).toBe(DIGEST);
+      expect(harness.getStatus()).toBe("provisioning");
+    });
+
+    it("재배포가 아니면 재사용 조회를 하지 않는다", async () => {
+      const harness = makeHarness({ reusableDigest: OLD_DIGEST });
+
+      await handleBuild({ data: { deployment_id: 42 } }, harness.deps);
+
+      expect(harness.buildHandler.build).toHaveBeenCalledTimes(1);
+    });
   });
 });

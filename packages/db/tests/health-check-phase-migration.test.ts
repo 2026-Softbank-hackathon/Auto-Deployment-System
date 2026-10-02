@@ -8,10 +8,10 @@ const migrationPath = join(
   __dirname,
   "..",
   "migrations",
-  "012_health_check_attempt_phase.sql",
+  "013_health_check_attempt_phase.sql",
 );
 
-describe("012 health check phase migration", () => {
+describe("013 health check phase migration", () => {
   it("기존 시도를 target으로 보존하고 허용 phase를 제한한다", async () => {
     const sql = await readFile(migrationPath, "utf8");
     expect(sql).toMatch(/ADD COLUMN phase VARCHAR\(32\) NOT NULL DEFAULT 'target'/i);

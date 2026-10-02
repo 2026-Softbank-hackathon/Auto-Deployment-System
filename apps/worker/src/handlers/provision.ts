@@ -14,7 +14,7 @@ import { TerraformCliError } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
 
 export type ProvisionJobPayload = {
-  deployment_id: number;
+  deployment_id: number | string;
 };
 
 type ProvisionContext = {
@@ -23,6 +23,8 @@ type ProvisionContext = {
   target_profile: string | null;
   target_environment_id: number | string | null;
   target_environment_type: string | null;
+  /** 대상 연결의 소유 프로젝트 — 공용 연결(#215)이면 null */
+  target_environment_project_id: number | string | null;
   aws_config: unknown;
   ir_json: unknown;
   repository_uri: string | null;
@@ -41,7 +43,7 @@ export async function handleProvision(
   job: { data: ProvisionJobPayload },
   deps: WorkerDeps,
 ): Promise<void> {
-  const deploymentId = job.data.deployment_id;
+  const deploymentId = parsePositiveId(job.data.deployment_id, "DEPLOYMENT_ID_INVALID");
   const stepLog = createStepLogger(deps, deploymentId, "provision");
   let activeStatus: Status | null = null;
 
@@ -152,9 +154,15 @@ export async function handleProvision(
     ) {
       throw new Error("AWS_CREDENTIALS_UNSUPPORTED");
     }
+    // 시크릿은 대상 연결의 소유 범위에서 읽는다 (공용 연결이면 공용 시크릿, #215).
+    // Terraform state key · 리소스 이름은 아래처럼 배포 프로젝트 기준이라 앱끼리 겹치지 않는다.
+    const secretOwnerId =
+      context.target_environment_project_id === null
+        ? null
+        : parsePositiveId(context.target_environment_project_id, "PROJECT_ID_INVALID");
     const [accessKeyId, secretAccessKey] = await Promise.all([
-      deps.secretReader.read(projectId, awsConfig.accessKeyIdSecretName),
-      deps.secretReader.read(projectId, awsConfig.secretAccessKeySecretName),
+      deps.secretReader.read(secretOwnerId, awsConfig.accessKeyIdSecretName),
+      deps.secretReader.read(secretOwnerId, awsConfig.secretAccessKeySecretName),
     ]);
 
     const moduleDirectory = path.resolve(
@@ -338,6 +346,7 @@ async function loadProvisionContext(
             d.target_profile,
             d.target_environment_id,
             target_environment.type AS target_environment_type,
+            target_environment.project_id AS target_environment_project_id,
             target_environment.aws_config,
             ir.ir_json,
             artifact.repository_uri,

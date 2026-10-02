@@ -1,10 +1,11 @@
-import { useId, useRef, useState } from 'react';
-import { cancelDeployment, redeployDeployment } from '../../api/deployment-api';
+import { useEffect, useId, useRef, useState } from 'react';
+import { cancelDeployment, listEnvironments, listSharedEnvironments, redeployDeployment, type EnvironmentSummary } from '../../api/deployment-api';
 import type { Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
-import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
+import { redeployReasonText, serverReasonText, useI18n } from '../../i18n/I18nProvider';
 import { deploymentStatusView } from '../deployment-status/status-view';
 import { DeploymentRow } from './DeploymentRow';
+import { CONNECTIONS_PATH, EnvironmentChooser } from './EnvironmentChooser';
 import { RowMenu, type RowMenuItem } from './RowMenu';
 import { displayProjectName, isStalled, safeHttpUrl } from './format';
 import type { DeploymentListItem } from './useDeploymentList';
@@ -31,16 +32,29 @@ function matchesStatus(item: DeploymentListItem, filter: StatusFilter): boolean 
 }
 
 /**
+ * 프로젝트에서 쓸 수 있는 연결 = 프로젝트 전용 연결 + 공용 연결(#215). 같은 연결이 두 목록에 다 있으면 한 번만 넣는다.
+ * 공용 연결 목록을 못 읽으면(그 기능이 없는 서버) 프로젝트 연결만 쓴다.
+ */
+async function loadDeployTargets(projectId: string): Promise<EnvironmentSummary[]> {
+  const [own, shared] = await Promise.all([listEnvironments(projectId), listSharedEnvironments().catch(() => [])]);
+  const ownIds = new Set(own.map((environment) => environment.id));
+  return [...own, ...shared.filter((environment) => !ownIds.has(environment.id))];
+}
+
+/**
  * 배포 목록 + 검색 · 상태 필터 · 페이지 나누기. 배포 현황(전체)과 프로젝트 상세(한 프로젝트)가 같이 쓴다.
  * 받은 목록 안에서 찾는다 (전역 검색 API가 없다). 목록이 다시 들어와도 검색어 · 페이지는 유지한다.
  *
  * 행마다 "⋯" 메뉴가 있고, 끝난 배포(성공 · 실패 · 중단)는 거기서 재배포한다.
+ * 성공한 이전 버전은 롤백(같은 환경에 그 배포를 다시 배포)할 수 있고, projectId를 주면 다른 종류의 환경(AWS ↔ 온프레미스)으로도 배포할 수 있다.
  */
-export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, onChanged }: {
+export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, onChanged, projectId }: {
   items: DeploymentListItem[]; now: number; onNavigate: Navigate;
   searchPlaceholder: string;
   /** 배포 상태를 바꾼 뒤(취소) 목록을 다시 읽게 한다 */
   onChanged?: () => void;
+  /** 한 프로젝트의 목록일 때. 이 프로젝트의 연결을 읽어 "다른 환경으로 배포"를 보여 준다 */
+  projectId?: string;
 }) {
   const { t } = useI18n();
   const searchId = useId();
@@ -71,6 +85,32 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
   // 취소는 되돌릴 수 없어서 한 번 더 확인받는다.
   const [cancelTarget, setCancelTarget] = useState<DeploymentListItem | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // 롤백도 지금 서비스 중인 버전을 바꾸므로 한 번 더 확인받는다.
+  const [rollbackTarget, setRollbackTarget] = useState<DeploymentListItem | null>(null);
+  // 다른 환경으로 배포할 원래 배포 (연결 고르는 창이 열려 있는 동안)
+  const [switchSource, setSwitchSource] = useState<DeploymentListItem | null>(null);
+
+  // 다른 환경으로 배포할 수 있는 연결. null = 읽는 중
+  const [targets, setTargets] = useState<EnvironmentSummary[] | 'error' | null>(null);
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    setTargets(null);
+    loadDeployTargets(projectId).then((loaded) => { if (active) setTargets(loaded); }, () => { if (active) setTargets('error'); });
+    return () => { active = false; };
+  }, [projectId]);
+  /** 원래 배포와 종류가 다른 연결. 종류를 모르는 옛 배포는 원래 연결이 아닌 것 모두 */
+  const switchTargets = (item: DeploymentListItem) => (Array.isArray(targets) ? targets : [])
+    .filter((environment) => (item.environmentType ? environment.type !== item.environmentType : environment.id !== item.environmentId));
+  const environmentLabel = (item: DeploymentListItem) => (item.environmentType ? t.deploy.targets[item.environmentType] : t.versions.sameEnvironment);
+  const itemName = (item: DeploymentListItem) => `${displayProjectName(item.projectName)} ${t.dashboard.deploymentNo(item.id)}`;
+
+  /** 확인 줄은 한 번에 하나만 띄운다 */
+  function ask(next: { cancel?: DeploymentListItem; rollback?: DeploymentListItem }) {
+    setFailure(null);
+    setCancelTarget(next.cancel ?? null);
+    setRollbackTarget(next.rollback ?? null);
+  }
   async function cancel(item: DeploymentListItem) {
     if (cancelling) return;
     setCancelling(true);
@@ -86,27 +126,51 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
       setCancelling(false);
     }
   }
-  async function redeploy(item: DeploymentListItem) {
+  /** 재배포 · 롤백(같은 환경) · 다른 환경으로 배포. 새 배포가 만들어지면 그 진행 화면으로 간다. */
+  async function redeploy(item: DeploymentListItem, failedTitle: string, targetEnvironmentId?: string) {
     if (starting) return;
     setStarting(item.id);
     setFailure(null);
     try {
-      const created = await redeployDeployment(item.id);
+      const created = await redeployDeployment(item.id, targetEnvironmentId);
       onNavigate(`/deployments/${encodeURIComponent(created.deploymentId)}`);
     } catch (error) {
-      setFailure({ id: item.id, title: t.redeploy.failed, reason: serverReasonText(error, t, t.redeploy.failed) });
+      setFailure({ id: item.id, title: failedTitle, reason: redeployReasonText(error, t, failedTitle) });
       setStarting(null);
+      setRollbackTarget(null);
+      setSwitchSource(null);
     }
+  }
+
+  /** 다른 환경으로 배포 메뉴 항목. 고를 연결이 없으면 이유와 함께 막고, 연결 화면으로 가는 길을 바로 아래에 둔다. */
+  function switchItems(item: DeploymentListItem): RowMenuItem[] {
+    const other = item.environmentType === 'aws' ? t.deploy.targets.onprem : item.environmentType === 'onprem' ? t.deploy.targets.aws : t.versions.otherConnection;
+    const none = Array.isArray(targets) && switchTargets(item).length === 0;
+    const disabledReason = blocked(item) ? t.redeploy.blocked
+      : targets === null ? t.versions.switchLoading
+        : targets === 'error' ? t.versions.switchLoadError
+          : none ? t.versions.switchNeedsConnection(other) : undefined;
+    return [
+      { key: 'switch', label: t.versions.switchEnv, onSelect: () => { ask({}); setSwitchSource(item); }, disabledReason },
+      ...(none ? [{ key: 'connections', label: t.versions.goConnections, href: CONNECTIONS_PATH }] : []),
+    ];
   }
 
   // 메뉴에는 행의 기본 버튼과 겹치지 않는 동작만 둔다. 기본 버튼이 이미 진행 화면(지켜보기 · 원인 보기 · 자세히)이나
   // 결과 화면으로 가므로, 같은 곳으로 가는 항목은 넣지 않는다.
   function menuItems(item: DeploymentListItem): RowMenuItem[] {
     // 진행 중인 배포는 취소만 할 수 있다. 취소하면 환경 락이 풀려 같은 프로젝트를 다시 배포할 수 있다.
-    if (!finished(item)) return [{ key: 'cancel', label: t.cancel.button, onSelect: () => { setFailure(null); setCancelTarget(item); } }];
-    const opensLiveUrl = deploymentStatusView(item.status).outcome === 'success' && safeHttpUrl(item.publicUrl) !== null;
+    if (!finished(item)) return [{ key: 'cancel', label: t.cancel.button, onSelect: () => ask({ cancel: item }) }];
+    const outcome = deploymentStatusView(item.status).outcome;
+    // 기본 버튼이 "열기"인 건 지금 서비스 중인 배포뿐이다 (DeploymentRow)
+    const opensLiveUrl = outcome === 'success' && item.isLive && safeHttpUrl(item.publicUrl) !== null;
+    const blockedReason = blocked(item) ? t.redeploy.blocked : undefined;
     return [
-      { key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item), disabledReason: blocked(item) ? t.redeploy.blocked : undefined },
+      { key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item, t.redeploy.failed), disabledReason: blockedReason },
+      // 분석까지 끝난 배포만 다시 배포할 수 있다. 실패한 배포도 분석 뒤에 실패했으면 된다 (분석 결과가 없으면 서버가 거절).
+      ...(projectId && (outcome === 'success' || outcome === 'failed') ? switchItems(item) : []),
+      // 지금 서비스 중이 아닌 성공 배포만 롤백할 수 있다.
+      ...(outcome === 'success' && !item.isLive ? [{ key: 'rollback', label: t.versions.rollback, onSelect: () => ask({ rollback: item }), disabledReason: blockedReason }] : []),
       // 성공한 배포의 기본 버튼이 "열기"(배포된 앱)일 때만, 결과 화면으로 가는 길을 메뉴에 둔다.
       ...(opensLiveUrl ? [{ key: 'result', label: t.dashboard.viewResult, href: `/deployments/${encodeURIComponent(item.id)}/result` }] : []),
     ];
@@ -128,10 +192,19 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     </div>
 
     {cancelTarget && <div className="selection-bar" role="alertdialog" aria-label={t.cancel.button}>
-      <span>{t.cancel.confirm(`${displayProjectName(cancelTarget.projectName)} ${t.dashboard.deploymentNo(cancelTarget.id)}`)}</span>
+      <span>{t.cancel.confirm(itemName(cancelTarget))}</span>
       <Keycap disabled={cancelling} onClick={() => void cancel(cancelTarget)}>{cancelling ? t.cancel.cancelling : t.cancel.button}</Keycap>
       <Keycap variant="ghost" disabled={cancelling} onClick={() => setCancelTarget(null)}>{t.cancel.keep}</Keycap>
     </div>}
+    {rollbackTarget && <div className="selection-bar" role="alertdialog" aria-label={t.versions.rollback}>
+      <span>{t.versions.rollbackConfirm(itemName(rollbackTarget), environmentLabel(rollbackTarget))}</span>
+      <Keycap sound="start" disabled={starting !== null} onClick={() => void redeploy(rollbackTarget, t.versions.rollbackFailed)}>{starting === rollbackTarget.id ? t.versions.rollbackStarting : t.versions.rollbackStart}</Keycap>
+      <Keycap variant="ghost" disabled={starting !== null} onClick={() => setRollbackTarget(null)}>{t.versions.rollbackKeep}</Keycap>
+    </div>}
+    {projectId && <EnvironmentChooser open={switchSource !== null} sourceName={switchSource ? itemName(switchSource) : ''}
+      environments={switchSource ? switchTargets(switchSource) : []} starting={starting !== null}
+      onChoose={(environment) => { if (switchSource) void redeploy(switchSource, t.versions.switchFailed, environment.id); }}
+      onClose={() => setSwitchSource(null)} onNavigate={onNavigate} />}
     {failure && <div className="notice error" role="alert"><strong>{t.dashboard.deploymentNo(failure.id)} — {failure.title}</strong><br />{failure.reason}</div>}
 
     <p className="dashboard-status" role="status" aria-live="polite">
@@ -141,7 +214,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
 
     {visible.length > 0 && <section className="deployment-list" aria-label={t.dashboard.listLabel}>
       {visible.map((deployment) => <DeploymentRow key={deployment.id} deployment={deployment} now={now} onNavigate={onNavigate}
-        menu={<RowMenu label={`${displayProjectName(deployment.projectName)} ${t.dashboard.deploymentNo(deployment.id)}`} items={menuItems(deployment)} onNavigate={onNavigate} />} />)}
+        menu={<RowMenu label={itemName(deployment)} items={menuItems(deployment)} onNavigate={onNavigate} />} />)}
     </section>}
 
     {pageCount > 1 && <nav className="pager" aria-label={t.dashboard.pagerLabel}>

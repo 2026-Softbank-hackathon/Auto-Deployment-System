@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, type DeploymentLogStep, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
@@ -10,7 +10,9 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { DeployScene } from './DeployScene';
+import { DeployScene, koroSpot, SCENE_SIZE, sceneTarget } from './DeployScene';
+import { koroIdle, koroLine, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
+import { localizeLogLine } from './log-line-i18n';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
@@ -65,6 +67,12 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
   return logs.map((log) => (log === existing ? { ...log, text: `${log.text}\n${entry.line}` } : log));
 }
 /** 로그 줄 앞의 "[ISO 시각]"으로 가장 최근 줄을 고른다. */
+/** 진행 탭의 "지금" 자리에 보여 주는 최근 로그 줄 수 (좁은 화면에서는 마지막 한 줄만 보인다) */
+const RECENT_LINES = 3;
+/** "지금" 자리에 보여 줄 줄: 시각을 떼고 화면 언어로 옮긴다. 옮길 수 없는 줄은 뺀다. */
+function nowLines(lines: string[], locale: string): string[] {
+  return lines.flatMap((line) => localizeLogLine(line.replace(/^\[[^\]]+\]\s*/, ''), locale) ?? []);
+}
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
 
 /** 진행 중일 때만 1초마다 다시 그린다. 경과 시간은 서버의 createdAt 기준 실제 값이다. */
@@ -78,7 +86,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function StageChips({ view }: { view: DeploymentStatusView }) {
+function StageChips({ view, currentElapsed }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null }) {
   const { t } = useI18n();
   return <ol className="stage-chips" aria-label={t.run.chipsLabel}>
     {railStages.map((stage, index) => {
@@ -90,19 +98,19 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
       return <li key={stage} className={`stage-chip is-${state}`} aria-current={current ? 'step' : undefined}>
         <GadgetIcon kind={stage} size={18} />
         <span>{t.stages[stage]}</span>
-        {note && <span className="stage-chip__note">{done ? `✓ ${note}` : note}</span>}
+        {note && <span className="stage-chip__note">{done ? `✓ ${note}` : current && currentElapsed && !view.waiting ? `${note} ${currentElapsed}` : note}</span>}
       </li>;
     })}
   </ol>;
 }
 
-interface DeploymentProgressProps { deploymentId: string; /** 주소가 고른 탭 */ tab: DeploymentTab; onNavigate: Navigate; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
+interface DeploymentProgressProps { deploymentId: string; /** 주소가 고른 탭 */ tab: DeploymentTab; onNavigate: Navigate; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 연결 화면으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
 
 export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded, onNewDeployment, onFixSettings, onRedeployed }: DeploymentProgressProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
-  const [latestLine, setLatestLine] = useState<string | null>(null);
+  const [recentLines, setRecentLines] = useState<string[]>([]);
   const [logs, setLogs] = useState<StepLog[] | null>(null);
   const [error, setError] = useState<ErrorState>(null);
   const [loading, setLoading] = useState(true);
@@ -124,7 +132,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
       if (event.name === 'log.line') {
         const entry = readLogLine(event.payload);
         if (!entry) return;
-        setLatestLine(entry.line);
+        setRecentLines((previous) => [...previous, entry.line].slice(-RECENT_LINES));
         setLogs((previous) => (previous ? appendLogLine(previous, entry) : previous));
         return;
       }
@@ -132,14 +140,14 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     }, () => { /* The server closes SSE after succeeded/failed; HTTP remains authoritative. */ });
   }, [deploymentId, refresh]);
 
-  // 작업 노트 첫 줄 — 단계별 마지막 로그 한 줄씩 받아 가장 최근 것을 쓴다.
+  // "지금" 줄 — 단계별 마지막 로그 몇 줄을 받아 가장 최근 것들을 쓴다. 실시간 줄이 먼저 왔으면 건드리지 않는다.
   useEffect(() => {
     let active = true;
-    void Promise.allSettled(deploymentLogSteps.map((step) => getDeploymentLogs(deploymentId, step, 1))).then((results) => {
+    void Promise.allSettled(deploymentLogSteps.map((step) => getDeploymentLogs(deploymentId, step, RECENT_LINES))).then((results) => {
       if (!active) return;
-      const lines = results.flatMap((result) => (result.status === 'fulfilled' && result.value ? [result.value.trim().split('\n').pop() ?? ''] : [])).filter(Boolean);
-      const newest = lines.sort((a, b) => lineTime(b) - lineTime(a))[0];
-      if (newest) setLatestLine((current) => current ?? newest);
+      const lines = results.flatMap((result) => (result.status === 'fulfilled' && result.value ? result.value.trim().split('\n') : [])).filter(Boolean);
+      const newest = lines.sort((a, b) => lineTime(a) - lineTime(b)).slice(-RECENT_LINES);
+      if (newest.length) setRecentLines((current) => (current.length ? current : newest));
     });
     return () => { active = false; };
   }, [deploymentId]);
@@ -219,6 +227,31 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const finishedAt = text(status?.succeededAt) ?? text(status?.failedAt);
   const elapsedText = createdAt ? elapsed(createdAt, finishedAt ? Date.parse(finishedAt) : now) : null;
   const title = view.outcome === 'active' ? t.run.titleActive : view.outcome === 'success' ? t.run.titleSucceeded : view.outcome === 'failed' ? t.run.titleFailed : t.run.titleStopped;
+  // 서버가 준 현재 단계의 시작 시각. 단계 칩에 "그 단계에서 흐른 시간"을 보여 주는 데 쓴다(없으면 표시하지 않는다).
+  const currentStep = status?.currentStep && typeof status.currentStep === 'object' ? status.currentStep as { startedAt?: unknown } : null;
+  const stepStartedAt = text(currentStep?.startedAt);
+  // 코로의 말과 몸짓에 쓰는 "이 단계에서 흐른 시간". 서버가 준 단계 시작 시각과, 이 화면이 본 마지막 상태 변화 중 늦은 쪽부터 센다.
+  // (서버는 인프라 준비와 배포를 한 단계로 기록하므로, 상태가 바뀐 순간을 화면에서도 기억한다.)
+  const [changedAt, setChangedAt] = useState<{ status: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!currentStatus) return;
+    setChangedAt((previous) => (previous === null ? { status: currentStatus, at: 0 } : previous.status === currentStatus ? previous : { status: currentStatus, at: Date.now() }));
+  }, [currentStatus]);
+  const stageSince = Math.max(stepStartedAt ? Date.parse(stepStartedAt) : 0, changedAt?.at ?? 0);
+  const stepSeconds = stageSince > 0 ? Math.max(0, Math.floor((now - stageSince) / 1000)) : 0;
+  const rolling = view.outcome === 'active' && !view.waiting && !waitingForEnv;
+  // 분석이 끝난 뒤(빌드 단계부터) 분석 결과를 받아 코로가 말할 사실로 쓴다. 못 받아도 일반 문장으로 말한다.
+  const [facts, setFacts] = useState<AnalysisFacts | null>(null);
+  const analysisDone = view.stage !== null && view.stage >= 1;
+  useEffect(() => {
+    if (!analysisDone) return;
+    let active = true;
+    getDeploymentAnalysisReport(deploymentId).then((report) => { if (active) setFacts(readAnalysisFacts(report.services)); }, () => { /* 분석 결과가 없어도 진행 화면은 동작한다 */ });
+    return () => { active = false; };
+  }, [deploymentId, analysisDone]);
+  const target = sceneTarget(text(status?.targetProfile));
+  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t) : null;
+  const [koroX, koroY] = koroSpot(view);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
   const failure = failureKind(failureMessage);
@@ -282,7 +315,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </p>
       </div>
 
-      <StageChips view={view} />
+      <StageChips view={view} currentElapsed={stepStartedAt && view.outcome === 'active' ? elapsed(stepStartedAt, now) : null} />
 
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
@@ -304,7 +337,23 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure className="run-scene"><DeployScene view={view} /></figure>
+        <figure className={`run-scene ${talk ? 'has-talk' : ''}`}>
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} />
+          {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
+              풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
+              좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
+          {talk && <div className={`koro-think ${koroX > SCENE_SIZE.width * 0.82 ? 'is-left' : 'is-right'} ${koroX > SCENE_SIZE.width * 0.7 ? 'is-near-edge' : ''}`}
+            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2) / SCENE_SIZE.height) * 100}%` } as CSSProperties}>
+            <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
+            <p key={talk} className="koro-think__bubble">{talk}</p>
+          </div>}
+        </figure>
+
+        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 최근 로그 몇 줄(시각은 떼고 화면 언어로 옮긴다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
+        {view.outcome === 'active' && !view.waiting && nowLines(recentLines, t.locale).length > 0 && <div className="run-now" aria-live="polite">
+          <span>{t.run.nowLabel}</span>
+          <ol>{nowLines(recentLines, t.locale).map((line, index) => <li key={`${index}-${line}`}><code>{line}</code></li>)}</ol>
+        </div>}
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 
@@ -337,7 +386,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     {shownTab === 'logs' && <section className="work-note" aria-label={t.run.workNote}>
       <div className="work-note__bar">
         <h2>{t.run.workNote}</h2>
-        <p className="work-note__line">{latestLine ?? t.run.noNote}</p>
+        <p className="work-note__line">{recentLines[recentLines.length - 1] ?? t.run.noNote}</p>
         <div className="work-note__actions">
           <Keycap variant="ghost" onClick={() => { void refresh(); void loadLogs(); }}>{t.progress.refresh}</Keycap>
         </div>

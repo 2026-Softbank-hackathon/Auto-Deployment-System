@@ -32,11 +32,16 @@ import {
  * multipart 필드. Zod 로 parse 하지 않고 라우트가 직접 검사한다 (문서 · 타입용).
  * 프론트: `FormData` 에 source(zip, 최대 100MB) · project_id · target 을 넣어 보낸다.
  * target 은 벤더 (aws/onprem), 서버가 default profile 매핑.
+ *
+ * environment_id(#215): 배포할 연결을 직접 고른다. 공용 연결이거나 이 프로젝트의 연결이어야 하고,
+ * 연결의 type 이 벤더를 정한다 (target 은 생략 가능, 같이 보내면 type 과 같아야 함 — 다르면 400).
+ * environment_id 가 없으면 target 필수 → 프로젝트 기본 연결, 없으면 공용 기본 연결을 쓴다.
  */
 export type CreateDeploymentFields = {
   source: Blob;
   project_id: string | number;
-  target: TargetVendor;
+  target?: TargetVendor;
+  environment_id?: string | number;
 };
 
 export const CreateDeploymentResponseSchema = z
@@ -248,6 +253,9 @@ export type Diagnosis = z.infer<typeof DiagnosisSchema>;
 /**
  * 이전에 올린 소스(IR 포함)를 재사용해 바로 빌드부터 재배포한다.
  * `targetEnvironmentId` 를 주면 해당 환경으로 override (이슈 #140 과 공유).
+ * - 다른 종류 환경이면 프로필 · 이미지 Registry 환경을 그 환경에 맞게 다시 고른다.
+ * - 원본 배포의 이미지가 있고 Registry 환경이 같으면 빌드 없이 같은 이미지(digest)를 쓴다.
+ * - 롤백 = 이전 배포 ID 로 같은 환경에 재배포.
  */
 export const RedeployBodySchema = z.object({
   /** 재배포할 환경 ID override. 없으면 소스 deployment 의 환경 그대로. */

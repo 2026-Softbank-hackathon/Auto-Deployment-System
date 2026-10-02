@@ -3,7 +3,7 @@ import { Koro } from '../../components/ui/Koro';
 import { Rail } from '../../components/ui/Rail';
 import { useI18n } from '../../i18n/I18nProvider';
 
-const stops: ReadonlyArray<GadgetKind> = ['source', 'analyze', 'deploy', 'verify', 'done'];
+const stops: ReadonlyArray<GadgetKind> = ['source', 'analyze', 'build', 'provision', 'deploy', 'verify', 'done'];
 
 /** 간단 배포 화면 상단 레일. 배포 시작 전이므로 첫 정거장(소스 넣기)만 상태를 가진다. */
 export function PipelineRail({ sourceReady }: { sourceReady: boolean }) {

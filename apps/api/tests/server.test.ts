@@ -141,7 +141,7 @@ describe("POST /api/v1/projects", () => {
 describe("GET /api/v1/projects", () => {
   it("returns project list", async () => {
     const project = makeProject(1, "todo-app");
-    mockPool.on(/SELECT id, name, description, created_at, updated_at\s+FROM projects/, () => ({
+    mockPool.on(/FROM projects p/, () => ({
       rows: [project],
     }));
 
@@ -161,7 +161,7 @@ describe("POST /api/v1/deployments", () => {
     mockPool.on(/SELECT id FROM environments/, (params) => ({
       rows: [{ id: params[1] === "onprem" ? 20 : 10 }],
     }));
-    mockPool.on(/SELECT aws_config FROM environments/, () => ({
+    mockPool.on(/SELECT aws_config, project_id FROM environments/, () => ({
       rows: [{
         aws_config: {
           credentialsType: "access_key",

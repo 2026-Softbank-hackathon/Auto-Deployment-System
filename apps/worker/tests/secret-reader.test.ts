@@ -31,6 +31,21 @@ describe("PostgresProjectSecretReader", () => {
     expect(pool.query).toHaveBeenCalledWith(expect.any(String), [1, "aws-secret"]);
   });
 
+  it("소유 범위가 null 이면 공용 시크릿(project_id IS NULL)에서 읽는다 (#215)", async () => {
+    const pool = {
+      query: vi.fn(async () => ({ rows: [] })),
+    } as unknown as Pool;
+
+    await expect(
+      new PostgresProjectSecretReader(pool, randomBytes(32)).read(null, "aws-secret"),
+    ).rejects.toThrow("PROJECT_SECRET_NOT_FOUND");
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("project_id IS NOT DISTINCT FROM $1::bigint"),
+      [null, "aws-secret"],
+    );
+  });
+
   it("없는 Secret과 잘못된 master key를 값 없는 오류로 반환한다", async () => {
     const emptyPool = {
       query: vi.fn(async () => ({ rows: [] })),

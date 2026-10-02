@@ -6,15 +6,22 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  CreateEnvironmentBodySchema,
+  CreateSecretBodySchema,
   DEPLOYMENT_EVENT_NAMES,
   DeploymentEventSchema,
   DeploymentSchema,
+  EnvironmentSchema,
   ErrorBodySchema,
   ListProjectDeploymentsQuerySchema,
+  OptionalProjectIdQuerySchema,
   PatchProjectEnvBodySchema,
+  ProjectDeploymentSchema,
   ProjectSchema,
+  SecretSchema,
   TARGET_VENDORS,
   TargetVendorSchema,
+  UpdateEnvironmentBodySchema,
   type DeploymentEventData,
 } from "../src/index.js";
 
@@ -23,6 +30,8 @@ const project = {
   name: "todo-app",
   createdAt: "2026-09-30T03:00:00.000Z",
   updatedAt: "2026-09-30T03:00:00.000Z",
+  live: null,
+  latest: null,
 };
 
 describe("TARGET_VENDORS", () => {
@@ -40,6 +49,61 @@ describe("TARGET_VENDORS", () => {
 });
 
 describe("응답 스키마", () => {
+  it("Project.live · latest — 서비스 중인 배포와 최근 배포 요약", () => {
+    const withDeployments = {
+      ...project,
+      live: {
+        deploymentId: "7",
+        environmentId: "3",
+        environmentType: "onprem",
+        environmentName: "home-mac",
+        publicUrl: "https://service-1.example.com",
+        succeededAt: "2026-09-30T03:10:00.000Z",
+      },
+      latest: {
+        deploymentId: "8",
+        status: "building",
+        environmentType: "aws",
+        createdAt: "2026-09-30T03:20:00.000Z",
+      },
+    };
+    expect(ProjectSchema.safeParse(withDeployments).success).toBe(true);
+    // 환경이 없는 옛 배포 — 환경 필드 null
+    const legacy = {
+      ...withDeployments,
+      live: { ...withDeployments.live, environmentId: null, environmentType: null, environmentName: null, publicUrl: null },
+      latest: { ...withDeployments.latest, environmentType: null },
+    };
+    expect(ProjectSchema.safeParse(legacy).success).toBe(true);
+    expect(ProjectSchema.safeParse({ ...withDeployments, live: { ...withDeployments.live, extra: 1 } }).success).toBe(false);
+    expect(ProjectSchema.safeParse({ ...withDeployments, latest: { ...withDeployments.latest, environmentType: "gcp" } }).success).toBe(false);
+    const { live: _live, ...noLive } = withDeployments;
+    expect(ProjectSchema.safeParse(noLive).success).toBe(false);
+  });
+
+  it("ProjectDeployment — 환경 정보와 isLive", () => {
+    const item = {
+      id: "7",
+      status: "succeeded",
+      targetProfile: "onprem-docker-basic",
+      publicUrl: null,
+      sourceVersion: null,
+      createdAt: "2026-09-30T03:00:00.000Z",
+      succeededAt: "2026-09-30T03:10:00.000Z",
+      failedAt: null,
+      environmentId: "3",
+      environmentType: "onprem",
+      environmentName: "home-mac",
+      isLive: true,
+    };
+    expect(ProjectDeploymentSchema.safeParse(item).success).toBe(true);
+    expect(
+      ProjectDeploymentSchema.safeParse({ ...item, environmentId: null, environmentType: null, environmentName: null, isLive: false }).success,
+    ).toBe(true);
+    const { isLive: _isLive, ...noIsLive } = item;
+    expect(ProjectDeploymentSchema.safeParse(noIsLive).success).toBe(false);
+  });
+
   it("선언 안 된 필드 · 빠진 필드를 거부함 (strict)", () => {
     expect(ProjectSchema.safeParse(project).success).toBe(true);
     expect(ProjectSchema.safeParse({ ...project, extra: 1 }).success).toBe(false);
@@ -125,5 +189,59 @@ describe("SSE 이벤트", () => {
         "state_changed",
       ].sort(),
     );
+  });
+});
+
+describe("공용 연결 (#215)", () => {
+  const environment = {
+    id: "10",
+    projectId: null,
+    shared: true,
+    name: "my-mac",
+    type: "onprem",
+    isDefault: true,
+    onpremConfig: { hostname: "mac.local" },
+    agentStatus: null,
+    lastSeenAt: null,
+    agentOnline: true,
+    agentLastSeenAt: "2026-09-30T03:00:00.000Z",
+    createdAt: "2026-09-30T03:00:00.000Z",
+  };
+
+  it("Environment — 공용 연결은 projectId=null · shared=true, Agent 상태 필드가 있어야 함", () => {
+    expect(EnvironmentSchema.safeParse(environment).success).toBe(true);
+    expect(EnvironmentSchema.safeParse({ ...environment, projectId: "1", shared: false }).success).toBe(true);
+    const { agentOnline: _online, ...missingOnline } = environment;
+    expect(EnvironmentSchema.safeParse(missingOnline).success).toBe(false);
+    const { shared: _shared, ...missingShared } = environment;
+    expect(EnvironmentSchema.safeParse(missingShared).success).toBe(false);
+  });
+
+  it("Secret — 공용 시크릿은 projectId=null · shared=true", () => {
+    const secret = { name: "aws-key", projectId: null, shared: true, createdAt: "2026-09-30T03:00:00.000Z" };
+    expect(SecretSchema.safeParse(secret).success).toBe(true);
+    const { shared: _shared, ...missing } = secret;
+    expect(SecretSchema.safeParse(missing).success).toBe(false);
+  });
+
+  it("요청 — 환경 · 시크릿 생성과 목록 쿼리에서 projectId 생략 가능", () => {
+    expect(
+      CreateEnvironmentBodySchema.safeParse({
+        name: "aws",
+        type: "aws",
+        awsConfig: { credentialsType: "access_key", region: "ap-northeast-2" },
+      }).success,
+    ).toBe(true);
+    expect(CreateSecretBodySchema.safeParse({ name: "aws-key", value: "v" }).success).toBe(true);
+    expect(OptionalProjectIdQuerySchema.parse({})).toEqual({});
+    expect(OptionalProjectIdQuerySchema.parse({ projectId: "3" })).toEqual({ projectId: 3 });
+    expect(OptionalProjectIdQuerySchema.safeParse({ projectId: "0" }).success).toBe(false);
+  });
+
+  it("요청 — PATCH /environments/:id 는 isDefault: true 만 받는다 (#228)", () => {
+    expect(UpdateEnvironmentBodySchema.parse({ isDefault: true })).toEqual({ isDefault: true });
+    expect(UpdateEnvironmentBodySchema.safeParse({ isDefault: false }).success).toBe(false);
+    expect(UpdateEnvironmentBodySchema.safeParse({}).success).toBe(false);
+    expect(UpdateEnvironmentBodySchema.safeParse({ isDefault: true, name: "x" }).success).toBe(false);
   });
 });

@@ -12,7 +12,6 @@ import {
   RedeployBodySchema,
 } from "@camellia/contracts";
 import { DeploymentService } from "../services/deployment-service.js";
-import { resolveProfile } from "../services/profile-resolver.js";
 import { idParams, toJsonSchema } from "../plugins/swagger.js";
 
 const VALID_VENDORS = new Set<string>(TARGET_VENDORS);
@@ -31,11 +30,20 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       consumes: ["multipart/form-data"],
       body: {
         type: "object",
-        required: ["source", "project_id", "target"],
+        required: ["source", "project_id"],
         properties: {
           source: { type: "string", format: "binary", description: "소스 zip (최대 100MB)" },
           project_id: { type: "integer", minimum: 1 },
-          target: { type: "string", enum: [...VALID_VENDORS] },
+          target: {
+            type: "string",
+            enum: [...VALID_VENDORS],
+            description: "environment_id 가 없으면 필수. 프로젝트 기본 연결 → 공용 기본 연결 순으로 고름",
+          },
+          environment_id: {
+            type: "integer",
+            minimum: 1,
+            description: "배포할 연결 (공용 연결 또는 이 프로젝트 연결). 연결 type 이 target 을 정함 (#215)",
+          },
         },
       },
     },
@@ -43,6 +51,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
     let fileBuffer: Buffer | undefined;
     let rawProjectId: string | undefined;
     let rawTarget: string | undefined;
+    let rawEnvironmentId: string | undefined;
     for await (const part of request.parts()) {
       if (part.type === "file") {
         const chunks: Buffer[] = [];
@@ -52,6 +61,9 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
         rawProjectId = rawProjectId === undefined && typeof part.value === "string" ? part.value : "";
       } else if (part.fieldname === "target") {
         rawTarget = rawTarget === undefined && typeof part.value === "string" ? part.value : "";
+      } else if (part.fieldname === "environment_id") {
+        rawEnvironmentId =
+          rawEnvironmentId === undefined && typeof part.value === "string" ? part.value : "";
       }
     }
     if (!fileBuffer) {
@@ -64,15 +76,26 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       throw new ApiError(413, "FILE_TOO_LARGE", "zip 파일 크기가 100MB를 초과합니다.", "zip 파일 최대 크기는 100MB입니다.");
     }
 
-    // Validate target vendor
-    const target = rawTarget ?? "";
-    if (!VALID_VENDORS.has(target)) {
-      throw new ApiError(
-        400,
-        "VALIDATION_ERROR",
-        "target 은 aws 또는 onprem 이어야 합니다.",
-        "올바른 target 벤더를 지정하세요."
-      );
+    // environment_id: optional (#215) — 있으면 연결 type 이 target 을 정한다
+    let environmentId: number | undefined;
+    if (rawEnvironmentId !== undefined) {
+      environmentId = Number(rawEnvironmentId);
+      if (!/^\d+$/.test(rawEnvironmentId) || !Number.isSafeInteger(environmentId) || environmentId <= 0) {
+        throw new ApiError(400, "VALIDATION_ERROR", "environment_id는 양수 정수여야 합니다.");
+      }
+    }
+
+    // Validate target vendor (environment_id 가 있으면 생략 가능)
+    if (rawTarget !== undefined || environmentId === undefined) {
+      const target = rawTarget ?? "";
+      if (!VALID_VENDORS.has(target)) {
+        throw new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          "target 은 aws 또는 onprem 이어야 합니다.",
+          "올바른 target 벤더를 지정하거나 environment_id 로 연결을 고르세요."
+        );
+      }
     }
 
     // project_id: required
@@ -84,13 +107,11 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       throw new ApiError(400, "VALIDATION_ERROR", "project_id 필드가 필요합니다.", "POST /projects 로 프로젝트를 먼저 생성하세요.");
     }
 
-    // vendor → profile ID 매핑
-    const resolvedProfileId = resolveProfile(target as TargetVendor);
-
+    // vendor → profile ID 매핑은 서비스가 최종 연결 type 으로 한다
     const result = await svc.create({
       projectId: projectIdNum,
-      targetVendor: target as TargetVendor,
-      targetProfile: resolvedProfileId,
+      ...(rawTarget !== undefined ? { targetVendor: rawTarget as TargetVendor } : {}),
+      ...(environmentId !== undefined ? { environmentId } : {}),
       fileBuffer,
     });
 
@@ -117,7 +138,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       body: {
         type: "object",
         properties: {
-          targetEnvironmentId: { type: "string", pattern: "^\\d+$", description: "환경 override (없으면 소스 배포 환경 그대로)" },
+          targetEnvironmentId: { type: "string", pattern: "^\\d+$", description: "환경 override (없으면 소스 배포 환경 그대로). 다른 종류 환경이면 프로필 · Registry 재선정" },
         },
       },
     },

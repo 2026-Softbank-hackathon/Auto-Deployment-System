@@ -111,7 +111,7 @@ describe("SecretService", () => {
     const svc = new SecretService(pool, MASTER_KEY);
     const list = await svc.list({ projectId: 1 });
     expect(list).toHaveLength(2);
-    expect(list[0]).toEqual({ name: "aws-key-1", projectId: 1, createdAt: "2026-09-30T09:00:00.000Z" });
+    expect(list[0]).toEqual({ name: "aws-key-1", projectId: 1, shared: false, createdAt: "2026-09-30T09:00:00.000Z" });
     expect(list[0]).not.toHaveProperty("value");
   });
 

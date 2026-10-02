@@ -35,6 +35,7 @@ function makeHarness(overrides: Partial<{
   statusAfterApplyFailure: string;
   cleanupFailure: boolean;
   dnsPreparationFailure: Error;
+  targetOwnerProjectId: string | null;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
@@ -80,6 +81,8 @@ function makeHarness(overrides: Partial<{
               target_profile: overrides.targetType === "onprem" ? "onprem-docker-basic" : "aws-ecs-basic",
               target_environment_id: "34",
               target_environment_type: overrides.targetType ?? "aws",
+              target_environment_project_id:
+                overrides.targetOwnerProjectId === undefined ? "12" : overrides.targetOwnerProjectId,
               aws_config: {
                 credentialsType: "access_key",
                 accessKeyIdSecretName: "AWS_ACCESS_KEY_ID",
@@ -138,7 +141,7 @@ function makeHarness(overrides: Partial<{
     activate: vi.fn(async () => undefined),
   };
   const secretReader = {
-    read: vi.fn(async (_projectId: number, name: string) =>
+    read: vi.fn(async (_projectId: number | null, name: string) =>
       name === "AWS_ACCESS_KEY_ID" ? "access-key-value" : "secret-key-value",
     ),
   };
@@ -175,6 +178,34 @@ function makeHarness(overrides: Partial<{
 }
 
 describe("handleProvision", () => {
+  it.each(["aws", "onprem"] as const)("%s 큐의 문자열 배포 ID를 숫자로 정규화한다", async (targetType) => {
+    const harness = makeHarness({ targetType });
+
+    await handleProvision({ data: { deployment_id: "99" } }, harness.deps);
+
+    expect(harness.getStatus()).toBe(targetType === "onprem" ? "deploying" : "verifying");
+    if (targetType === "onprem") {
+      expect(harness.originActivator.prepareOnpremVerification).toHaveBeenCalledWith({
+        deploymentId: 99,
+        projectId: 12,
+      });
+      const payload = JSON.parse(String(harness.agentJobQueries[0]?.params[4]));
+      expect(payload.deploymentId).toBe(99);
+    } else {
+      expect(harness.boss.send).toHaveBeenCalledWith("verify", expect.objectContaining({
+        deploymentId: 99,
+      }));
+    }
+  });
+
+  it.each(["invalid", "0", "-1", "1.5", "9007199254740992"])("잘못된 큐 배포 ID는 외부 실행 전에 거부한다: %s", async (deploymentId) => {
+    const harness = makeHarness({ targetType: "onprem" });
+    await expect(handleProvision({ data: { deployment_id: deploymentId } }, harness.deps))
+      .rejects.toThrow("DEPLOYMENT_ID_INVALID");
+    expect(harness.pool.query).not.toHaveBeenCalled();
+    expect(harness.originActivator.prepareOnpremVerification).not.toHaveBeenCalled();
+  });
+
   it("On-Prem Agent Job을 공개하기 전에 검증용 DNS를 준비한다", async () => {
     const harness = makeHarness({ targetType: "onprem" });
 
@@ -251,6 +282,24 @@ describe("handleProvision", () => {
     expect(harness.queries.some(({ sql }) => sql === "ROLLBACK")).toBe(true);
     expect(harness.notifier.notify).not.toHaveBeenCalledWith(99, "state_changed", { status: "failed" });
     expect(harness.boss.send).not.toHaveBeenCalledWith("diagnose", expect.anything());
+  });
+
+  it("공용 AWS 연결이면 공용 시크릿을 읽고 state key · 리소스 이름은 프로젝트별로 둔다 (#215)", async () => {
+    const harness = makeHarness({ targetOwnerProjectId: null });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    const context = harness.queries.find(({ sql }) => sql.includes("SELECT d.status"))!;
+    expect(context.sql).toContain("target_environment.project_id AS target_environment_project_id");
+    expect(harness.secretReader.read).toHaveBeenCalledWith(null, "AWS_ACCESS_KEY_ID");
+    expect(harness.secretReader.read).toHaveBeenCalledWith(null, "AWS_SECRET_ACCESS_KEY");
+    expect(harness.terraformCli.apply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: expect.objectContaining({
+          stateKey: "projects/12/environments/34/terraform.tfstate",
+        }),
+      }),
+    );
   });
 
   it("사용자 계정 credential로 digest를 적용하고 Verify payload를 큐잉한다", async () => {

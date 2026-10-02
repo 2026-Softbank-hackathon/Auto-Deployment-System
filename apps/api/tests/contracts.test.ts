@@ -98,6 +98,22 @@ function projectRow(id: number, description: string | null = null) {
   return { id, name: `app-${id}`, description, created_at: NOW, updated_at: NOW };
 }
 
+/** GET /projects · GET /projects/:id row — live · latest 요약 컬럼 포함 (실제 pg 는 BIGINT 를 문자열로 줌) */
+function projectSummaryRow(id: number, description: string | null = null, deployed = true) {
+  return {
+    ...projectRow(id, description),
+    live_deployment_id: deployed ? "7" : null,
+    live_environment_id: deployed ? "3" : null,
+    live_environment_type: deployed ? "onprem" : null,
+    live_environment_name: deployed ? "home-mac" : null,
+    live_succeeded_at: deployed ? NOW : null,
+    latest_deployment_id: deployed ? "8" : null,
+    latest_status: deployed ? "building" : null,
+    latest_environment_type: deployed ? "aws" : null,
+    latest_created_at: deployed ? NOW : null,
+  };
+}
+
 function deploymentRow(status = "awaiting_target_confirmation") {
   return {
     id: 42,
@@ -133,25 +149,32 @@ describe("projects 응답 계약", () => {
   });
 
   it("GET /projects — 목록 · nextCursor · total", async () => {
-    pool.on(/FROM projects/, () => ({ rows: [projectRow(1), projectRow(2, "b")] }));
+    pool.on(/FROM projects p/, () => ({
+      rows: [projectSummaryRow(1), projectSummaryRow(2, "b", false), projectSummaryRow(3)],
+    }));
 
-    const res = await call("GET", "/api/v1/projects?limit=1");
+    const res = await call("GET", "/api/v1/projects?limit=2");
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().nextCursor).toBe("1");
+    expect(res.json().nextCursor).toBe("2");
+    expect(res.json().items[0].live).toMatchObject({ deploymentId: "7", environmentId: "3", environmentType: "onprem" });
+    expect(res.json().items[0].latest).toMatchObject({ deploymentId: "8", status: "building" });
+    expect(res.json().items[1].live).toBeNull();
+    expect(res.json().items[1].latest).toBeNull();
     expectContract(ProjectListSchema, res.json());
   });
 
   it("GET /projects/:id", async () => {
-    pool.on(/FROM projects WHERE id/, () => ({ rows: [projectRow(1, "설명")] }));
+    pool.on(/FROM projects p/, () => ({ rows: [projectSummaryRow(1, "설명")] }));
 
     const res = await call("GET", "/api/v1/projects/1");
 
     expect(res.statusCode).toBe(200);
+    expect(res.json().live.deploymentId).toBe("7");
     expectContract(ProjectSchema, res.json());
   });
 
-  it("GET /projects/:id/deployments — sourceVersion 있음 · null", async () => {
+  it("GET /projects/:id/deployments — sourceVersion · 환경 있음 · null", async () => {
     pool.on(/FROM projects WHERE id/, () => ({ rows: [{ id: 1 }] }));
     pool.on(/FROM deployments d/, () => ({
       rows: [
@@ -165,6 +188,10 @@ describe("projects 응답 계약", () => {
           failed_at: NOW,
           source_version_id: null,
           source_sha256: null,
+          environment_id: null,
+          environment_type: null,
+          environment_name: null,
+          is_live: false,
         },
         {
           id: 1,
@@ -176,6 +203,10 @@ describe("projects 응답 계약", () => {
           failed_at: null,
           source_version_id: 10,
           source_sha256: "abc",
+          environment_id: "3",
+          environment_type: "aws",
+          environment_name: "prod-aws",
+          is_live: true,
         },
       ],
     }));
@@ -491,6 +522,24 @@ describe("secrets 응답 계약", () => {
     expect(del.statusCode).toBe(204);
     expect(del.body).toBe("");
   });
+
+  it("공용 시크릿 (#215) — projectId 없이 POST 201 · GET 목록 · DELETE 204", async () => {
+    pool.on(/INSERT INTO secrets/, () => ({ rows: [{ created_at: NOW }] }));
+    pool.on(/FROM secrets/, () => ({ rows: [{ name: "aws-key", project_id: null, created_at: NOW }] }));
+
+    const created = await call("POST", "/api/v1/secrets", { name: "aws-key", value: "v" });
+    expect(created.statusCode).toBe(201);
+    expectContract(SecretSchema, created.json());
+    expect(created.json()).toMatchObject({ projectId: null, shared: true });
+
+    const list = await call("GET", "/api/v1/secrets");
+    expect(list.statusCode).toBe(200);
+    expectContract(SecretListSchema, list.json());
+    expect(list.json()[0]).toMatchObject({ projectId: null, shared: true });
+
+    const del = await call("DELETE", "/api/v1/secrets/aws-key");
+    expect(del.statusCode).toBe(204);
+  });
 });
 
 describe("environments 응답 계약", () => {
@@ -539,6 +588,32 @@ describe("environments 응답 계약", () => {
     expect(del.body).toBe("");
   });
 
+  it("공용 연결 (#215) — projectId 없이 POST 201 · GET 목록(Agent 연결 상태 포함)", async () => {
+    pool.on(/INSERT INTO environments/, () => ({ rows: [{ id: "11", is_default: true, created_at: NOW }] }));
+    pool.on(/FROM environments/, () => ({
+      rows: [{ ...envRow, id: "11", project_id: null, agent_last_seen_at: NOW, agent_online: true }],
+    }));
+
+    const created = await call("POST", "/api/v1/environments", {
+      name: "my-mac",
+      type: "onprem",
+      onpremConfig: { agentRegistrationToken: "tok", hostname: "mac.local" },
+    });
+    expect(created.statusCode).toBe(201);
+    expectContract(CreateEnvironmentResponseSchema, created.json());
+    expect(created.json()).toMatchObject({ projectId: null, shared: true, agentOnline: false });
+
+    const list = await call("GET", "/api/v1/environments");
+    expect(list.statusCode).toBe(200);
+    expectContract(EnvironmentListSchema, list.json());
+    expect(list.json()[0]).toMatchObject({
+      projectId: null,
+      shared: true,
+      agentOnline: true,
+      agentLastSeenAt: NOW.toISOString(),
+    });
+  });
+
   it("GET 단건 (aws, lastSeenAt 있음)", async () => {
     pool.on(/FROM environments/, () => ({
       rows: [
@@ -556,6 +631,20 @@ describe("environments 응답 계약", () => {
     const res = await call("GET", "/api/v1/environments/10");
 
     expectContract(EnvironmentSchema, res.json());
+  });
+
+  it("PATCH 200 — isDefault: true 로 기본 연결 변경 (#228)", async () => {
+    pool.on(/SELECT project_id, type FROM environments/, () => ({ rows: [{ project_id: null, type: "onprem" }] }));
+    pool.on(/FROM environments/, () => ({ rows: [{ ...envRow, project_id: null }] }));
+
+    const res = await call("PATCH", "/api/v1/environments/10", { isDefault: true });
+    expect(res.statusCode).toBe(200);
+    expectContract(EnvironmentSchema, res.json());
+    expect(res.json()).toMatchObject({ isDefault: true, shared: true });
+
+    const invalid = await call("PATCH", "/api/v1/environments/10", { isDefault: false });
+    expect(invalid.statusCode).toBe(400);
+    expectContract(ErrorBodySchema, invalid.json());
   });
 });
 

@@ -5,12 +5,14 @@
  *   POST   /secrets                 { name, value, projectId } → 201 { name, projectId, createdAt }
  *   GET    /secrets?projectId=<N>   → 200 [{ name, projectId, createdAt }]  (value 없음)
  *   DELETE /secrets/:name?projectId=<N> → 204
+ *
+ * projectId 를 생략하면 공용 시크릿 (공용 연결이 참조, #215).
  */
 
 import { type FastifyPluginAsync } from "fastify";
 import {
   CreateSecretBodySchema as CreateBody,
-  ProjectIdQuerySchema as ProjectIdQuery,
+  OptionalProjectIdQuerySchema as ProjectIdQuery,
   SecretNameParamsSchema,
 } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
@@ -50,7 +52,7 @@ const secretsRoutes: FastifyPluginAsync<{ secretService: SecretService }> = asyn
     if (!request.params.name) {
       throw new ApiError(400, "VALIDATION_ERROR", "시크릿 name 이 필요합니다.");
     }
-    await svc.delete({ projectId: q.projectId, name: request.params.name });
+    await svc.delete({ ...q, name: request.params.name });
     return reply.status(204).send();
   });
 };

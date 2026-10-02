@@ -26,7 +26,7 @@ const jobRow = {
 function setup(rows: unknown[] = [jobRow]) {
   const query = vi.fn(async () => ({ rows, rowCount: rows.length }));
   const pool = { query } as unknown as Pool;
-  const decrypt = vi.fn(async ({ name }: { projectId: number; name: string }) =>
+  const decrypt = vi.fn(async ({ name }: { projectId: number | null; name: string }) =>
     name === "aws-access-key" ? "AKIA_EXAMPLE" : "secret-example",
   );
   const secretService = { decrypt } as unknown as SecretService;
@@ -70,6 +70,19 @@ describe("AgentEcrCredentialService.issue", () => {
       expiresAt: "2026-10-01T10:00:00.000Z",
     });
     expect(JSON.stringify(query.mock.calls)).not.toContain("SHORT_LIVED_ECR_PASSWORD");
+  });
+
+  it("레지스트리가 공용 연결이면 공용 시크릿(projectId=null)으로 발급한다 (#215)", async () => {
+    const { service, query, decrypt } = setup([{ ...jobRow, project_id: null }]);
+
+    await service.issue({ agent, jobId: "73" });
+
+    const sql = String(query.mock.calls[0]?.[0]).replace(/\s+/g, " ");
+    expect(sql).toContain(
+      "(registry_environment.project_id IS NULL OR registry_environment.project_id = deployment.project_id)",
+    );
+    expect(decrypt).toHaveBeenNthCalledWith(1, { projectId: null, name: "aws-access-key" });
+    expect(decrypt).toHaveBeenNthCalledWith(2, { projectId: null, name: "aws-secret-key" });
   });
 
   it("자기 소유 active lease가 아니거나 attempt에서 이미 발급됐으면 거부한다", async () => {

@@ -70,6 +70,15 @@ export const ProjectIdQuerySchema = z.object({
 });
 export type ProjectIdQuery = z.input<typeof ProjectIdQuerySchema>;
 
+/**
+ * `?projectId=<N>` 생략 가능 쿼리 (secrets · environments, #215).
+ * 생략하면 공용 연결(프로젝트 없이 등록한 연결 · 시크릿) 대상.
+ */
+export const OptionalProjectIdQuerySchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
+});
+export type OptionalProjectIdQuery = z.input<typeof OptionalProjectIdQuerySchema>;
+
 // ── 배포 상태 · 프로필 ────────────────────────────────────────────────────────
 
 /** v5.4.1 배포 상태 (apps/worker/src/state-machine.ts STATUSES 와 같은 목록 — 워커 테스트가 확인) */

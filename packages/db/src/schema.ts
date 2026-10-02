@@ -159,6 +159,7 @@ export const HealthCheckAttemptSchema = z.object({
   id: z.number().int().positive(),
   deployment_step_id: z.number().int().positive(),
   environment_id: z.string().min(1),
+  phase: z.enum(["target", "public_url"]),
   attempt: z.number().int().min(1),
   checked_at: z.date(),
   status_code: z.number().int().min(100).max(599).nullable(),

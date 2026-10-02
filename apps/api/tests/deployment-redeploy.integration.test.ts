@@ -78,7 +78,12 @@ describe.skipIf(!databaseUrl)("DeploymentService.redeploy: isolated PostgreSQL",
     );
     const id = result.rows[0]!.id;
     await pool.query("INSERT INTO source_versions(deployment_id, sha256, storage_key, size_bytes) VALUES($1, 'x', 'sources/x.zip', 1)", [id]);
-    await pool.query("INSERT INTO ir_versions(deployment_id, ir_json, source) VALUES($1, '{}', 'analyzer')", [id]);
+    await pool.query("INSERT INTO ir_versions(deployment_id, ir_json, source) VALUES($1, $2, 'analyzer')", [id, JSON.stringify({
+      $ir_version: "0.1.0",
+      metadata: { name: "app", version: "1.0.0" },
+      services: { api: { type: "http", port: 3000 } },
+      deploy: { profile: input.profile, region: "ap-northeast-2" },
+    })]);
     if (input.digest) {
       await pool.query(
         `INSERT INTO build_artifacts(deployment_id, repository_uri, image_tag, image_digest, immutable_ref, platform, strategy)
@@ -100,6 +105,11 @@ describe.skipIf(!databaseUrl)("DeploymentService.redeploy: isolated PostgreSQL",
 
   const digest = (c: string) => `sha256:${c.repeat(64)}`;
 
+  async function storedIr(id: number | string) {
+    const result = await pool.query("SELECT ir_json FROM ir_versions WHERE deployment_id=$1 ORDER BY id DESC LIMIT 1", [id]);
+    return result.rows[0]!.ir_json;
+  }
+
   it("롤백 — 새 배포가 떠 있어도 이전 배포를 같은 환경에 다시 배포하고, build 는 이전 배포 이미지를 재사용할 수 있다", async () => {
     const projectId = await project();
     const aws = await environment(projectId, "aws", true);
@@ -108,6 +118,8 @@ describe.skipIf(!databaseUrl)("DeploymentService.redeploy: isolated PostgreSQL",
     const { svc, boss } = service();
 
     const result = await svc.redeploy(v1);
+
+    expect(await storedIr(result.deploymentId)).toEqual(await storedIr(v1));
 
     expect(await row(result.deploymentId)).toEqual({
       status: "queued",
@@ -141,6 +153,10 @@ describe.skipIf(!databaseUrl)("DeploymentService.redeploy: isolated PostgreSQL",
 
     const result = await svc.redeploy(v1, { targetEnvironmentId: Number(onprem) });
 
+    const sourceIr = await storedIr(v1);
+    expect(await storedIr(result.deploymentId)).toEqual({ ...sourceIr, deploy: { ...sourceIr.deploy, profile: "onprem-docker-basic" } });
+    expect((await storedIr(v1)).deploy.profile).toBe("aws-ecs-basic");
+
     expect(await row(result.deploymentId)).toMatchObject({
       target_profile: "onprem-docker-basic",
       target_environment_id: onprem,
@@ -150,6 +166,8 @@ describe.skipIf(!databaseUrl)("DeploymentService.redeploy: isolated PostgreSQL",
     // 다시 AWS 로 — 프로필 aws-ecs-basic, Registry = 대상 AWS 환경
     await pool.query("UPDATE deployments SET status = 'succeeded' WHERE id = $1", [result.deploymentId]);
     const back = await svc.redeploy(Number(result.deploymentId), { targetEnvironmentId: Number(aws) });
+    expect(await storedIr(back.deploymentId)).toEqual(sourceIr);
+    expect((await storedIr(result.deploymentId)).deploy.profile).toBe("onprem-docker-basic");
     expect(await row(back.deploymentId)).toMatchObject({
       target_profile: "aws-ecs-basic",
       target_environment_id: aws,

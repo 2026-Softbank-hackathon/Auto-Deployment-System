@@ -13,6 +13,7 @@ function validAttempt() {
     id: 1,
     deployment_step_id: 10,
     environment_id: "env-aws-1",
+    phase: "target",
     attempt: 1,
     checked_at: new Date("2026-09-30T03:20:00.000Z"),
     status_code: 200,
@@ -46,6 +47,7 @@ describe("HealthCheckAttemptSchema", () => {
     ["HTTP 범위를 벗어난 상태 코드", { status_code: 600 }],
     ["음수 지연 시간", { latency_ms: -1 }],
     ["빈 환경 ID", { environment_id: "" }],
+    ["알 수 없는 검증 phase", { phase: "unknown" }],
   ])("%s를 거부함", (_name, invalidValues) => {
     const result = getHealthCheckAttemptSchema().safeParse({
       ...validAttempt(),

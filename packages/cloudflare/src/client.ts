@@ -37,6 +37,10 @@ export type CloudflareDnsRecord = {
   proxied: boolean;
 };
 
+export type CloudflareTunnelOriginChange = {
+  previousServiceUrl: string | null;
+};
+
 type ZoneRecord = {
   id?: string;
   name?: string;
@@ -122,7 +126,7 @@ export class CloudflareClient {
     tunnelId: string;
     hostname: string;
     serviceUrl: string;
-  }): Promise<void> {
+  }): Promise<CloudflareTunnelOriginChange> {
     const tunnelId = requireValue(input.tunnelId, "tunnelId");
     const hostname = normalizeDomain(input.hostname);
     const serviceUrl = normalizeServiceUrl(input.serviceUrl);
@@ -133,7 +137,14 @@ export class CloudflareClient {
         [key: string]: unknown;
       };
     }>(path);
-    const ingress = (current.config?.ingress ?? []).filter(
+    const currentIngress = current.config?.ingress ?? [];
+    const previousRule = currentIngress.find(
+      (rule) => rule.hostname === hostname,
+    );
+    const previousServiceUrl = typeof previousRule?.service === "string"
+      ? previousRule.service
+      : null;
+    const ingress = currentIngress.filter(
       (rule) => rule.hostname !== hostname && rule.service !== "http_status:404",
     );
     ingress.push({ hostname, service: serviceUrl });
@@ -142,6 +153,83 @@ export class CloudflareClient {
       method: "PUT",
       body: { config: { ...current.config, ingress } },
     });
+    return { previousServiceUrl };
+  }
+
+  async removeTunnelOrigin(input: {
+    tunnelId: string;
+    hostname: string;
+    expectedServiceUrl: string;
+  }): Promise<void> {
+    const tunnelId = requireValue(input.tunnelId, "tunnelId");
+    const hostname = normalizeDomain(input.hostname);
+    const expectedServiceUrl = normalizeServiceUrl(input.expectedServiceUrl);
+    const path = `/accounts/${encodeURIComponent(this.accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`;
+    const current = await this.request<{
+      config?: {
+        ingress?: Array<Record<string, unknown>>;
+        [key: string]: unknown;
+      };
+    }>(path);
+    const currentIngress = current.config?.ingress ?? [];
+    const currentRule = currentIngress.find((rule) => rule.hostname === hostname);
+    if (!currentRule) return;
+    if (currentRule.service !== expectedServiceUrl) {
+      throw new CloudflareApiError(
+        "CLOUDFLARE_INVALID_ARGUMENT",
+        "현재 Tunnel origin이 예상값과 달라 삭제하지 않았습니다.",
+      );
+    }
+    const ingress = currentIngress.filter(
+      (rule) => rule.hostname !== hostname && rule.service !== "http_status:404",
+    );
+    ingress.push({ service: "http_status:404" });
+    await this.request(path, {
+      method: "PUT",
+      body: { config: { ...current.config, ingress } },
+    });
+  }
+
+  async getCname(input: {
+    zoneId: string;
+    hostname: string;
+  }): Promise<CloudflareDnsRecord | null> {
+    const zoneId = requireValue(input.zoneId, "zoneId");
+    const hostname = normalizeDomain(input.hostname);
+    const path = `/zones/${encodeURIComponent(zoneId)}/dns_records`;
+    const matches = await this.request<DnsRecord[]>(
+      `${path}?${new URLSearchParams({
+        type: "CNAME",
+        name: hostname,
+        per_page: String(PAGE_SIZE),
+      })}`,
+    );
+    const existing = matches.find(
+      (record) => record.type === "CNAME" && record.name === hostname,
+    );
+    return existing ? normalizeDnsRecord(existing) : null;
+  }
+
+  async deleteCname(input: {
+    zoneId: string;
+    hostname: string;
+    expectedTarget: string;
+  }): Promise<void> {
+    const zoneId = requireValue(input.zoneId, "zoneId");
+    const hostname = normalizeDomain(input.hostname);
+    const expectedTarget = normalizeDomain(input.expectedTarget);
+    const existing = await this.getCname({ zoneId, hostname });
+    if (!existing) return;
+    if (existing.content !== expectedTarget) {
+      throw new CloudflareApiError(
+        "CLOUDFLARE_INVALID_ARGUMENT",
+        "현재 CNAME target이 예상값과 달라 삭제하지 않았습니다.",
+      );
+    }
+    await this.request<{ id?: string }>(
+      `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(existing.id)}`,
+      { method: "DELETE" },
+    );
   }
 
   async ensureCname(input: {

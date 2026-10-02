@@ -25,6 +25,7 @@ import { loadTerraformBackendConfig } from "./terraform-config.js";
 import { CloudflareClient } from "@camellia/cloudflare";
 import { DeploymentOriginActivator } from "./origin-activation.js";
 import { PublicDnsActivationChecker } from "./public-dns-activation.js";
+import { FinalUrlVerifier } from "./final-url-verifier.js";
 
 const log = pino({ name: "worker" });
 
@@ -56,6 +57,7 @@ async function main(): Promise<void> {
     platformDomain: process.env["DEMO_PLATFORM_DOMAIN"],
   });
   const dnsActivationChecker = new PublicDnsActivationChecker();
+  const finalUrlVerifier = new FinalUrlVerifier();
   const terraformCli = new TerraformCli({
     executable: process.env["TERRAFORM_BINARY"]?.trim() || "terraform",
   });
@@ -76,6 +78,7 @@ async function main(): Promise<void> {
     registrySession,
     originActivator,
     dnsActivationChecker,
+    finalUrlVerifier,
     awsRegistryFactory,
     terraformCli,
     terraformBackend: loadTerraformBackendConfig(),

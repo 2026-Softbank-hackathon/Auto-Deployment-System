@@ -459,6 +459,16 @@ export class DeploymentService {
       }
     }
 
+    const redeployIr = targetProfile === src.target_profile
+      ? ir.ir_json
+      : {
+          ...ir.ir_json,
+          deploy: {
+            ...(ir.ir_json["deploy"] as Record<string, unknown> | undefined),
+            profile: targetProfile,
+          },
+        };
+
     // 6. DB 트랜잭션: 새 deployment + source_version (재사용) + ir_version (cache 복사)
     const client = await this.pool.connect();
     let newDeploymentId: number;
@@ -488,7 +498,7 @@ export class DeploymentService {
       await client.query(
         `INSERT INTO ir_versions (deployment_id, ir_json, source)
          VALUES ($1, $2, 'analyzer_cache')`,
-        [newDeploymentId, JSON.stringify(ir.ir_json)],
+        [newDeploymentId, JSON.stringify(redeployIr)],
       );
 
       await client.query("COMMIT");

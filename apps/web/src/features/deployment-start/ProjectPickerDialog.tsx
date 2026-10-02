@@ -3,6 +3,7 @@ import { listEnvironments, listSecretNames } from '../../api/deployment-api';
 import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { useI18n } from '../../i18n/I18nProvider';
+import { readCache, writeCache } from '../../lib/page-cache';
 import { displayProjectName } from '../dashboard/format';
 import { awsKeysMissing, type DeployProject } from './useDeployProject';
 
@@ -15,10 +16,12 @@ export interface ReadyProject extends DeployProject { region: string | null; onp
  * 프로젝트별 상태를 한 번에 주는 API가 없어 프로젝트마다 환경 · 시크릿 목록을 읽는다.
  */
 export function useReadyProjects(projects: DeployProject[] | null): ReadyProject[] | null {
-  const [ready, setReady] = useState<ReadyProject[] | null>(null);
   const key = projects ? projects.map((project) => project.id).join(',') : null;
+  // 같은 프로젝트 목록으로 직전에 확인한 결과가 있으면 먼저 쓰고, 다시 확인해 바꿔 끼운다.
+  const [ready, setReady] = useState<ReadyProject[] | null>(() => (key === null ? null : readCache<ReadyProject[]>(`ready-projects:${key}`) ?? null));
   useEffect(() => {
-    if (!projects) { setReady(null); return; }
+    if (!projects || key === null) { setReady(null); return; }
+    setReady(readCache<ReadyProject[]>(`ready-projects:${key}`) ?? null);
     let active = true;
     void Promise.all(projects.map(async (project): Promise<ReadyProject | null> => {
       try {
@@ -28,7 +31,11 @@ export function useReadyProjects(projects: DeployProject[] | null): ReadyProject
         if (!aws || awsKeysMissing(environments, secretNames)) return null;
         return { ...project, region: aws.region, onpremHost: defaultOf('onprem')?.hostname ?? null };
       } catch { return null; }
-    })).then((results) => { if (active) setReady(results.filter((item): item is ReadyProject => item !== null)); });
+    })).then((results) => {
+      const next = results.filter((item): item is ReadyProject => item !== null);
+      writeCache(`ready-projects:${key}`, next);
+      if (active) setReady(next);
+    });
     return () => { active = false; };
     // 프로젝트 목록이 바뀔 때만 다시 확인한다 (key가 목록을 대표한다).
   }, [key]);

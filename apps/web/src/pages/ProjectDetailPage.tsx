@@ -9,6 +9,7 @@ import { displayProjectName } from '../features/dashboard/format';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ConnectionCards } from '../features/setup/ConnectionCards';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
+import { readCache, writeCache } from '../lib/page-cache';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
 /** 서버가 한 번에 주는 최대 건수. 이 안에서 검색 · 페이지 나누기를 한다. */
@@ -21,16 +22,18 @@ const tabs: ReadonlyArray<{ tab: ProjectTab; path: string }> = [
 
 function Deployments({ projectId, projectName, onNavigate }: { projectId: string; projectName: string; onNavigate: Navigate }) {
   const { t } = useI18n();
-  const [state, setState] = useState<{ items: ProjectDeploymentSummary[]; loadedAt: number } | { error: unknown } | null>(null);
+  const cacheKey = `project-deployments:${projectId}`;
+  // 직전에 받은 배포 내역이 있으면 먼저 보여 주고, 바로 다시 읽는다.
+  const [state, setState] = useState<{ items: ProjectDeploymentSummary[]; loadedAt: number } | { error: unknown } | null>(() => readCache<{ items: ProjectDeploymentSummary[]; loadedAt: number }>(cacheKey) ?? null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let active = true;
     listProjectDeployments(projectId, { limit: DEPLOYMENTS_SHOWN }).then(
-      (page) => { if (active) setState({ items: page.items, loadedAt: Date.now() }); },
+      (page) => { const next = { items: page.items, loadedAt: Date.now() }; writeCache(cacheKey, next); if (active) setState(next); },
       (error) => { if (active) setState({ error }); },
     );
     return () => { active = false; };
-  }, [projectId, reloadKey]);
+  }, [projectId, reloadKey, cacheKey]);
 
   if (state === null) return <p className="dashboard-status" role="status">{t.dashboard.loading}</p>;
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;

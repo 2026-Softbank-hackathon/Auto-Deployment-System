@@ -545,3 +545,11 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .failure-detail__copy:hover { border-color: var(--koro); color: var(--koro-text); }
 .failure-detail__copy:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
 .failure-detail__copy.is-copied { color: var(--moss-text); border-color: var(--moss-text); }
+
+/* 배포 화면 탭 */
+.run-tabs { align-self: stretch; justify-content: center; }
+.tabs__dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--brick-text); vertical-align: middle; }
+.run-latest { display: flex; align-items: center; gap: 12px; max-width: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
+.run-latest span { flex-shrink: 0; font-weight: 700; }
+.run-latest code { min-width: 0; font-family: var(--font-mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-note__logs { border-top: var(--border); padding-top: 16px; }

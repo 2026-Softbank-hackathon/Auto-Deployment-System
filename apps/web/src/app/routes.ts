@@ -1,16 +1,22 @@
 export type ProjectTab = 'deployments' | 'env' | 'settings';
 
+/** 배포 화면의 탭. auto는 주소에 탭이 없을 때(/deployments/:id) — 실패한 배포면 실패 원인, 아니면 진행을 보여 준다. */
+export type DeploymentTab = 'auto' | 'progress' | 'failure' | 'logs' | 'analysis';
+
 export type Route =
   | { page: 'dashboard' }
   | { page: 'deploy' }
   | { page: 'projects' }
   | { page: 'project'; projectId: string; tab: ProjectTab }
-  | { page: 'progress'; deploymentId: string }
+  | { page: 'progress'; deploymentId: string; tab: DeploymentTab }
   | { page: 'result'; deploymentId: string };
 
 export function routeFromLocation(): Route {
-  const match = window.location.pathname.match(/^\/deployments\/([^/]+)(?:\/(result))?\/?$/);
-  if (match) return { page: match[2] ? 'result' : 'progress', deploymentId: decodeURIComponent(match[1]) };
+  const match = window.location.pathname.match(/^\/deployments\/([^/]+)(?:\/(result|progress|failure|logs|analysis))?\/?$/);
+  if (match) {
+    const deploymentId = decodeURIComponent(match[1]);
+    return match[2] === 'result' ? { page: 'result', deploymentId } : { page: 'progress', deploymentId, tab: (match[2] as DeploymentTab | undefined) ?? 'auto' };
+  }
   // 예전 연결 설정 주소. 설정은 프로젝트 상세의 설정 탭으로 옮겼다.
   if (window.location.pathname === '/setup') return { page: 'projects' };
   if (window.location.pathname === '/projects') return { page: 'projects' };

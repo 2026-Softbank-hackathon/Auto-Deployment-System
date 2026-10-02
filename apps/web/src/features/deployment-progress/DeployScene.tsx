@@ -9,10 +9,9 @@ import { KoroHat, KoroProp } from './KoroProp';
  * 배포 여정 장면. 코로가 앱을 "집"으로 지어서 배포할 곳까지 옮긴다.
  *   0 분석      — 설계도(IR)를 살펴본다
  *   1 빌드      — 집(컨테이너 이미지)을 짓는다. 층이 올라간다
- *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 비행기를 조립한다 · 온프레미스: 에이전트 로봇에게 집을 넘긴다
- *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다 · 온프레미스: 에이전트 로봇이 집을 이고 서버 옆으로 알아서 옮긴다
- *                 (AWS는 서버의 "배포" 상태가 순식간에 지나간다. 실제 대기는 "인프라 준비"에서 일어나므로,
- *                  진행 화면이 인프라 준비 도중에 이 장면으로 넘긴다 — awsSceneStage)
+ *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 땅에서 비행기를 조립한다(Terraform) · 온프레미스: 에이전트 로봇에게 집을 넘긴다
+ *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다(새 버전이 켜지기를 기다리는 ECS 롤아웃, #253)
+ *                 · 온프레미스: 에이전트 로봇이 집을 이고 서버 옆으로 알아서 옮긴다
  *   4 검증      — 도착한 집에 불이 들어오는지 점검한다
  *   5 완료      — 집에 깃발이 오른다
  * 같은 집이 배포할 곳에 따라 다른 길로 간다(같은 이미지, 다른 환경).
@@ -130,17 +129,6 @@ function House({ floors, total = FLOORS, roofed, windows, tag }: { floors: numbe
       <text x="0" y="0" textAnchor="middle">{tag}</text>
     </g>}
   </>;
-}
-
-/**
- * AWS 여정에서 장면에 쓸 단계. Terraform apply 가 인프라와 새 버전 교체를 한 번에 하고 끝날 때까지 "인프라 준비"에 머문다.
- * 그동안 비행기 조립만 보여 주면 비행 장면은 볼 수 없으므로, 조립을 잠깐 보여 준 뒤에는 날아가는 장면으로 넘긴다.
- * (진행률이 아니다 — 언제 끝날지는 모른다. 구름에 내려앉는 것은 서버가 검증 단계를 알려 줬을 때다.)
- */
-export const AWS_ASSEMBLE_SECONDS = 12;
-export function awsSceneStage(view: DeploymentStatusView, target: SceneTarget, stepSeconds: number): DeploymentStatusView {
-  const flying = target !== 'onprem' && view.stage === 2 && view.outcome === 'active' && !view.waiting && stepSeconds >= AWS_ASSEMBLE_SECONDS;
-  return flying ? { ...view, stage: 3 } : view;
 }
 
 /** 빌드 중에 올라간 층수. 빌드 단계에서 실제로 흐른 시간만큼 한 층씩 쌓고(최대 3층), 지붕은 빌드가 끝났을 때만 올린다. */

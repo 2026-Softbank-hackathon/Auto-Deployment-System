@@ -16,6 +16,7 @@ const jaRules: ReadonlyArray<readonly [RegExp, string]> = [
   [/^컨테이너 이미지 빌드 및 Registry push$/, 'コンテナイメージのビルドと Registry への push'],
   [/^이미지 digest 확정: (.*)$/, 'イメージ digest 確定: $1'],
   [/^빌드 실패: (.*)$/, 'ビルドに失敗: $1'],
+  [/^빌드 생략 — 배포 #(\d+)의 이미지 재사용: (.*)$/, 'ビルドを省略 — デプロイ #$1 のイメージを再利用: $2'],
   [/^검증용 DNS 사전 준비 완료$/, '検証用 DNS の事前準備が完了'],
   [/^Terraform init · validate · plan · apply 시작$/, 'Terraform init · validate · plan · apply を開始'],
   [/^Terraform apply 완료, origin endpoint를 수집했습니다\.$/, 'Terraform apply 完了、origin endpoint を取得しました'],

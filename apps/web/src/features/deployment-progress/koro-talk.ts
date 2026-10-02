@@ -86,7 +86,7 @@ export function sceneCue(stage: number | null, target: SceneTarget, story: Deplo
   switch (stage) {
     case 0: return 'scan';
     case 1: return moving ? null : story?.reused ? 'warehouse' : 'hammer';
-    case 2: return 'wrench';
+    case 2: return target === 'onprem' && !moving ? 'robot' : 'wrench';
     case 3: return target === 'onprem' ? (moving ? 'parachute' : 'roll') : 'takeoff';
     case 4: return 'check';
     default: return null;

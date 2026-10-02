@@ -794,16 +794,21 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-live { transition: transform var(--dur-scene) var(--ease-roll); }
 .jr-live rect, .jr-live path { fill: var(--moss); }
 .jr-live text { fill: var(--surface); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
-/* 집 · 수레 · 비행기는 코로와 같은 박자로 자리를 옮긴다 */
+/* 집 · 로봇 · 비행기는 코로와 같은 박자로 자리를 옮긴다 */
 .jr-plane__body { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
 .jr-plane__tail, .jr-plane__wing { fill: var(--koro-tint); stroke: var(--koro); stroke-width: 2.5; stroke-linejoin: round; }
 .jr-plane__window { fill: var(--koro-tint); stroke: var(--ink); stroke-width: 2; }
 .jr-plane__prop { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
 .jr-plane__wind { fill: none; stroke: var(--line-strong); stroke-width: 3; stroke-linecap: round; }
 .jr-plane.is-building .jr-plane__wing, .jr-plane.is-building .jr-plane__tail { stroke-dasharray: 7 6; }
-.jr-cart, .jr-plane { opacity: 0; }
-.jr-cart.is-shown, .jr-plane.is-shown { opacity: 1; }
-.jr-house, .jr-cart, .jr-plane { transition: transform var(--dur-scene) var(--ease-roll), opacity var(--dur-roll); }
+.jr-robot__track { fill: var(--ink); }
+.jr-robot__visor { fill: var(--ink); }
+.jr-robot__eye { fill: var(--moss-on-dark); }
+.jr-robot__antenna { fill: var(--brass); stroke: var(--ink); stroke-width: 2; }
+.jr-robot__name { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 8px; font-weight: 700; letter-spacing: .5px; }
+.jr-plane { opacity: 0; }
+.jr-plane.is-shown { opacity: 1; }
+.jr-house, .jr-robot, .jr-plane { transition: transform var(--dur-scene) var(--ease-roll), opacity var(--dur-roll); }
 
 @media (prefers-reduced-motion: no-preference) {
   .koro-prop--scan { animation: prop-scan 2.6s ease-in-out infinite; }
@@ -824,6 +829,9 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .jr-roof { transform-box: fill-box; transform-origin: 50% 100%; animation: floor-rise .5s var(--ease-roll) both; }
   .jr-pad.is-building { animation: dash-march 1s linear infinite; }
   .jr-parachute { transform-box: fill-box; transform-origin: 50% 100%; animation: parachute-sway 1.8s ease-in-out infinite alternate; }
+  .jr-robot.is-carrying .jr-plane__wind { animation: wind-streak .7s ease-in-out infinite alternate; }
+  .jr-robot.is-carrying .jr-robot__track { animation: track-roll .3s linear infinite alternate; }
+  .jr-robot.is-carrying .jr-robot__antenna, .jr-robot.is-called .jr-robot__antenna { animation: antenna-blink .6s ease-in-out infinite alternate; }
   .jr-live { animation: live-bob 1.4s ease-in-out infinite alternate; }
   .jr-plane.is-building .jr-plane__wing, .jr-plane.is-building .jr-plane__tail { animation: dash-march 1s linear infinite; }
   .jr-plane.is-flying .jr-plane__prop { transform-box: fill-box; transform-origin: 50% 50%; animation: prop-spin .16s linear infinite alternate; }
@@ -845,6 +853,8 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @keyframes prop-spin { from { transform: scaleY(1); } to { transform: scaleY(.12); } }
 @keyframes wind-streak { from { opacity: .2; transform: translateX(10px); } to { opacity: 1; transform: translateX(-6px); } }
 @keyframes parachute-sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+@keyframes track-roll { from { transform: translateX(-1px); } to { transform: translateX(1px); } }
+@keyframes antenna-blink { from { fill: var(--brass); } to { fill: var(--moss); } }
 @keyframes live-bob { from { translate: 0 0; } to { translate: 0 -4px; } }
 @keyframes window-check { 0%, 100% { fill: var(--line); } 50% { fill: var(--brass); } }
 @keyframes cloud-drift { from { transform: translateX(-10px); } to { transform: translateX(26px); } }

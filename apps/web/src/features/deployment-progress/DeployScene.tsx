@@ -9,8 +9,8 @@ import { KoroHat, KoroProp } from './KoroProp';
  * 배포 여정 장면. 코로가 앱을 "집"으로 지어서 배포할 곳까지 옮긴다.
  *   0 분석      — 설계도(IR)를 살펴본다
  *   1 빌드      — 집(컨테이너 이미지)을 짓는다. 층이 올라간다
- *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 비행기를 조립한다 · 온프레미스: 서버 옆 자리를 만들고 수레를 조립한다
- *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다 · 온프레미스: 수레에 실어 서버 옆으로 민다
+ *   2 인프라 준비 — AWS: 구름 위 자리를 만들고 비행기를 조립한다 · 온프레미스: 에이전트 로봇에게 집을 넘긴다
+ *   3 배포      — AWS: 집을 비행기에 싣고 구름으로 날아간다 · 온프레미스: 에이전트 로봇이 집을 이고 서버 옆으로 알아서 옮긴다
  *                 (AWS는 서버의 "배포" 상태가 순식간에 지나간다. 실제 대기는 "인프라 준비"에서 일어나므로,
  *                  진행 화면이 인프라 준비 도중에 이 장면으로 넘긴다 — awsSceneStage)
  *   4 검증      — 도착한 집에 불이 들어오는지 점검한다
@@ -52,7 +52,13 @@ const PLANE_AIR: Spot = [900, 340];
 const PLANE_TOP = 64;
 /** 단계별 코로 중심 좌표 (0 설계도 · 1 집 짓는 곳 · 2 탈것 준비 · 3 이동 중 · 4 도착 · 5 완료) */
 const skySpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [640, KORO_Y], [PLANE_AIR[0] + 55, PLANE_AIR[1] - PLANE_TOP - KORO_SIZE / 2], [950, 114], [950, 114]];
-const groundSpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [640, KORO_Y], [780, KORO_Y], [925, KORO_Y], [925, KORO_Y]];
+// 온프레미스: 집을 지은 뒤에는 에이전트 로봇이 알아서 옮긴다. 코로는 집 짓는 곳에서 넘겨주고 지켜보다가, 검증 때 서버 옆으로 간다.
+const groundSpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [415, KORO_Y], [415, KORO_Y], [880, KORO_Y], [880, KORO_Y]];
+/** 에이전트 로봇의 바닥 중심: 서버 옆 대기 자리 → 집 옆(넘겨받기) → 집을 이고 가는 중 */
+const ROBOT_DOCK: Spot = [950, GROUND];
+const ROBOT_PICKUP: Spot = [600, GROUND];
+const ROBOT_CARRY: Spot = [800, GROUND];
+const ROBOT_TOP = 58;
 /** 도착점의 새 집 자리와, 지금까지 서비스하던 집이 서 있는 옆자리 */
 const CLOUD_SLOT: Spot = [1050, 150];
 const CLOUD_OLD_SLOT: Spot = [1128, 150];
@@ -66,7 +72,7 @@ const STOPPED_SPOT: Spot = [600, KORO_Y];
 const HOUSE_SITE: Spot = [520, GROUND];
 function houseSpot(stage: number, onGround: boolean): Spot {
   if (stage <= 2) return HOUSE_SITE;
-  if (stage === 3) return onGround ? [880, GROUND - 18] : [PLANE_AIR[0] - 38, PLANE_AIR[1] - PLANE_TOP];
+  if (stage === 3) return onGround ? [ROBOT_CARRY[0], GROUND - ROBOT_TOP] : [PLANE_AIR[0] - 38, PLANE_AIR[1] - PLANE_TOP];
   return onGround ? LOT_SLOT : CLOUD_SLOT;
 }
 
@@ -76,7 +82,7 @@ export function koroSpot(view: DeploymentStatusView, target: SceneTarget, story:
   const stage = Math.min(view.stage, railStageCount);
   if (isMoving(story)) {
     // 환경 전환: 집을 짓지 않으니 짓는 곳에 서지 않는다. 온프레미스로 내려올 때는 집터 옆에서 기다린다.
-    if (stage === 1) return groundSpots[2];
+    if (stage === 1) return [640, KORO_Y];
     if (target === 'onprem' && stage >= 2) return groundSpots[4];
   }
   return (target === 'onprem' ? groundSpots : skySpots)[stage];
@@ -198,6 +204,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
 
   const [cx, cy] = koroSpot(view, target, story);
 
+  const handingOff = onGround && !moving && (stage === 2 || stage === 3);
   const box = sceneBox(target, story);
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
@@ -265,7 +272,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <path className="jr-line" d={`M468 ${GROUND - floors * FLOOR_HEIGHT - 14} H572`} />
     </g>}
 
-    {/* 2 · 탈것 준비 — AWS: 바람을 넣는 풍선 · 온프레미스: 조립하는 수레 */}
+    {/* 2 · 탈것 준비 — AWS: 조립하는 비행기 */}
     {!onGround && <g className={`jr-plane ${stage === 2 || stage === 3 ? 'is-shown' : ''} ${working(2) ? 'is-building' : ''} ${stage === 3 ? 'is-flying' : ''}`}
       style={place(stage !== null && stage >= 4 ? [1320, 240] : stage === 3 ? PLANE_AIR : PLANE_GROUND)}>
       {stage === 3 && <path className="jr-plane__wind" d="M-150 -52 H-118 M-164 -36 H-124 M-150 -20 H-118" />}
@@ -277,11 +284,19 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <circle className="jr-wheel" cx="-40" cy="-5" r="6" /><circle className="jr-wheel" cx="50" cy="-5" r="6" />
       <path className="jr-plane__prop" d="M116 -66 V-12" />
     </g>}
-    {onGround && !moving && <g className={`jr-cart ${stage === 2 || stage === 3 ? 'is-shown' : ''}`} style={place(stage !== null && stage >= 4 ? LOT_SLOT : stage === 3 ? [880, GROUND] : [745, GROUND])}>
-      <path className="jr-line jr-line--thick" d="M-48 -14 L-64 -42" />
-      <rect className="jr-paper" x="-50" y="-18" width="100" height="9" rx="3" />
-      <circle className="jr-wheel" cx="-30" cy="-7" r="7" />
-      <circle className="jr-wheel" cx="30" cy="-7" r="7" />
+    {/* 온프레미스의 에이전트 로봇. 서버 옆에 대기하다가, 일을 넘겨받으면 집 옆으로 와서 집을 이고 서버 옆까지 알아서 옮긴다 */}
+    {onGround && <g className={`jr-robot ${!moving && stage === 3 ? 'is-carrying' : ''} ${!moving && working(2) ? 'is-called' : ''}`}
+      style={place(moving || stage === null || stage < 2 || stage >= 4 ? ROBOT_DOCK : stage === 2 ? ROBOT_PICKUP : ROBOT_CARRY)}>
+      {!moving && stage === 3 && <path className="jr-plane__wind" d="M-62 -40 H-38 M-70 -26 H-40 M-62 -12 H-38" />}
+      {!moving && stage === 3
+        ? <path className="jr-line jr-line--thick" d={`M-18 -40 L-28 -${ROBOT_TOP} M18 -40 L28 -${ROBOT_TOP} M-44 -${ROBOT_TOP} H44`} />
+        : <path className="jr-line jr-line--thick" d="M-20 -34 L-28 -20 M20 -34 L28 -20" />}
+      <rect className="jr-robot__track" x="-24" y="-12" width="48" height="12" rx="6" />
+      <rect className="jr-paper" x="-20" y="-46" width="40" height="34" rx="6" />
+      <rect className="jr-robot__visor" x="-13" y="-40" width="26" height="11" rx="4" />
+      <circle className="jr-robot__eye" cx="-6" cy="-34.5" r="2.5" /><circle className="jr-robot__eye" cx="6" cy="-34.5" r="2.5" />
+      <path className="jr-line" d="M0 -46 V-54" /><circle className="jr-robot__antenna" cx="0" cy="-57" r="3.5" />
+      <text className="jr-robot__name" x="0" y="-18" textAnchor="middle">AGENT</text>
     </g>}
 
     {/* 집 = 컨테이너 이미지. 한 번 지은 집이 그대로 배포할 곳까지 간다 */}
@@ -302,9 +317,10 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     <g className="scene-koro" style={place([cx - KORO_SIZE / 2, cy - KORO_SIZE / 2])}>
       <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         {/* 팔과 도구는 몸 뒤에, 안전모는 몸 앞에 그린다. 일하는 중이 아니거나 조는 동안에는 팔만 내린다 */}
-        <KoroProp stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : stage} target={parachuting ? 'aws' : target} carrying={reused && !moving} />
+        {/* 온프레미스(전환이 아닐 때)의 인프라 준비 · 배포: 코로는 로봇에게 넘겨주고 손을 흔든다 */}
+        <KoroProp stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
         <Koro mood={mood} size={KORO_SIZE} />
-        {rolling && !dozing && ((stage === 1 && !reused) || stage === 2) && <KoroHat />}
+        {rolling && !dozing && ((stage === 1 && !reused) || (stage === 2 && !handingOff)) && <KoroHat />}
       </g>
       {dozing && <g className="scene-zzz" aria-hidden="true"><text x={KORO_SIZE - 4} y="4">z</text><text x={KORO_SIZE + 8} y="-10">z</text></g>}
     </g>

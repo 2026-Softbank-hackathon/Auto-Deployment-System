@@ -4,7 +4,7 @@
  */
 export type SoundName = 'tap' | 'start' | 'success' | 'failure' | 'toggle'
   // 배포 여정 장면 — 단계가 바뀌어 코로가 새 일을 시작할 때 한 번씩
-  | 'scan' | 'hammer' | 'floor' | 'warehouse' | 'wrench' | 'takeoff' | 'roll' | 'parachute' | 'check';
+  | 'scan' | 'hammer' | 'floor' | 'warehouse' | 'wrench' | 'takeoff' | 'roll' | 'robot' | 'parachute' | 'check';
 
 interface Note { frequency: number; at: number; duration: number; type: OscillatorType; gain: number; slideTo?: number }
 
@@ -51,7 +51,12 @@ const cues: Record<SoundName, Note[]> = {
     { frequency: 150, slideTo: 620, at: 0, duration: 0.7, type: 'sawtooth', gain: 0.06 },
     { frequency: 300, slideTo: 900, at: 0.1, duration: 0.6, type: 'sine', gain: 0.08 },
   ],
-  // 수레 바퀴가 구르는 낮은 네 박
+  // 에이전트 로봇이 일을 넘겨받고 내는 삑삑
+  robot: [
+    { frequency: 660, at: 0, duration: 0.07, type: 'square', gain: 0.05 },
+    { frequency: 990, at: 0.1, duration: 0.1, type: 'square', gain: 0.05 },
+  ],
+  // 로봇 바퀴가 구르는 낮은 네 박
   roll: [0, 0.11, 0.22, 0.33].map((at) => ({ frequency: 130, slideTo: 100, at, duration: 0.07, type: 'triangle' as OscillatorType, gain: 0.16 })),
   // 낙하산으로 내려오는 하강 휘파람과 펼쳐지는 소리
   parachute: [

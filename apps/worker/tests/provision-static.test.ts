@@ -21,6 +21,14 @@ function makeHarness(overrides: Partial<{
   publishFailure: Error;
   platformDomain: string | undefined;
   databaseBefore: boolean;
+  /** 같은 프로젝트 · 환경에서 직전에 Terraform 입력 지문을 남긴 배포 */
+  previous: {
+    id: number;
+    status: string;
+    terraform_inputs_hash: string;
+    target_profile: string | null;
+    terraform_outputs: unknown;
+  } | null;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   const order: string[] = [];
@@ -46,6 +54,9 @@ function makeHarness(overrides: Partial<{
       queries.push({ sql, params });
       if (sql.includes("jsonb_each")) {
         return { rows: overrides.databaseBefore ? [{ id: 7 }] : [] };
+      }
+      if (sql.includes("terraform_inputs_hash IS NOT NULL")) {
+        return { rows: overrides.previous ? [overrides.previous] : [] };
       }
       if (sql.includes("SELECT d.status")) {
         return {
@@ -129,6 +140,19 @@ function makeHarness(overrides: Partial<{
   } as unknown as WorkerDeps;
   return { deps, order, queries, terraformCli, staticSitePublisher, boss, awsRegistryFactory, getStatus: () => status };
 }
+
+function provisionLogLines(harness: ReturnType<typeof makeHarness>): string[] {
+  const notify = (harness.deps.notifier as unknown as { notify: ReturnType<typeof vi.fn> }).notify;
+  return notify.mock.calls
+    .filter(([, event]) => event === "log.line")
+    .map(([, , payload]) => String((payload as { line: string }).line));
+}
+
+const STORED_OUTPUTS = {
+  origin_url: { value: `http://${WEBSITE}` },
+  origin_hostname: { value: WEBSITE },
+  bucket_name: { value: "service-12.camellia.example.com" },
+};
 
 describe("정적 사이트 provision (#274)", () => {
   it("버킷 Terraform → 이미지에서 파일 동기화 → S3 웹사이트 endpoint 검증 순서", async () => {
@@ -219,5 +243,85 @@ describe("정적 사이트 provision (#274)", () => {
 
   it("버킷 이름 = 공개 호스트 이름", () => {
     expect(staticSiteBucketName(7, "Demo.Example.com.")).toBe("service-7.demo.example.com");
+  });
+
+  describe("인프라 변경 없는 갱신의 Terraform 생략 (#299)", () => {
+    const succeededSameInputs = {
+      id: 81,
+      status: "succeeded",
+      terraform_inputs_hash: "hash",
+      target_profile: "aws-static-basic",
+      terraform_outputs: STORED_OUTPUTS,
+    };
+
+    it("직전 성공 배포와 입력 지문이 같고 출력값이 남아 있으면 Terraform 없이 그 출력값으로 동기화한다", async () => {
+      const harness = makeHarness({ previous: succeededSameInputs });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+      expect(harness.terraformCli.output).not.toHaveBeenCalled();
+      expect(harness.order).toEqual(["status:deploying", "publish", "status:verifying", "send:verify"]);
+      expect(provisionLogLines(harness)).toContainEqual(
+        expect.stringContaining("인프라 변경 없음 — Terraform 생략 (직전 성공 배포 #81 출력값 재사용)"),
+      );
+      expect(harness.staticSitePublisher.publish).toHaveBeenCalledWith(expect.objectContaining({
+        bucket: "service-12.camellia.example.com",
+      }));
+      // 이번 배포에도 지문과 출력값을 남겨 다음 갱신이 이어서 생략할 수 있게 한다
+      const hash = harness.queries.find((q) => q.sql.includes("SET terraform_inputs_hash"));
+      expect(hash?.params).toEqual(["hash", 99]);
+      const saved = harness.queries.find((q) => q.sql.includes("SET public_url"));
+      expect(saved?.params[0]).toBe(`http://${WEBSITE}`);
+      expect(JSON.parse(String(saved?.params[1]))).toEqual(STORED_OUTPUTS);
+      expect(harness.boss.send).toHaveBeenCalledWith("verify", expect.objectContaining({
+        targetUrl: `http://${WEBSITE}`,
+      }));
+    });
+
+    it.each([
+      ["입력이 바뀜", { ...succeededSameInputs, terraform_inputs_hash: "hash-old" }, true],
+      ["직전 배포가 실패", { ...succeededSameInputs, status: "failed" }, true],
+      ["다른 프로필로 배포함", { ...succeededSameInputs, target_profile: "aws-ecs-basic" }, false],
+      ["저장된 출력값이 없음", { ...succeededSameInputs, terraform_outputs: null }, false],
+      ["첫 배포", null, true],
+    ])("%s → Terraform 을 실행하고 출력값을 남긴다", async (_case, previous, refresh) => {
+      const harness = makeHarness({ previous });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).toHaveBeenCalledOnce();
+      expect(harness.terraformCli.apply).toHaveBeenCalledWith(expect.objectContaining({ refresh }));
+      expect(provisionLogLines(harness).some((line) => line.includes("Terraform 생략"))).toBe(false);
+      const saved = harness.queries.find((q) => q.sql.includes("SET public_url"));
+      expect(JSON.parse(String(saved?.params[1]))).toEqual(STORED_OUTPUTS);
+      expect(harness.getStatus()).toBe("verifying");
+    });
+
+    it("sensitive 출력값은 저장하지 않는다", async () => {
+      const harness = makeHarness();
+      harness.terraformCli.apply.mockResolvedValueOnce({
+        ...STORED_OUTPUTS,
+        token: { value: "secret", sensitive: true },
+      } as never);
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const saved = harness.queries.find((q) => q.sql.includes("SET public_url"));
+      expect(JSON.parse(String(saved?.params[1]))).toEqual(STORED_OUTPUTS);
+    });
+
+    it("입력 지문에서 배포마다 바뀌는 앱 이름을 뺀다 (분석기가 이름을 못 찾으면 업로드 폴더 이름이 된다)", async () => {
+      const harness = makeHarness();
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const [input] = harness.terraformCli.fingerprint.mock.calls[0] as unknown as [{ variables: Record<string, unknown> }];
+      expect(input.variables).not.toHaveProperty("app_name");
+      expect(input.variables).toMatchObject({
+        bucket_name: "service-12.camellia.example.com",
+        verifier_cidrs: ["203.0.113.9/32"],
+      });
+    });
   });
 });

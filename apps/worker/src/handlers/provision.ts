@@ -383,7 +383,8 @@ export async function handleProvision(
 
 /**
  * 정적 사이트 on AWS (#274) — 서버 없이 S3 웹사이트 호스팅.
- * 1. Terraform 으로 버킷(이름 = 공개 호스트 이름) · 웹사이트 설정 · 버킷 정책 (입력이 같으면 -refresh=false 빠른 길)
+ * 1. Terraform 으로 버킷(이름 = 공개 호스트 이름) · 웹사이트 설정 · 버킷 정책.
+ *    인프라 입력이 직전 성공 배포와 같으면 Terraform 을 건너뛰고 그 배포의 출력값을 쓴다 (#299)
  * 2. 빌드한 이미지(같은 digest)에서 파일을 꺼내 버킷과 맞춘다
  * 3. S3 웹사이트 endpoint 를 직접 검증한 뒤 verify 가 Cloudflare 공개 주소를 그쪽으로 바꾼다
  */
@@ -423,36 +424,52 @@ async function provisionStaticSite(input: {
   };
 
   await stepLog.line(`정적 사이트 — 서버 없이 S3 웹사이트 호스팅 (버킷 ${bucket})`);
-  const applied = context.status === "deploying" && context.origin_url
-    ? {
-        originUrl: context.origin_url,
-        outputs: await deps.terraformCli!.output({
-          moduleDirectory: input.moduleDirectory,
-          backend: { ...deps.terraformBackend!, stateKey: input.stateKey },
-          region,
-          credentials,
-          variables,
-          log: (line: string) => stepLog.line(line),
-        }),
-      }
-    : await applyTerraform({
-        deps,
-        stepLog,
-        deploymentId,
-        projectId: input.projectId,
-        environmentId: input.environmentId,
+  let applied: { originUrl: string; outputs: TerraformOutputs };
+  if (context.status === "deploying" && context.origin_url) {
+    applied = {
+      originUrl: context.origin_url,
+      outputs: await deps.terraformCli!.output({
         moduleDirectory: input.moduleDirectory,
-        stateKey: input.stateKey,
-        resourceName: input.resourceName,
-        variables,
-        credentials,
+        backend: { ...deps.terraformBackend!, stateKey: input.stateKey },
         region,
-      });
+        credentials,
+        variables,
+        log: (line: string) => stepLog.line(line),
+      }),
+    };
+  } else {
+    const terraformInput = {
+      deps,
+      stepLog,
+      deploymentId,
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      moduleDirectory: input.moduleDirectory,
+      stateKey: input.stateKey,
+      resourceName: input.resourceName,
+      variables,
+      credentials,
+      region,
+    };
+    const history = await recordTerraformInputs(terraformInput);
+    const reused = reusableStaticOutputs(history);
+    if (reused) {
+      await stepLog.line(
+        `인프라 변경 없음 — Terraform 생략 (직전 성공 배포 #${history.last!.id} 출력값 재사용)`,
+      );
+      applied = reused;
+    } else {
+      applied = await applyTerraform({ ...terraformInput, history });
+    }
+  }
   const originUrl = applied.originUrl;
   validateOriginUrl(originUrl);
+  // 출력값을 남겨 두면 인프라 입력이 같은 다음 갱신이 Terraform 을 건너뛴다 (#299)
   await deps.pool.query(
-    "UPDATE deployments SET public_url = $1, updated_at = NOW() WHERE id = $2",
-    [originUrl, deploymentId],
+    `UPDATE deployments
+     SET public_url = $1, terraform_outputs = $2::jsonb, updated_at = NOW()
+     WHERE id = $3`,
+    [originUrl, JSON.stringify(storableOutputs(applied.outputs)), deploymentId],
   );
   if (context.status === "provisioning") {
     await transitionTo(deps.pool, deploymentId, "deploying");
@@ -509,6 +526,38 @@ export function staticSiteBucketName(projectId: number, platformDomain: string):
   return `service-${projectId}.${domain}`;
 }
 
+/**
+ * 인프라 변경 없는 정적 사이트 갱신 (#299) — 같은 프로젝트 · 환경의 직전 Terraform 배포가 성공했고
+ * 입력 지문(모듈 파일 · 버킷 이름 · 워커 IP · region · 키 등)이 같고 그 배포가 정적 사이트 출력값을 남겼으면
+ * Terraform 을 돌리지 않고 그 출력값을 쓴다. 버킷 · 정책을 바꿀 입력이 없으므로 apply 결과도 같다.
+ * 첫 배포 · 입력 변경 · 직전 실패 · 출력값 없음이면 null → 지금처럼 Terraform 실행.
+ */
+function reusableStaticOutputs(
+  history: TerraformInputsHistory,
+): { originUrl: string; outputs: TerraformOutputs } | null {
+  const last = history.last;
+  if (
+    !last ||
+    last.status !== "succeeded" ||
+    last.terraform_inputs_hash !== history.inputsHash ||
+    last.target_profile !== "aws-static-basic"
+  ) {
+    return null;
+  }
+  const outputs = last.terraform_outputs;
+  if (!outputs || typeof outputs !== "object" || Array.isArray(outputs)) return null;
+  const originUrl = outputs["origin_url"]?.value;
+  if (typeof originUrl !== "string" || !originUrl) return null;
+  return { originUrl, outputs };
+}
+
+/** DB 에 남길 출력값 — sensitive 출력은 뺀다 */
+function storableOutputs(outputs: TerraformOutputs): TerraformOutputs {
+  return Object.fromEntries(
+    Object.entries(outputs).filter(([, output]) => output.sensitive !== true),
+  );
+}
+
 async function failProvisionStage(
   deps: WorkerDeps,
   deploymentId: number,
@@ -554,9 +603,14 @@ async function applyTerraform(input: {
   variables: Record<string, TerraformVariable>;
   credentials: { accessKeyId: string; secretAccessKey: string };
   region: string;
+  /** 호출자가 이미 기록 · 조회한 입력 지문 (정적 사이트, #299). 없으면 여기서 한다 */
+  history?: TerraformInputsHistory;
 }): Promise<{ originUrl: string; outputs: TerraformOutputs }> {
   const { deps } = input;
-  const refresh = await decideStateRefresh(input);
+  const refresh = await decideStateRefresh(
+    input.stepLog,
+    input.history ?? (await recordTerraformInputs(input)),
+  );
   await input.stepLog.line("Terraform 실행 시작");
   try {
     const outputs = await deps.terraformCli!.apply({
@@ -587,16 +641,29 @@ async function applyTerraform(input: {
   }
 }
 
+type TerraformInputsHistory = {
+  /** 이번 배포의 인프라 입력 지문 */
+  inputsHash: string;
+  /** 같은 프로젝트 · 환경에서 직전에 지문을 남긴 배포 */
+  last:
+    | {
+        id: number | string;
+        status: string;
+        terraform_inputs_hash: string;
+        target_profile: string | null;
+        terraform_outputs: TerraformOutputs | null;
+      }
+    | undefined;
+};
+
 /**
- * 이미지만 바뀐 재배포의 상태 재조회 생략 (#252, 팀 합의 2026-10-02).
- * 이미지를 뺀 Terraform 입력(모듈 파일 · 변수 · region · access key ID)의 지문이 같은 프로젝트 · 환경에서
- * 직전에 Terraform 을 돌린 배포와 같고 그 배포가 성공했을 때만 -refresh=false 로 하고,
- * 이때는 plan · apply 를 apply 한 번으로 합친다 (#260).
+ * 이번 배포의 인프라 입력 지문을 기록하고, 같은 프로젝트 · 환경에서 직전에 Terraform 을 돌린 배포를 찾는다.
+ * 지문은 이미지와 앱 이름을 뺀 Terraform 입력(모듈 파일 · 변수 · region · access key ID)이다.
+ * 앱 이름은 분석기가 이름을 못 찾으면 업로드 폴더 이름(camellia-stage-<소스 해시>)이라 배포마다 바뀐다 (#299).
  * 지문은 apply 전에 이번 배포에 기록한다 → apply 나 검증이 실패하면(ECS 롤백 등) 다음 배포는 전체 재조회.
  */
-async function decideStateRefresh(input: {
+async function recordTerraformInputs(input: {
   deps: WorkerDeps;
-  stepLog: ReturnType<typeof createStepLogger>;
   deploymentId: number;
   projectId: number;
   environmentId: number;
@@ -604,21 +671,17 @@ async function decideStateRefresh(input: {
   variables: Record<string, TerraformVariable>;
   credentials: { accessKeyId: string; secretAccessKey: string };
   region: string;
-}): Promise<boolean> {
+}): Promise<TerraformInputsHistory> {
   const { deps } = input;
-  const { container_image: _image, ...infraVariables } = input.variables;
+  const { container_image: _image, app_name: _appName, ...infraVariables } = input.variables;
   const inputsHash = await deps.terraformCli!.fingerprint({
     moduleDirectory: input.moduleDirectory,
     region: input.region,
     credentials: input.credentials,
     variables: infraVariables,
   });
-  const previous = await deps.pool.query<{
-    id: number | string;
-    status: string;
-    terraform_inputs_hash: string;
-  }>(
-    `SELECT id, status, terraform_inputs_hash
+  const previous = await deps.pool.query<NonNullable<TerraformInputsHistory["last"]>>(
+    `SELECT id, status, terraform_inputs_hash, target_profile, terraform_outputs
      FROM deployments
      WHERE project_id = $1 AND target_environment_id = $2 AND id <> $3
        AND terraform_inputs_hash IS NOT NULL
@@ -630,10 +693,20 @@ async function decideStateRefresh(input: {
     "UPDATE deployments SET terraform_inputs_hash = $1, updated_at = NOW() WHERE id = $2",
     [inputsHash, input.deploymentId],
   );
+  return { inputsHash, last: previous.rows[0] };
+}
 
-  const last = previous.rows[0];
+/**
+ * 이미지만 바뀐 재배포의 상태 재조회 생략 (#252, 팀 합의 2026-10-02).
+ * 인프라 입력 지문이 직전에 Terraform 을 돌린 배포와 같고 그 배포가 성공했을 때만 -refresh=false 로 하고,
+ * 이때는 plan · apply 를 apply 한 번으로 합친다 (#260).
+ */
+async function decideStateRefresh(
+  stepLog: ReturnType<typeof createStepLogger>,
+  { inputsHash, last }: TerraformInputsHistory,
+): Promise<boolean> {
   if (last?.status === "succeeded" && last.terraform_inputs_hash === inputsHash) {
-    await input.stepLog.line(
+    await stepLog.line(
       `이미지만 바뀌어 상태 재조회 생략 — 직전 성공 배포 #${last.id} 와 인프라 입력이 같아 -refresh=false 로 plan·apply 를 한 번에 실행합니다.`,
     );
     return false;
@@ -643,7 +716,7 @@ async function decideStateRefresh(input: {
     : last.status !== "succeeded"
       ? `직전 배포 #${last.id} 가 성공하지 않음`
       : "인프라 입력 변경";
-  await input.stepLog.line(`전체 상태 재조회로 plan → apply 를 실행합니다 (${reason}).`);
+  await stepLog.line(`전체 상태 재조회로 plan → apply 를 실행합니다 (${reason}).`);
   return true;
 }
 

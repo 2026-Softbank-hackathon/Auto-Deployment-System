@@ -141,7 +141,7 @@ describe("POST /api/v1/projects", () => {
 describe("GET /api/v1/projects", () => {
   it("returns project list", async () => {
     const project = makeProject(1, "todo-app");
-    mockPool.on(/SELECT id, name, description, created_at, updated_at\s+FROM projects/, () => ({
+    mockPool.on(/FROM projects p/, () => ({
       rows: [project],
     }));
 

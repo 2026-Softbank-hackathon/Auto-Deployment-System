@@ -12,6 +12,7 @@ import {
   ErrorBodySchema,
   ListProjectDeploymentsQuerySchema,
   PatchProjectEnvBodySchema,
+  ProjectDeploymentSchema,
   ProjectSchema,
   TARGET_VENDORS,
   TargetVendorSchema,
@@ -23,6 +24,8 @@ const project = {
   name: "todo-app",
   createdAt: "2026-09-30T03:00:00.000Z",
   updatedAt: "2026-09-30T03:00:00.000Z",
+  live: null,
+  latest: null,
 };
 
 describe("TARGET_VENDORS", () => {
@@ -40,6 +43,61 @@ describe("TARGET_VENDORS", () => {
 });
 
 describe("응답 스키마", () => {
+  it("Project.live · latest — 서비스 중인 배포와 최근 배포 요약", () => {
+    const withDeployments = {
+      ...project,
+      live: {
+        deploymentId: "7",
+        environmentId: "3",
+        environmentType: "onprem",
+        environmentName: "home-mac",
+        publicUrl: "https://service-1.example.com",
+        succeededAt: "2026-09-30T03:10:00.000Z",
+      },
+      latest: {
+        deploymentId: "8",
+        status: "building",
+        environmentType: "aws",
+        createdAt: "2026-09-30T03:20:00.000Z",
+      },
+    };
+    expect(ProjectSchema.safeParse(withDeployments).success).toBe(true);
+    // 환경이 없는 옛 배포 — 환경 필드 null
+    const legacy = {
+      ...withDeployments,
+      live: { ...withDeployments.live, environmentId: null, environmentType: null, environmentName: null, publicUrl: null },
+      latest: { ...withDeployments.latest, environmentType: null },
+    };
+    expect(ProjectSchema.safeParse(legacy).success).toBe(true);
+    expect(ProjectSchema.safeParse({ ...withDeployments, live: { ...withDeployments.live, extra: 1 } }).success).toBe(false);
+    expect(ProjectSchema.safeParse({ ...withDeployments, latest: { ...withDeployments.latest, environmentType: "gcp" } }).success).toBe(false);
+    const { live: _live, ...noLive } = withDeployments;
+    expect(ProjectSchema.safeParse(noLive).success).toBe(false);
+  });
+
+  it("ProjectDeployment — 환경 정보와 isLive", () => {
+    const item = {
+      id: "7",
+      status: "succeeded",
+      targetProfile: "onprem-docker-basic",
+      publicUrl: null,
+      sourceVersion: null,
+      createdAt: "2026-09-30T03:00:00.000Z",
+      succeededAt: "2026-09-30T03:10:00.000Z",
+      failedAt: null,
+      environmentId: "3",
+      environmentType: "onprem",
+      environmentName: "home-mac",
+      isLive: true,
+    };
+    expect(ProjectDeploymentSchema.safeParse(item).success).toBe(true);
+    expect(
+      ProjectDeploymentSchema.safeParse({ ...item, environmentId: null, environmentType: null, environmentName: null, isLive: false }).success,
+    ).toBe(true);
+    const { isLive: _isLive, ...noIsLive } = item;
+    expect(ProjectDeploymentSchema.safeParse(noIsLive).success).toBe(false);
+  });
+
   it("선언 안 된 필드 · 빠진 필드를 거부함 (strict)", () => {
     expect(ProjectSchema.safeParse(project).success).toBe(true);
     expect(ProjectSchema.safeParse({ ...project, extra: 1 }).success).toBe(false);

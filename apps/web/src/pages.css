@@ -168,9 +168,10 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .stage-chip__note { font-family: var(--font-mono); font-size: 12px; }
 .stage-chip.is-done .stage-chip__note { color: var(--moss-text); }
 .stage-chip.is-current { border: 2.5px solid var(--koro); color: var(--koro-text); font-weight: 700; }
+.stage-chip.is-skipped { background: transparent; border-style: dotted; border-color: var(--line); color: var(--ink-soft); opacity: .7; }
 .stage-chip.is-pending { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--ink-soft); }
 
-.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 44px 0 0; }
+.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 44px auto 0; }
 /* 코로의 생각 풍선. 코로 머리 위 한 점(--koro-x, --koro-y)에 붙어서 코로와 같이 움직인다. */
 .koro-think { position: absolute; left: var(--koro-x); top: var(--koro-y); width: 0; height: 0; pointer-events: none; transition: left var(--dur-scene) var(--ease-roll), top var(--dur-scene) var(--ease-roll); }
 .koro-think__dot { position: absolute; border-radius: 50%; background: var(--surface); border: 2px solid var(--koro); }

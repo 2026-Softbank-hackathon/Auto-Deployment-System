@@ -10,7 +10,7 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { awsSceneStage, DeployScene, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { awsSceneStage, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
 import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -82,15 +82,16 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function StageChips({ view, currentElapsed }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null }) {
+function StageChips({ view, currentElapsed, skipped = 0 }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null; /** 앞에서부터 건너뛴 단계 수 — 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않는다 */ skipped?: number }) {
   const { t } = useI18n();
   return <ol className="stage-chips" aria-label={t.run.chipsLabel}>
     {railStages.map((stage, index) => {
-      const done = view.stage !== null && index < view.stage;
-      const current = view.outcome === 'active' && view.stage === index;
-      const state = done ? 'done' : current ? 'current' : 'pending';
+      const skip = index < skipped;
+      const done = !skip && view.stage !== null && index < view.stage;
+      const current = !skip && view.outcome === 'active' && view.stage === index;
+      const state = skip ? 'skipped' : done ? 'done' : current ? 'current' : 'pending';
       // 실패·중단은 백엔드가 멈춘 단계를 주지 않는다(stage = null). 어디까지 갔는지 지어내지 않고 단계 이름만 보여 준다.
-      const note = view.stage === null ? null : done ? t.run.chipDone : current ? (view.waiting === 'approval' ? t.run.chipWaiting : view.waiting === 'queue' ? t.run.chipQueued : t.run.chipCurrent) : t.run.chipPending;
+      const note = skip ? t.run.chipSkipped : view.stage === null ? null : done ? t.run.chipDone : current ? (view.waiting === 'approval' ? t.run.chipWaiting : view.waiting === 'queue' ? t.run.chipQueued : t.run.chipCurrent) : t.run.chipPending;
       return <li key={stage} className={`stage-chip is-${state}`} aria-current={current ? 'step' : undefined}>
         <GadgetIcon kind={stage} size={18} />
         <span>{t.stages[stage]}</span>
@@ -259,6 +260,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
   // 장면에 쓰는 단계: AWS는 인프라 준비 도중에 비행 장면으로 넘어간다(서버의 "배포" 상태가 순식간이라서). 코로의 말은 실제 단계를 따른다.
   const sceneView = awsSceneStage(view, target, stepSeconds);
+  // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
+  const box = sceneBox(target, story);
   const [koroX, koroY] = koroSpot(sceneView, target, story);
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
@@ -271,7 +274,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     return () => window.clearTimeout(timer);
   }, [cue]);
   // 빌드 중 집의 층이 올라갈 때마다 (장면의 층수 계산과 같은 박자: 8초마다, 3층까지)
-  const risingFloor = rolling && view.stage === 1 && !story?.reused ? Math.min(2, Math.floor(stepSeconds / 8)) : 0;
+  const risingFloor = rolling && view.stage === 1 && !story?.reused ? Math.min(houseFloors(story) - 1, Math.floor(stepSeconds / 8)) : 0;
   useEffect(() => { if (risingFloor > 0) playRef.current('floor'); }, [risingFloor]);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
@@ -336,7 +339,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </p>
       </div>
 
-      <StageChips view={view} currentElapsed={stepStartedAt && view.outcome === 'active' ? elapsed(stepStartedAt, now) : null} />
+      <StageChips view={view} skipped={story?.reused ? 2 : 0} currentElapsed={stepStartedAt && view.outcome === 'active' ? elapsed(stepStartedAt, now) : null} />
 
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
@@ -358,13 +361,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure className={`run-scene ${talk ? 'has-talk' : ''}`}>
+        <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
           <DeployScene view={sceneView} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
-          {talk && <div className={`koro-think ${koroX > SCENE_SIZE.width * 0.85 ? 'is-left' : 'is-right'} ${koroX > SCENE_SIZE.width * 0.7 ? 'is-near-edge' : ''}`}
-            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - sceneBox(target, story).top) / sceneBox(target, story).height) * 100}%` } as CSSProperties}>
+          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''}`}
+            style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}

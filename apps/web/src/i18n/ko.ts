@@ -413,6 +413,7 @@ export const ko = {
     titleStopped: '배포가 멈췄어요',
     chipsLabel: '배포 단계',
     chipDone: '완료',
+    chipSkipped: '건너뜀',
     chipCurrent: '진행 중',
     chipWaiting: '확인 대기',
     chipQueued: '대기 중',
@@ -435,6 +436,7 @@ export const ko = {
     nowLabel: '지금',
     // 기다리는 동안 코로가 하는 말. 단계마다 차례로 돌아간다. 분석 결과(스택 · 포트)는 서버가 준 값만 넣는다.
     talk: {
+      update: '지금 버전과 바꿀 새 버전을 짓고 있어요',
       reuse: '전에 만든 이미지를 그대로 써요. 다시 만들지 않아요',
       reuseSwitch: '같은 이미지예요. 장소만 바꿔요',
       rollback: (label: string) => `이전 버전(${label})으로 되돌리고 있어요`,

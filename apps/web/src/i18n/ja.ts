@@ -413,6 +413,7 @@ export const ja: Messages = {
     titleStopped: 'デプロイが中止されました',
     chipsLabel: 'デプロイ段階',
     chipDone: '完了',
+    chipSkipped: 'スキップ',
     chipCurrent: '進行中',
     chipWaiting: '確認待ち',
     chipQueued: '順番待ち',
@@ -434,6 +435,7 @@ export const ja: Messages = {
     workNote: '作業ノート',
     nowLabel: '現在',
     talk: {
+      update: '今のバージョンと入れ替える新しいバージョンを建てています',
       reuse: '前に作ったイメージをそのまま使います。作り直しません',
       reuseSwitch: '同じイメージです。場所だけ変えます',
       rollback: (label: string) => `以前のバージョン(${label})に戻しています`,

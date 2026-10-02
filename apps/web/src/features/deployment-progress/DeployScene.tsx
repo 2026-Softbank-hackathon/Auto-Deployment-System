@@ -89,14 +89,27 @@ function isMoving(story: DeployStory | null): boolean {
 const PARACHUTE_AIR: Spot = [1035, 310];
 export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const;
 /** 장면이 보여 주는 세로 범위. 온프레미스 여정은 땅에서만 일어나므로 빈 하늘을 잘라 낸다. */
-export function sceneBox(target: SceneTarget, story: DeployStory | null = null): { top: number; height: number } {
+/**
+ * 가로 범위도 줄인다: 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않으므로 설계도와 집 짓는 곳을 그리지 않는다.
+ * (같은 환경 재배포 · 롤백은 창고부터, 환경 전환은 탈것을 준비하는 곳부터 보여 준다.)
+ */
+export function sceneBox(target: SceneTarget, story: DeployStory | null = null): { left: number; top: number; width: number; height: number } {
   const sky = target !== 'onprem' || (story?.prev != null && story.prev.target === 'aws');
-  return sky ? { top: 0, height: SCENE_SIZE.height } : { top: 190, height: SCENE_SIZE.height - 190 };
+  const left = !story?.reused ? 0 : isMoving(story) ? 580 : 360;
+  return { left, width: SCENE_SIZE.width - left, ...(sky ? { top: 0, height: SCENE_SIZE.height } : { top: 190, height: SCENE_SIZE.height - 190 }) };
+}
+
+/**
+ * 다 지었을 때의 층수. 버전 업데이트(서비스 중인 버전이 있는 앱에 새로 빌드해서 올리는 배포)는
+ * 지금 서비스 중인 집보다 한 층 높은 집을 짓는다 — 처음 배포와 구분하고, "더 새 버전으로 바꾼다"를 보여 준다.
+ */
+export function houseFloors(story: DeployStory | null): number {
+  return story?.kind === 'update' && !story.reused ? FLOORS + 1 : FLOORS;
 }
 
 type Windows = 'off' | 'checking' | 'on';
 /** 집 한 채 (바닥 중심이 원점). 층수 · 지붕 · 창문 불빛 · 이미지 이름표 */
-function House({ floors, roofed, windows, tag }: { floors: number; roofed: boolean; windows: Windows; tag: string | null }) {
+function House({ floors, total = FLOORS, roofed, windows, tag }: { floors: number; /** 다 지었을 때의 층수 (지붕 높이) */ total?: number; roofed: boolean; windows: Windows; tag: string | null }) {
   const light = windows === 'on' ? 'is-on' : windows === 'checking' ? 'is-checking' : '';
   return <>
     {Array.from({ length: floors }, (_, index) => <g key={index} className="jr-floor">
@@ -105,7 +118,7 @@ function House({ floors, roofed, windows, tag }: { floors: number; roofed: boole
         ? <><rect className="jr-door" x="-8" y="-18" width="16" height="18" rx="2" /><rect className={`jr-window ${light}`} x="18" y="-19" width="12" height="11" rx="2" /></>
         : <><rect className={`jr-window ${light}`} x="-28" y={-(index + 1) * FLOOR_HEIGHT + 8} width="12" height="11" rx="2" /><rect className={`jr-window ${light}`} x="16" y={-(index + 1) * FLOOR_HEIGHT + 8} width="12" height="11" rx="2" /></>}
     </g>)}
-    {roofed && <path className="jr-roof" d={`M-48 ${-FLOORS * FLOOR_HEIGHT} L0 ${-FLOORS * FLOOR_HEIGHT - 30} L48 ${-FLOORS * FLOOR_HEIGHT} Z`} />}
+    {roofed && <path className="jr-roof" d={`M-48 ${-total * FLOOR_HEIGHT} L0 ${-total * FLOOR_HEIGHT - 30} L48 ${-total * FLOOR_HEIGHT} Z`} />}
     {tag && floors > 0 && <g className="jr-tag">
       <rect x="-22" y="-13" width="44" height="17" rx="4" />
       <text x="0" y="0" textAnchor="middle">{tag}</text>
@@ -156,7 +169,8 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
 
   // 전에 만든 이미지를 재사용하면 집은 처음부터 다 지어진 채로 창고에서 나온다.
   const reused = story?.reused === true && reached(1);
-  const floors = stopped || stage === 0 ? 0 : reused ? FLOORS : stage === 1 ? (rolling ? Math.min(FLOORS, 1 + Math.floor(stepSeconds / FLOOR_SECONDS)) : 0) : FLOORS;
+  const total = houseFloors(story);
+  const floors = stopped || stage === 0 ? 0 : reused ? total : stage === 1 ? (rolling ? Math.min(total, 1 + Math.floor(stepSeconds / FLOOR_SECONDS)) : 0) : total;
   const roofed = reached(2) || reused;
   // 지금까지 서비스하던 버전: 그 버전이 있는 도착점의 옆자리에 서 있다. 환경을 모르면 이번 배포와 같은 곳으로 본다.
   const prev = story?.prev ?? null;
@@ -187,11 +201,11 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const box = sceneBox(target, story);
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
-  const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - HOUSE_HEIGHT - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
+  const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
-  return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`0 ${box.top} ${SCENE_SIZE.width} ${box.height}`} role="img" aria-label={fullLabel}>
-    <line className="scene-floor" x1="20" y1={GROUND} x2="1180" y2={GROUND} />
+  return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
+    <line className="scene-floor" x1={box.left + 20} y1={GROUND} x2="1180" y2={GROUND} />
 
     {/* 배포할 곳 — AWS: 구름 위 세계 · 온프레미스: 내 서버 옆 자리. 환경 전환이면 둘 다 그린다(집터는 이번에 갈 곳에만) */}
     {showLot && <g className="jr-dest">
@@ -204,17 +218,18 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       {onGround && <rect className={`jr-pad ${padClass}`} x={LOT_SLOT[0] - 47} y={GROUND - 6} width="94" height="6" rx="2" />}
     </g>}
     {showCloud && <g className="jr-dest">
-      <g className="jr-drift">
+      {/* 장식 구름은 장면을 잘라 냈을 때는 그리지 않는다(잘린 범위 밖에 있다) */}
+      {box.left === 0 && <g className="jr-drift">
         <path className="jr-cloudlet" d="M120 96 h60 a14 14 0 0 0 0 -28 a20 20 0 0 0 -38 -6 a16 16 0 0 0 -22 34 z" />
         <path className="jr-cloudlet" d="M560 70 h44 a11 11 0 0 0 0 -22 a16 16 0 0 0 -30 -4 a12 12 0 0 0 -14 26 z" />
-      </g>
+      </g>}
       <ellipse className="jr-cloud" cx="945" cy="206" rx="46" ry="24" />
       <ellipse className="jr-cloud" cx="1035" cy="216" rx="56" ry="26" />
       <ellipse className="jr-cloud" cx="1125" cy="206" rx="46" ry="24" />
       <path className="jr-cloud" d="M900 150 H1160 A32 32 0 0 1 1160 214 H900 A32 32 0 0 1 900 150 Z" />
       {(target === 'aws' || onGround) && <text className="jr-sign" x="1030" y="192" textAnchor="middle">AWS</text>}
       {!onGround && <rect className={`jr-pad ${inPlace ? 'is-ready' : padClass}`} x={CLOUD_SLOT[0] - 47} y="144" width="94" height="6" rx="2" />}
-      {!onGround && <path className="jr-route" d="M566 396 Q 800 330 960 230" />}
+      {!onGround && !moving && <path className="jr-route" d="M566 396 Q 800 330 960 230" />}
     </g>}
 
     {/* 지금까지 서비스하던 버전. 성공해도 불은 켜져 있다(실제로 계속 떠 있다). AWS 제자리 교체만 새 집이 도착하면 사라진다 */}
@@ -223,11 +238,11 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 0 · 설계도 — 올린 소스(ZIP)를 읽어 배포 명세(IR)를 그린다 */}
-    <g className="jr-zip">
+    {!reused && <g className="jr-zip">
       <rect className="jr-paper" x="34" y="408" width="46" height="32" rx="4" />
       <text className="scene-zip" x="57" y="429" textAnchor="middle">ZIP</text>
-    </g>
-    <g className={`jr-easel ${working(0) ? 'is-working' : reached(1) ? 'is-done' : ''}`}>
+    </g>}
+    {!reused && <g className={`jr-easel ${working(0) ? 'is-working' : reached(1) ? 'is-done' : ''}`}>
       <path className="jr-line" d="M122 372 L106 440 M208 372 L224 440" />
       <rect className="jr-paper" x="95" y="270" width="140" height="102" rx="6" />
       <text className="jr-board-title" x="107" y="290">IR</text>
@@ -235,10 +250,10 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <path className="jr-draft" d="M110 322 H196" />
       <path className="jr-draft" d="M110 340 H212" />
       <path className="jr-draft" d="M110 358 H170" />
-    </g>
+    </g>}
 
     {/* 1 · 집 짓는 곳 — 터와 비계 */}
-    <rect className="jr-pad is-ready" x="476" y={GROUND - 6} width="88" height="6" rx="2" />
+    {!moving && <rect className="jr-pad is-ready" x="476" y={GROUND - 6} width="88" height="6" rx="2" />}
     {/* 이미지를 재사용하는 배포: 집을 짓지 않고 창고(이미지 저장소)에서 꺼낸다 */}
     {reused && !moving && <g className="jr-warehouse">
       <path className="jr-paper" d={`M446 ${GROUND} V352 Q520 318 594 352 V${GROUND} Z`} />
@@ -275,7 +290,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
         <path className="jr-line" d="M-58 -152 L-44 -80 M58 -152 L44 -80 M0 -176 V-108" />
         <path className="jr-parachute__canopy" d="M-62 -150 Q0 -232 62 -150 Q31 -166 0 -150 Q-31 -166 -62 -150 Z" />
       </g>}
-      <House floors={floors} roofed={roofed} windows={arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
+      <House floors={floors} total={total} roofed={roofed} windows={arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
     </g>
 
     {liveAt && <g className="jr-live" style={place(liveAt)}>

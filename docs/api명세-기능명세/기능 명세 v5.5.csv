@@ -1,0 +1,448 @@
+기능,담당자,우선순위,분류,Status,조건 / 설명,Endpoint,ID
+새 프로젝트 만들기,이정,P0,분석,완료,"[사용자] 콘솔에서 프로젝트를 만들고 서브도메인을 지정한다 (D-67).
+
+[구현] POST /api/v1/projects → apps/api/src/routes/projects.ts → apps/api/src/services/project-service.ts → projects row INSERT. subdomain 입력 시 projectSubdomain() 유효성 검사 (3~40자 · 소문자/숫자/하이픈 · 예약어 체크).",POST /projects,SRC-01
+소스 zip 업로드,이정,P0,분석,완료,"[사용자] 소스 zip (최대 100MB) 을 올려 배포를 시작한다.
+
+[구현] POST /api/v1/deployments (multipart) → apps/api/src/routes/deployments.ts → apps/api/src/services/deployment-service.ts → deployments + source_versions row + pg-boss analyze job 이 한 트랜잭션.",POST /deployments,SRC-02
+Git 저장소 연결,이정,P2,분석,대기,"[사용자] GitHub URL 을 연결하면 코드를 직접 업로드하지 않아도 배포할 수 있다.
+
+[구현] P2 미구현 (D-44: 웹 업로드가 P0). GitHub App + webhook 연동 예정.",-,SRC-03
+소스 버전 자동 추적,이정,P0,분석,완료,"[사용자] 같은 소스를 다시 올려도 자동으로 중복이 감지된다.
+
+[구현] apps/api/src/services/deployment-service.ts sha256 계산 → source_versions 테이블 sha256 컬럼 중복 체크.",-,SRC-04
+모노레포 서비스 자동 감지,이정,P0,분석,완료,"[사용자] services/*, packages/*, apps/* 를 자동 인식해 모노레포를 처리한다.
+
+[구현] packages/analyzer/src/service-splitter.ts → services[] 다중 매핑 → IR services[] 배열.",-,SRC-05
+언어·프레임워크 자동 감지,이정,P0,분석,완료,"[사용자] 별도 입력 없이 Node.js · Python · Dockerfile · 정적 사이트가 자동 분류된다.
+
+[구현] packages/analyzer/src/detectors/{nodejs,python,docker,static}.ts 정규식 · pkg 매니페스트 파싱 → analysis_reports.detected_stack JSON.",-,ANL-01
+런타임 정보 자동 추출,이정,P0,분석,완료,"[사용자] 포트 · 시작 명령어를 입력하지 않아도 자동 인식된다.
+
+[구현] packages/analyzer/src/detectors/ port/command 파싱 → IR services[].port · services[].command 자동 세팅. 애매하면 fill-unresolved 로 AI 보완 (D-56).",-,ANL-02
+의존 리소스 자동 감지,이정,P0,분석,완료,"[사용자] DB · 캐시 등 리소스 의존이 자동으로 IR 에 들어간다.
+
+[구현] packages/analyzer/src/detectors/database.ts 로 SQLite · Postgres · Prisma 등 탐지 → IR services[].resources[] 로 기록. analysis_reports.services_json.",-,ANL-03
+환경변수·비밀값 탐지,이정,P0,분석,완료,"[사용자] 어떤 환경변수가 필요한지, 소스에 비밀값이 직접 써 있는지 자동 경고를 받는다.
+
+[구현] packages/analyzer/src/detectors/env.ts → analysis_reports.env_vars[] + hardcoded_secrets_warnings[] (line 번호 포함).",-,ANL-04
+서비스 구조 파악,이정,P0,분석,완료,"[사용자] 멀티 서비스 프로젝트는 서비스별로 자동 분리된다.
+
+[구현] packages/analyzer/src/service-splitter.ts → IR services[] 배열 + 서비스 간 의존 기록. analysis_reports.services_json.",-,ANL-05
+운영 위험 진단,이정,P0,분석,완료,"[사용자] 하드코딩 비밀값 · 루트 실행 등 위험 경고를 분석 단계에서 받는다.
+
+[구현] packages/analyzer/src/risk-checker.ts → analysis_reports.warnings[] JSON (severity · message · line).",-,ANL-06
+분석 결과 리포트 조회,이정,P0,분석,완료,"[사용자] 업로드 직후 분석 리포트에서 스택 · 경고 · IR 초안을 한눈에 본다.
+
+[구현] GET /api/v1/deployments/:id/analysis → apps/api/src/routes/deployment-analysis-report.ts → analysis_reports row 실시간 조회. apps/web/src/pages/ProjectDetailPage.tsx 렌더링.",GET /deployments/:id/analysis,ANL-07
+분석 결과 캐시,이정,P0,분석,완료,"[사용자] 같은 코드를 다시 올려도 분석 결과를 바로 받는다.
+
+[구현] source_versions.sha256 기준 중복 확인 → apps/worker/src/handlers/analyze.ts 가 기존 analysis_reports row 재사용, AI 호출 생략.",-,ANL-08
+정적 사이트 자동 감지,이정,P0,분석,완료,"[사용자] index.html · Vite · CRA · Parcel 등 정적 프로젝트를 자동 인식해 S3 로 보낸다 (D-65).
+
+[구현] packages/analyzer/src/detectors/static.ts → IR 에 build command · 결과 폴더 · SPA fallback 기록 → resolveProfileAfterAnalysis 로 aws-static-basic 선택.",-,ANL-09
+SQLite 사용 자동 감지,이정,P0,분석,완료,"[사용자] 소스에서 SQLite 를 쓰면 PostgreSQL 로 올릴 수 있는지 자동 분석한다 (D-64).
+
+[구현] packages/analyzer/src/detectors/database.ts usesSqlite() → IR 리소스에 PostgreSQL 추가 (connection_env=DATABASE_URL, local_fallback=sqlite).",-,ANL-10
+IR 초안 자동 생성,이정,P0,IR,완료,"[사용자] 분석 결과로 IR 초안이 자동 작성된다.
+
+[구현] packages/analyzer/src/ir-builder.ts → IrSchema.safeParse → ir_versions row (source=analyzer).",GET /deployments/:id/ir,IR-01
+IR 스키마 검증,이정,P0,IR,완료,"[사용자] 잘못된 IR 은 400 에러로 거절된다.
+
+[구현] packages/ir-schema/src/schema.ts Zod parse. 실패 시 400 + issues 반환.",-,IR-02
+환경별 IR 오버라이드,신은영,P1,IR,대기,"[사용자] 환경별로 IR 일부만 덮어쓸 수 있다.
+
+[구현] packages/ir-schema OverridesSchema. 어댑터 매핑 시 프로필 이름별 부분 오버라이드 병합. P1 미구현.",-,IR-04
+IR 버전 관리,이정,P1,IR,완료,"[사용자] 배포마다 사용된 IR 을 이력으로 확인한다.
+
+[구현] ir_versions 테이블 + deployments.ir_version_id 외래키. IR 갱신 시 새 row 생성 (불변 설계).",GET · PATCH /deployments/:id/ir,IR-05
+원클릭 배포 실행,이정,P0,배포,완료,"[사용자] 승인 버튼 하나로 완료 URL 까지 받는다.
+
+[구현] POST /api/v1/deployments → deployments INSERT + pg-boss analyze job → apps/worker 체인: analyze → build → provision → verify. apps/worker/src/register.ts.",POST /deployments,DEP-01
+배포 상태 머신 관리,이정,P0,배포,완료,"[사용자] 배포가 queued → building → provisioning → deploying → verifying → succeeded/failed 순서로 진행된다.
+
+[구현] apps/worker/src/state-machine.ts 16 상태 (received · analyzing · awaiting_patch_approval · awaiting_target_confirmation · queued · building · planning · awaiting_plan_approval · provisioning · deploying · verifying · succeeded · failed · cancelled · rejected · rollback) · transitionTo() SELECT FOR UPDATE 로 전이 유효성 검사.",상태 머신,DEP-02
+배포 진행 실시간 표시,이정,P0,배포,완료,"[사용자] 진행률 · 로그가 실시간으로 화면에 표시된다.
+
+[구현] GET /api/v1/deployments/:id/events (SSE) → apps/api/src/routes/deployment-events.ts + apps/worker/src/notifier.ts pg_notify 연동. apps/web SSE EventSource.",GET /deployments/:id/events,DEP-03
+배포 후 헬스체크 검증,김민서,P0,배포,완료,"[사용자] 배포 성공 여부가 자동으로 판정된다.
+
+[구현] apps/worker/src/handlers/verify.ts → /health 3회 연속 2xx (REQUIRED_PASSES=3) → succeeded. 실패 시 failed + 자동 diagnose 큐잉 (D-61).",-,DEP-04
+이전 버전으로 롤백,조서현,P1,배포,완료,"[사용자] 롤백 버튼으로 이전 안정 버전 digest 로 돌아간다.
+
+[구현] POST /api/v1/deployments/:id/redeploy → apps/api/src/routes/deployments.ts → 이전 digest 를 바로 재배포 (분석 · 빌드 스킵). ECS/Lambda 롤아웃만 돈다.",POST /deployments/:id/redeploy,DEP-05
+블루·그린 배포,공통,P2,배포,대기,"[사용자] 무중단 전환으로 서비스 중단 없이 새 버전으로 교체된다.
+
+[구현] P2 미구현 (D-32). apps/worker/src/handlers/provision.ts 블루·그린 스택 동시 런 + ALB 가중치 전환 필요.",-,DEP-06
+카나리 배포,공통,P2,배포,대기,"[사용자] 신버전을 일부 트래픽에만 적용 후 전체로 전환한다.
+
+[구현] P2 미구현 (D-32). ALB 가중치 + ECS 태스크 수 조정 필요.",-,DEP-07
+롤링 배포 (무중단),공통,P0,배포,완료,"[사용자] 배포 중에도 서비스가 계속 응답한다.
+
+[구현] apps/worker/src/ecs-rollout.ts 가 ECS 롤아웃을 직접 추적 (D-61). minimumHealthyPercent · 타깃 그룹 healthy 2 · 짧은 drain 으로 바로 교체.",-,DEP-08
+자동 롤백,공통,P0,배포,완료,"[사용자] 헬스체크 실패 시 자동으로 이전 digest 로 되돌아간다.
+
+[구현] AWS ECS 회로 차단기 자동 롤백 활성화 (D-61) + apps/worker/src/handlers/verify.ts 실패 감지 → rollback → 이전 revision 유지.",-,DEP-09
+배포 취소,이정,P0,배포,완료,"[사용자] 진행 중인 배포를 수동으로 취소한다.
+
+[구현] POST /api/v1/deployments/:id/cancel → cancelled 전이 + env_lock 해제. apps/api/src/services/deployment-service.ts cancel().",POST /deployments/:id/cancel,DEP-10
+재배포 (이미지만 교체),이정,P0,배포,완료,"[사용자] 분석 · 빌드 없이 바로 재배포한다.
+
+[구현] POST /api/v1/deployments/:id/redeploy → 이전 소스 · IR · digest 재사용. ECS 는 이미지만 교체되는 입력 지문 매칭 시 -refresh=false (D-60) + plan/apply 1회 통합 (D-62).",POST /deployments/:id/redeploy,DEP-11
+Dockerfile 자동 생성,신은영,P0,빌드,완료,"[사용자] Dockerfile 없는 프로젝트도 자동으로 컨테이너화된다.
+
+[구현] packages/build-handler 가 ANL-01 감지 스택 기반 Dockerfile 템플릿 선택. 빌드 산출물에 생성 Dockerfile 포함.",-,BLD-05
+컨테이너 이미지 빌드,신은영,P0,빌드,완료,"[사용자] 소스로부터 실행 가능한 이미지가 자동 생성된다.
+
+[구현] apps/worker/src/handlers/build.ts → packages/build-handler BuildKit linux/amd64 (D-33) → 이미지 생성 → ECR push.",-,BLD-01
+컨테이너 레지스트리 푸시,신은영,P0,빌드,완료,"[사용자] ECR 에 이미지가 저장되고 digest 로 특정된다.
+
+[구현] apps/worker/src/handlers/build.ts docker push → build_artifacts.image_digest sha256 저장. 공용 연결 (#215) 지원.",-,BLD-02
+이미지 태깅,신은영,P0,빌드,완료,"[사용자] deployment_id · digest 태그로 ECR 이미지를 특정한다.
+
+[구현] packages/build-handler 가 docker tag {image}:{deployment_id} + :latest 를 ECR 에 push. apps/api/src/routes/agent-ecr-credentials.ts 로 온프레미스 pull 공유.",-,BLD-03
+빌드 캐시 활용,신은영,P1,빌드,완료,"[사용자] 코드 일부만 수정하면 더 빠르게 빌드된다.
+
+[구현] packages/build-handler BuildKit --cache-from ECR 로 레이어 재사용. apps/worker/src/handlers/build.ts 가 활성화.",-,BLD-04
+Lambda Web Adapter 삽입,이정,P0,빌드,완료,"[사용자] 같은 이미지로 ECS · 온프레미스 · Lambda 를 모두 띄울 수 있다 (D-63).
+
+[구현] packages/build-handler/src/lambda-web-adapter.ts → 모든 이미지의 마지막 레이어로 LWA v1.1.0 digest 고정 → /opt/extensions/lambda-adapter. ECS/온프레미스에서는 실행 안 됨.",-,BLD-06
+리소스 계획 자동 생성,신은영,P0,프로비저닝,완료,"[사용자] IR 로부터 필요한 리소스 플랜이 자동 생성된다.
+
+[구현] apps/worker/src/handlers/provision.ts → IR 파싱 → packages/adapters createDeploymentPlan → Terraform 변수 생성.",-,PRV-01
+플랜 미리보기,신은영,P2,프로비저닝,대기,"[사용자] Terraform plan 요약을 미리 확인한다.
+
+[구현] 자동 승인으로 변경 (D-62) 되어 미리보기 미노출. GET /deployments/:id 에 last_apply 결과만. P2.",-,PRV-02
+온프레미스 Docker 배포,신은영,P0,프로비저닝,완료,"[사용자] 온프레미스 노드 (Intel Mac VM) 에 Docker Compose 로 배포된다.
+
+[구현] apps/worker/src/handlers/provision.ts + apps/onprem-agent (v0.1.8) 롱 폴링 + Compose 렌더링. Cloudflare Tunnel 로 외부 노출.",-,PRV-03
+AWS ECS Fargate 배포,신은영,P0,프로비저닝,완료,"[사용자] AWS 에 ECS Fargate 로 자동 배포된다 (D-22, D-32).
+
+[구현] apps/worker/src/handlers/provision.ts + infra/terraform/profiles/aws-ecs-basic + apps/worker/src/ecs-rollout.ts 직접 롤아웃 (D-61).",-,PRV-04
+AWS Lambda 배포 (서버리스),이정,P0,프로비저닝,완료,"[사용자] 간단 배포 고급 설정에서 Lambda 를 고르면 같은 이미지로 Lambda 로도 띄운다 (D-63).
+
+[구현] mode=serverless → infra/terraform/profiles/aws-lambda-basic + apps/worker/src/lambda-rollout.ts. ALB(lambda 타깃) 로 origin 유지. AWS_LWA_PORT · AWS_LWA_READINESS_CHECK_PATH 환경변수 주입.",-,PRV-10
+AWS 정적 사이트 배포,이정,P0,프로비저닝,완료,"[사용자] 정적 프로젝트는 AWS 에서 서버 없이 S3 웹사이트로 올라간다 (D-65).
+
+[구현] infra/terraform/profiles/aws-static-basic + apps/worker/src/static-site-publisher.ts 가 이미지에서 파일을 꺼내 버킷에 동기화. 버킷 이름 = 서비스 호스트명.",-,PRV-11
+GCP Cloud Run 배포,신은영,P2,프로비저닝,대기,"[사용자] GCP Cloud Run 으로도 배포한다.
+
+[구현] packages/profiles/gcp-cloudrun-basic 프로필 (P2 미구현, D-32).",-,PRV-05
+Azure Container Apps 배포,신은영,P2,프로비저닝,대기,"[사용자] Azure Container Apps 로도 배포한다.
+
+[구현] packages/profiles/azure-containerapp-basic 프로필 (P2 미구현, D-32).",-,PRV-06
+클라우드 고유 기능 활용,신은영,P1,프로비저닝,대기,"[사용자] 환경 고유 기능(Lambda, Cloud Run cold start, ACM 등) 을 설계로 흡수한다.
+
+[구현] packages/profiles/*/capabilities 기반 매핑. aws-lambda-basic (D-63) · aws-static-basic (D-65) 로 D-04 반영.",-,PRV-07
+리소스 자동 정리,이정,P0,프로비저닝,완료,"[사용자] 앱 삭제 시 공개 주소 · DNS · 터널 · AWS 리소스까지 자동 정리된다 (D-59).
+
+[구현] DELETE /api/v1/projects/:id → 202 → apps/worker/src/handlers/teardown.ts → Cloudflare 레코드 · Tunnel ingress 삭제 + terraform destroy + state 파일 삭제. 실패 시 failed 로 재시도 가능.",DELETE /projects/:id,PRV-08
+OS별 VM 배포 검증,신은영,P0,프로비저닝,완료,"[사용자] Intel Mac VM 에서 실제 배포가 검증된다.
+
+[구현] apps/worker/src/handlers/provision.ts 온프레미스 경로 + apps/onprem-agent 로 Docker Compose 검증.",-,PRV-09
+배포 유형 자동 선택,이정,P0,프로비저닝,완료,"[사용자] 사용자는 AWS/온프레미스만 고르고 (Container/Lambda/Static) 는 시스템이 IR 로 결정한다 (D-65, D-63).
+
+[구현] apps/api/src/services/profile-resolver.ts resolveProfile() → 배포 생성 시 연결 종류로 기본 프로필. apps/worker/src/profile-sync.ts resolveProfileAfterAnalysis() → 분석 후 재선정 (정적 사이트는 aws-static-basic, Lambda 불가 앱은 컨테이너로 복귀).",-,PRV-12
+Dockerfile 패치 자동화,신은영,P1,프로비저닝,대기,"[사용자] Dockerfile 이 없거나 문제가 있으면 자동 수정 diff 를 받는다.
+
+[구현] packages/analyzer/src/patch/ Dockerfile 템플릿 생성. P1.",-,PAT-01
+SQLite → Postgres 자동 마이그레이션,이정,P0,프로비저닝,완료,"[사용자] SQLite 앱은 AWS 에서 Postgres (dual-mode) 로 자동 변환된 diff 를 승인한다 (D-64).
+
+[구현] packages/analyzer/src/patch/sqlite-patch.ts → DATABASE_URL 있으면 Postgres, 없으면 SQLite 로 돌게 코드 수정 → source_patches 테이블. 사용자 승인 후 새 소스 버전으로 재빌드. apps/worker/src/handlers/analyze.ts createSqlitePatch.",-,PAT-02
+하드코딩 설정 외부화,신은영,P1,프로비저닝,대기,"[사용자] 하드코딩된 값을 env 로 자동 추출한다.
+
+[구현] packages/analyzer/src/patch 예정. 하드코딩 값 → env diff. P1 미구현.",-,PAT-03
+헬스체크 엔드포인트 추가,신은영,P1,프로비저닝,대기,"[사용자] /health 가 없으면 자동 삽입된다.
+
+[구현] packages/analyzer/src/patch 예정. P1 미구현.",-,PAT-04
+관측 코드 자동 주입,신은영,P2,프로비저닝,대기,"[사용자] 메트릭 수집 코드를 배포 시 자동 주입한다.
+
+[구현] P2 미구현 (D-45: 관측은 P2, 트레이스/프로파일링 제외).",-,PAT-05
+변경 diff 제시,이정,P0,프로비저닝,완료,"[사용자] AI 수정안이 unified diff 로 표시된다.
+
+[구현] GET /api/v1/deployments/:id/patch → apps/api/src/routes/deployment-patch.ts → source_patches row (patch_text · summary · summaryI18n · notesI18n D-68). apps/web 가 diff 를 노출.",GET /deployments/:id/patch,PAT-06
+사용자 승인·거부,이정,P0,프로비저닝,완료,"[사용자] 수정안 · 타깃 선택을 승인 버튼으로 넘긴다.
+
+[구현] POST /api/v1/deployments/:id/approvals → apps/api/src/services/approval-service.ts {gate: patch | target} → 상태 전이. target 승인 시 env_lock 획득 (D-30).",POST /deployments/:id/approvals,PAT-07
+수정 자동 검증,신은영,P1,프로비저닝,대기,"[사용자] 수정안을 적용한 뒤 자동 빌드 결과를 받는다.
+
+[구현] packages/analyzer/src/patch/ apply + BuildKit 재빌드 → deployment_steps 결과 저장. P1 미구현.",-,PAT-08
+배포 헬스체크,김민서,P0,검증,완료,"[사용자] 3회 연속 2xx 응답이면 성공, 실패 시 자동 롤백.
+
+[구현] apps/worker/src/handlers/verify.ts REQUIRED_PASSES=3, MAX_ATTEMPTS=8, RETRY_INTERVAL_MS=5000. health_check_attempts 테이블 기록.",-,VRF-01
+스모크 테스트,김민서,P1,검증,대기,"[사용자] 핵심 엔드포인트에서 200 계열 응답을 확인한다.
+
+[구현] apps/worker/src/handlers/verify.ts → IR services[].health_path 호출 → HTTP 200 확인. P1 미구현.",-,VRF-02
+digest 실행 검증,김민서,P0,검증,완료,"[사용자] 배포된 이미지가 예상 digest 와 일치하는지 확인한다.
+
+[구현] apps/worker/src/handlers/verify.ts VerifyJobPayload.expectedDigest 와 실제 ECS/Lambda 태스크 이미지 digest 를 비교.",-,VRF-03
+k6 부하 테스트,김민서,P2,검증,대기,"[사용자] 배포 후 k6 스크립트로 상용 가능한 성능인지 확인한다.
+
+[구현] apps/worker/src/handlers/verify.ts k6 실행 로직 + deployment_steps 결과 저장 예정. P2.",-,VRF-04
+최종 공개 URL 검증,김민서,P0,검증,완료,"[사용자] Cloudflare 레코드가 실제 서비스로 전파됐는지 자동 확인한다.
+
+[구현] apps/worker/src/final-url-verifier.ts → 공개 호스트에 HTTP 요청 → ALB/Tunnel origin 응답 확인. origin-activation.ts 와 짝.",-,VRF-05
+배포 이력 조회,조서현,P0,관측,완료,"[사용자] 어떤 배포가 언제 성공/실패했는지 목록으로 확인한다.
+
+[구현] GET /api/v1/projects/:id/deployments → apps/api/src/routes/projects.ts → deployments 테이블 상태 목록.",GET /projects/:id/deployments,LOG-01
+작업 로그 저장,조서현,P0,관측,완료,"[사용자] 배포 로그를 SSE 로 스트리밍으로 받는다.
+
+[구현] apps/worker/src/step-log.ts · notifier.ts → deployment_steps · 로그 오브젝트 저장. GET /api/v1/deployments/:id/logs SSE 스트리밍 (apps/api/src/routes/deployment-logs.ts).",GET /deployments/:id/logs,LOG-02
+감사 로그,조서현,P1,관측,완료,"[사용자] 누가 언제 어떤 변경을 했는지 추적한다.
+
+[구현] apps/api/src/services/audit-log-service.ts → audit_logs 테이블 (migration 010). GET /api/v1/audit-logs 로 조회.",GET /audit-logs,LOG-03
+배포 간 diff 비교,조서현,P2,관측,대기,"[사용자] 두 배포 간 IR · 코드 · 설정 차이를 비교한다.
+
+[구현] GET /deployments/:id/diff (P2 미구현).",-,LOG-04
+배포 로그 조회 (Loki),조서현,P2,관측,대기,"[사용자] Loki 에서 배포별 로그를 쿼리한다.
+
+[구현] P2 미구현. Loki + Promtail + GET /deployments/:id/logs 연동 필요.",-,OBS-01
+메트릭 수집,조서현,P2,관측,대기,"[사용자] Grafana 대시보드에서 기본 메트릭을 본다.
+
+[구현] P2 미구현. PAT-05 관측 코드 주입 + Prometheus scrape 연동 필요.",-,OBS-02
+시각화 대시보드,조서현,P2,관측,대기,"[사용자] Grafana 에서 환경별 메트릭 그래프를 본다.
+
+[구현] P2 미구현. Grafana 대시보드 YAML + Prometheus 데이터 소스 필요.",-,OBS-03
+관측 자동 구성,조서현,P2,관측,대기,"[사용자] 배포 완료 시 Prometheus 가 자동으로 앱 메트릭을 수집한다.
+
+[구현] P2 미구현. 배포 완료 후 scrape config 등록 예정.",-,OBS-06
+AI 사용량 기록,이정,P0,관측,완료,"[사용자] 어느 배포에서 AI 를 얼마나 썼는지 조회한다 (D-56, D-69).
+
+[구현] packages/analyzer/src/ai/tokens.ts 가 호출 시 토큰 · 비용 추정치 계산 → ai_usage 테이블 INSERT (deployment_id · purpose · model · token_in · token_out · cost_usd_est). migration 025.",-,OBS-04
+실패 원인 AI 진단,이정,P0,관측,완료,"[사용자] 배포 실패 시 AI 가 원인 요약과 다음 조치를 안내한다.
+
+[구현] GET /api/v1/deployments/:id/diagnosis → apps/api/src/routes/deployment-diagnosis.ts. failed 전이 시 state-machine.ts 가 pg-boss diagnose job 자동 큐잉 → apps/worker/src/handlers/diagnose.ts 가 Claude Sonnet 5.5 (D-56) 로 summary · 수정 후보 생성 (한일 i18n D-68).",GET /deployments/:id/diagnosis,OBS-05
+플랫폼 운영 대시보드,조서현,P0,관측,완료,"[사용자] 콘솔 운영 화면 한 장에서 플랫폼 자체 상태 (작업 큐 · 워커 · 서버 · AI 사용량 · 자동 배포 기록) 를 본다 (D-69).
+
+[구현] apps/web/src/pages/OpsPage.tsx + GET /api/v1/ops/{queue,server,ai-usage,deploys} → apps/api/src/routes/ops.ts + apps/api/src/services/ops-service.ts. 데이터는 Postgres (pg-boss 테이블 · worker_heartbeats · host_metrics · ai_usage · platform_deploys). migration 025.",GET /ops/queue · /ops/server · /ops/ai-usage · /ops/deploys,OBS-07
+워커 하트비트,조서현,P0,관측,완료,"[사용자] 각 워커가 살아 있는지 10초 단위로 확인한다 (D-69).
+
+[구현] apps/worker/src/worker-heartbeat.ts → 10초마다 worker_heartbeats upsert (worker_id · hostname · commit_sha · active_jobs · draining). 30초 넘게 last_seen_at 멈추면 ops-service 가 offline 으로 표시. SIGTERM 시 draining=true.",-,OBS-08
+서버 리소스 지표,조서현,P0,관측,완료,"[사용자] CPU · 메모리 · 디스크 · 빌드 캐시 크기를 24시간 추이로 확인한다 (D-69).
+
+[구현] apps/worker/src/host-metrics.ts → 30초마다 /proc 샘플링 (CPU · mem · df /) + 5분마다 Docker API 로 빌드 캐시 크기 → host_metrics 테이블. 24h 이후 자동 삭제. 디스크 80% · 메모리 90% 초과 시 경고.",-,OBS-09
+플랫폼 CD 기록,조서현,P0,관측,완료,"[사용자] 플랫폼 자체 재배포 (GitHub Actions → EC2) 성공/실패를 확인한다 (D-69).
+
+[구현] infra/platform/scripts/deploy.sh 가 시작 · 종료 시 Postgres psql 로 platform_deploys 한 행 기록 (started_at · finished_at · commit_sha · github_run_id · status). migration 025.",-,OBS-10
+공개 REST API,조서현,P0,기타,완료,"[사용자] OpenAPI 문서로 모든 P0 기능에 API 로 접근한다.
+
+[구현] GET /docs → Swagger UI. apps/api/src/main.ts fastify-swagger 등록. 모든 P0 라우트 schema 선언.",GET /docs · /docs/json,UI-01
+웹 대시보드,김민성,P0,UI,완료,"[사용자] 배포 진행 단계가 실시간 갱신되고 완료 후 URL · 롤백 버튼이 표시된다.
+
+[구현] apps/web/src/pages/{DashboardPage,ProjectDetailPage,SimpleDeployPage,ConnectionsPage,OpsPage}.tsx. SSE EventSource 연결 + deployment_steps 렌더링.",-,UI-03
+간단 배포 페이지,김민성,P0,UI,완료,"[사용자] 소스 zip · 서브도메인 · 배포 형태 · 연결을 한 화면에서 선택해 바로 배포한다 (D-67, D-63).
+
+[구현] apps/web/src/pages/SimpleDeployPage.tsx → POST /projects (subdomain) + POST /deployments (mode: container/serverless + environment_id).",-,UI-06
+다국어 콘솔 (한국어 · 일본어),이정,P0,UI,완료,"[사용자] 콘솔에서 ko · ja 를 선택해 UI · AI 설명 · 워커 로그를 자국어로 본다 (D-68).
+
+[구현] apps/web/src/i18n/{ko,ja,log-lines,I18nProvider,language-transition}.ts. AI 응답은 구조화 출력 1회 호출로 {ko, ja} 받음 (summaryI18n · notesI18n · descriptionI18n). 워커 로그는 ' #i18n{""k"":key,""p"":{...}}' 마커로 키 기록 (apps/worker/src/log-messages.ts). 서버 오류는 코드별 UI 문구 매핑.",-,UI-07
+CLI 도구,김민성,P2,UI,대기,"[사용자] 터미널에서 명령어로 배포한다.
+
+[구현] P2 미구현 (D-44). apps/cli/ 예정. REST API 래퍼.",-,UI-02
+MCP 서버,공통,P2,UI,대기,"[사용자] IDE 등 외부 AI 도구에서 배포 기능을 호출한다.
+
+[구현] P2 미구현. apps/mcp-server/ 예정.",-,UI-05
+배포 환경 등록,조서현,P0,프로비저닝,완료,"[사용자] AWS 연결 · 온프레미스 노드를 등록 · 조회한다 (D-58 공용 연결).
+
+[구현] POST /api/v1/environments → apps/api/src/routes/environments.ts → environments 테이블. aws_config JSONB 에 secrets 이름만 참조. 공용 연결은 project_id null. 진행 중 배포 있으면 삭제 409. migration 012 shared_connections.",POST · GET · PATCH · DELETE /environments,REC-01
+예상 비용 표시,신은영,P1,프로비저닝,대기,"[사용자] 프로파일 선택 시 월 예상 비용을 확인한다.
+
+[구현] packages/profiles/ 가격 카탈로그 + apps/api/src/services/cost-estimator.ts (P1 미구현).",-,REC-06
+시크릿 저장 및 주입,이정,P0,기타,완료,"[사용자] 시크릿 값은 UI 에서 마스킹되고 로그 · LLM 전송에도 노출되지 않는다 (D-50).
+
+[구현] apps/api/src/services/secret-service.ts → AES-256-GCM 암호화 (iv 12B · auth_tag 16B) → secrets 테이블 (project_id · name · ciphertext). 응답은 name · projectId · createdAt 만. 마스터 키는 플랫폼 SSM.",POST · GET · DELETE /secrets,DAT-02
+환경변수 설정 및 변경,조서현,P0,기타,완료,"[사용자] 대시보드에서 환경변수를 편집하면 다음 배포부터 적용된다.
+
+[구현] PATCH /api/v1/projects/:id/env → apps/api/src/routes/project-env.ts + apps/api/src/services/env-var-service.ts → env_vars UPSERT. IR YAML 의 services.*.env 는 키 이름만 포함. migration 005.",GET · PATCH /projects/:id/env,DAT-01
+플랫폼 환경변수 자동 주입,이정,P0,기타,완료,"[사용자] PORT · DEPLOY_TARGET · NODE_ENV · AWS_REGION 은 사용자가 등록하지 않아도 자동 주입된다.
+
+[구현] packages/contracts/src/env.ts PLATFORM_INJECTED_ENV_NAMES. apps/worker/src/handlers/provision.ts 가 target 별 값을 자동으로 넣고 사용자 env 와 병합 (예약 이름은 사용자가 못 덮어씀).",-,DAT-05
+DB 자동 프로비저닝 (RDS 추가 모듈),이정,P1,기타,완료,"[사용자] SQLite 앱이 AWS 에 올라갈 때 RDS Postgres 가 자동으로 생성되고 DATABASE_URL 이 주입된다 (D-64).
+
+[구현] apps/worker/src/handlers/provision.ts 가 IR 리소스에 postgres 가 있으면 aws-ecs-basic 위에 RDS 추가 모듈 (db.t4g.micro · 단일 AZ · 저장 암호화 · RDS 관리형 시크릿) 적용 → DATABASE_URL · PGPASSWORD 주입. 온프레미스는 DB 안 만들고 SQLite 유지.",-,DAT-03
+DB 연결 정보 주입,이정,P1,기타,완료,"[사용자] DB 가 만들어지면 DATABASE_URL 이 앱에 자동으로 주입된다.
+
+[구현] apps/worker/src/handlers/provision.ts DB 생성 후 DATABASE_URL · PGPASSWORD 생성 → env_vars INSERT → ECS task definition 에 반영. D-64 참조.",-,DAT-04
+DB 백업 및 스냅샷,공통,P2,기타,대기,"[사용자] 배포 실패 시 배포 전 시점으로 DB 를 복원한다.
+
+[구현] P2 미구현. provision 시작 전 pg_dump → S3 저장 예정.",-,DAT-06
+공개 URL 제공,공통,P0,기타,완료,"[사용자] 배포 완료 후 service-{subdomain}.camellia-deploy.app 로 접속한다 (D-67).
+
+[구현] apps/worker/src/public-dns-activation.ts + packages/cloudflare/src/client.ts ensureCname() → ALB DNS 또는 Tunnel hostname 으로 CNAME 생성. deployments.public_url 세팅.",-,NET-01
+온프레미스 외부 노출,신은영,P0,기타,완료,"[사용자] 온프레미스 노드도 Cloudflare Tunnel 로 공개 URL 을 받는다 (D-09).
+
+[구현] apps/onprem-agent/src/tunnel.ts cloudflared 설치 · 실행. apps/worker 가 Tunnel ingress 규칙 생성 (packages/cloudflare).",-,NET-02
+HTTPS 자동 인증서,공통,P0,기타,완료,"[사용자] 모든 공개 URL 이 자동 HTTPS 로 서비스된다.
+
+[구현] Cloudflare 프록시 CNAME → Cloudflare 가 Edge 인증서 자동 발급 (ACM 불필요). 온프레미스도 Tunnel 로 Edge HTTPS.",-,NET-03
+VPC/서브넷 자동 구성,공통,P1,기타,완료,"[사용자] AWS 배포 시 네트워크가 분리된 VPC/서브넷에 올라간다.
+
+[구현] infra/terraform/profiles/aws-ecs-basic Terraform 모듈이 VPC + 퍼블릭/프라이빗 서브넷 정의.",-,NET-04
+최소 권한 IAM,공통,P1,기타,대기,"[사용자] 앱별 Task Role 로 최소 권한만 부여된다.
+
+[구현] infra/terraform/profiles 에 앱별 IAM Task Role 자동 생성 (P1).",-,NET-05
+사용자 지정 서브도메인,이정,P0,기타,완료,"[사용자] 간단 배포 시 subdomain 을 입력하면 추천 주소를 쓸 수 있고 실시간 사용 가능 여부가 표시된다 (D-67).
+
+[구현] packages/contracts/src/project-subdomain.ts (3~40자 · 소문자/숫자/하이픈 · 끝 하이픈 금지). 예약어 체크: console · www · api · admin · app · apps · mail · verify · verify-* · service-{숫자}. GET /api/v1/projects/subdomain-availability. migration 022.",GET /projects/subdomain-availability,NET-06
+서브도메인 변경,이정,P0,기타,완료,"[사용자] 배포 후에도 앱 설정에서 공개 주소를 바꿀 수 있다 (D-67).
+
+[구현] PATCH /api/v1/projects/:id/subdomain → address-change pg-boss 작업 큐잉 → apps/worker/src/handlers/address-change.ts 가 새 주소를 origin 에 붙이고 검증 통과 시 예전 주소 삭제. 실패 시 새 주소만 삭제. 변경 중 배포/삭제 차단. **정적 사이트(S3) 는 409 로 거부**. migration 023.",PATCH /projects/:id/subdomain,NET-07
+연결 공유 (공용 AWS 연결),이정,P0,기타,완료,"[사용자] AWS 연결을 공용으로 등록해 여러 앱이 공유한다 (D-58).
+
+[구현] migration 012 shared_connections. environments.project_id null = 공용. 배포 시 project_id = 환경 project_id (null 포함) 체크. apps/api/src/services/environment-service.ts.",-,NET-08
+앱 비동기 삭제,이정,P0,기타,완료,"[사용자] 삭제 버튼 한 번으로 공개 주소 · AWS 리소스 · 터널 · ECR 이미지가 자동 정리된다 (D-59).
+
+[구현] DELETE /api/v1/projects/:id → 202 + projects.state=deleting → apps/worker/src/handlers/teardown.ts: Cloudflare 레코드 · Tunnel ingress 삭제 → provision 과 같은 state key 로 terraform destroy → state 파일 삭제 → DB row 삭제. migration 015.",DELETE /projects/:id,NET-09
+AI 배포 계획 수립,이정,P0,기타,완료,"[사용자] AI 가 분석 결과를 보고 애매한 IR 빈칸을 채워 준다 (D-56).
+
+[구현] packages/analyzer/src/ai/fill-unresolved.ts → Claude Opus 5.5 구조화 출력 (output_config.format, D-56). apps/worker/src/handlers/analyze.ts 에서 호출. 비용은 ai_usage 에 기록.",-,AGT-01
+AI 도구 호출 실행,공통,P1,기타,완료,"[사용자] AI 가 요청한 작업이 실제 실행되고 결과가 반영된다.
+
+[구현] apps/worker/src/handlers/ 가 pg-boss 를 통해 AI 수정안을 실행 (createSqlitePatch · diagnose 등). requires_approval=true 는 승인 전 403 (AGT-04).",-,AGT-02
+AI 설명 다국어 출력,이정,P0,기타,완료,"[사용자] 실패 진단 요약 · SQLite 수정안 설명을 한국어 · 일본어 둘 다 받는다 (D-68).
+
+[구현] packages/analyzer/src/ai + apps/worker/src/handlers/diagnose.ts 구조화 출력 스키마에 { ko, ja } 객체. summaryI18n · notesI18n · descriptionI18n 저장. 한 번의 호출로 두 언어 생성.",-,AGT-05
+AI 가드레일 (승인 강제),이정,P0,기타,완료,"[사용자] requires_approval=true 는 승인 전까지 다음 단계로 못 간다 (D-06, D-07).
+
+[구현] apps/api/src/services/approval-service.ts 가 requires_approval 플래그 검증 → approved_at null 이면 상태 전이 거부. awaiting_patch_approval · awaiting_target_confirmation · awaiting_plan_approval 세 게이트.",-,AGT-04
+배포 환경별 락,공통,P0,기타,완료,"[사용자] 같은 환경에 두 배포가 동시 진행되지 못한다 (D-14, D-30).
+
+[구현] env_locks 테이블 (env_key · deployment_id · lease_expires_at) + SELECT FOR UPDATE. target 승인 시 approval-service.ts 가 INSERT. 배포 완료/취소 시 DELETE.",-,LCK-01
+IaC 상태 공유 잠금,공통,P0,기타,완료,"[사용자] 두 Terraform apply 가 동시 실행되지 않는다.
+
+[구현] S3 backend + use_lockfile (D-34). terraform-state-store.ts.",-,LCK-03
+다중 클라이언트 동시 처리,김민서,P0,기타,완료,"[사용자] 두 사용자가 동시 요청해도 각각 독립적으로 진행된다.
+
+[구현] pg-boss 멀티 워커 (D-11, SKIP LOCKED + LISTEN/NOTIFY) + env_lock. apps/worker/src/register.ts.",-,USR-04
+작업 자동 복구,조서현,P0,기타,완료,"[사용자] 워커 재시작 후 진행 중이던 작업이 자동 재개된다.
+
+[구현] pg-boss 재시작 시 pgboss.job 테이블 in-progress 상태 자동 재개. apps/worker/src/main.ts shutdown.ts 가 SIGTERM 시 draining 처리.",-,USR-06
+로그인 인증,공통,P0,기타,완료,"[사용자] 콘솔 접속 시 세션 쿠키로 인증한다.
+
+[구현] POST /api/v1/auth/session → apps/api/src/routes/auth.ts → session_tokens 쿠키. apps/api/src/plugins/auth.ts 가 모든 /api/v1 경로 보호.",POST /auth/session,USR-01
+운영 배포 승인,공통,P2,기타,대기,"[사용자] 운영 환경 배포는 담당자 승인 후에만 실행된다.
+
+[구현] P2 미구현. deployments.approved_at + 승인자 역할 확인 필요.",-,USR-03
+보안 및 데이터 경계,안우진,P0,기타,완료,"[사용자] 시크릿은 암호화 저장되고 LLM 에 값이 전달되지 않는다 (D-20, D-50).
+
+[구현] secrets 테이블 AES-256-GCM 암호화. LLM 프롬프트에는 키 이름만. apps/api/src/services/secret-service.ts.",-,NFR-03
+로컬 실행 검증,조서현,P0,기타,완료,"[사용자] 샘플 앱이 docker compose up 으로 로컬에서 돈다.
+
+[구현] docker-compose.yml + tests/ 에서 샘플 앱 docker build + run 후 HTTP 응답 확인.",-,SMP-04
+모놀리스 샘플 앱,조서현,P0,기타,완료,"[사용자] 단일 서비스 샘플 앱 (camellia-test-sample.zip) 이 로컬에서 빌드 · 실행된다.
+
+[구현] camellia-test-sample.zip + tests/ Node.js Fastify 샘플.",-,SMP-01
+MSA 샘플 앱,공통,P1,기타,대기,"[사용자] 두 서비스로 구성된 MSA 샘플이 로컬 · 배포 둘 다에서 동작한다.
+
+[구현] apps/samples/msa/ 디렉터리 (P1 미구현). IR services[] 2개 정의.",-,SMP-02
+다중 서비스 순차 배포,공통,P1,기타,대기,"[사용자] depends_on 기반으로 서비스가 순서대로 배포된다.
+
+[구현] packages/analyzer IR services[] 위상 정렬 → provision 순서 반영. P1 미구현.",-,SCL-01
+서비스 간 내부 통신,공통,P1,기타,대기,"[사용자] 서비스가 내부 DNS 로 서로 호출한다.
+
+[구현] ECS Service Connect / Docker Compose DNS. packages/profiles 캡슐화. P1.",-,SCL-02
+오토스케일링,공통,P2,기타,대기,"[사용자] 트래픽에 따라 ECS 태스크 수가 자동 조정된다.
+
+[구현] ECS AutoScaling 정책 (P2 미구현).",-,SCL-03
+리소스 한도 설정,공통,P1,기타,대기,"[사용자] IR services[].size (small/medium/large) 로 리소스를 지정한다.
+
+[구현] IR services[].size → Terraform ECS task cpu/memory 매핑. P1 미구현.",-,SCL-04
+대규모 가용성 검토,공통,P2,기타,대기,"[사용자] k6 리포트로 대규모 트래픽 대응을 확인한다.
+
+[구현] P2 미구현. VRF-04 + SCL-03 연동 필요.",-,SCL-05
+마이그레이션 도구 감지,공통,P1,기타,대기,"[사용자] Prisma · Flyway · Alembic 등 마이그레이션 도구가 자동 감지된다.
+
+[구현] packages/analyzer/src/detectors/ 마이그레이션 도구 탐지 → analysis_reports.migration_tool. P1 미구현.",-,MIG-01
+스키마 마이그레이션 실행,공통,P1,기타,대기,"[사용자] 배포 전에 DB 마이그레이션이 자동 실행된다.
+
+[구현] apps/worker/src/handlers/provision.ts 앞단에서 마이그레이션 명령 실행. P1 미구현.",-,MIG-02
+데이터 이전,이정,P1,기타,완료,"[사용자] SQLite 데이터를 RDS 로 자동 이전한다 (D-64).
+
+[구현] 수정된 앱이 처음 뜰 때 Postgres 가 비어 있으면 이미지 안의 SQLite 파일에서 자동 복사. apps/worker 가 아니라 앱 코드가 처리.",-,MIG-03
+마이그레이션 실패 처리,공통,P1,기타,대기,"[사용자] 마이그레이션 실패 시 배포가 실패로 끝나고 롤백 준비된다.
+
+[구현] apps/worker/src/handlers/provision.ts 실패 → failed + 자동 진단 (OBS-05). P1 보강 필요.",-,MIG-04
+마이그레이션 롤백,공통,P2,기타,대기,"[사용자] 마이그레이션 롤백으로 이전 스키마를 복원한다.
+
+[구현] P2 미구현.",-,MIG-05
+AI ROI 지표 조회,이정,P0,기타,완료,"[사용자] 플랫폼 운영 화면에서 AI 가 얼마나 썼는지 비용 추정치를 본다 (D-69).
+
+[구현] GET /api/v1/ops/ai-usage → apps/api/src/services/ops-service.ts → ai_usage 테이블 집계 (목적별 purpose · 모델별 총액 · 7일/24시간 추이).",GET /ops/ai-usage,CST-02
+월 예상 인프라 비용 표시,공통,P1,기타,대기,"[사용자] 배포 전 월 예상 비용을 확인한다.
+
+[구현] packages/profiles/ 가격 카탈로그 + apps/api/src/services/cost-estimator.ts. P1 미구현 (Q-04).",-,CST-03
+AI 사용량 기록 (호출당),이정,P0,기타,완료,"[사용자] 어느 배포에서 AI 가 얼마나 썼는지 호출 단위로 기록된다 (D-56, D-69).
+
+[구현] packages/analyzer/src/ai/tokens.ts 가 호출마다 요금표 (SONNET_5_5_PRICING · OPUS_5_5_PRICING) 로 cost_usd_est 계산 → ai_usage INSERT (deployment_id · purpose · model · token_in · token_out · cost_usd_est).",-,CST-01
+환경 전환 대상 지정,이정,P0,배포,완료,"[사용자] 재배포 시 다른 연결 (AWS/온프레미스) 을 지정해 환경을 바꾼다 (D-41).
+
+[구현] POST /api/v1/deployments/:id/redeploy { targetEnvironmentId } → apps/api/src/services/deployment-service.ts redeploy() → 다른 연결 타입이면 프로필 · Registry 재선정.",POST /deployments/:id/redeploy,SW-01
+환경 전환 실행 (DNS 전환),이정,P0,배포,완료,"[사용자] 새 환경으로 배포 성공 후 Cloudflare CNAME 이 자동으로 새 origin 으로 전환된다 (D-57).
+
+[구현] apps/worker/src/public-dns-activation.ts 가 새 ALB/Tunnel 로 CNAME 교체 전 origin 검증 (final-url-verifier.ts) → 통과 시 레코드 교체. 같은 digest 유지로 같은 이미지가 두 환경에서 실행.",-,SW-02
+옛 환경 정리,이정,P0,배포,완료,"[사용자] 환경 전환 성공 후 이전 스택이 자동 정리된다.
+
+[구현] 환경 전환 성공 후 15분 롤백 유예 → DELETE /projects/:id 재사용 또는 teardown 작업으로 이전 state key 의 terraform destroy. D-59 참조.",-,SW-03
+승인 후 자동 재시도,이정,P0,기타,완료,"[사용자] AI 수정안을 승인하면 새 소스 버전으로 파이프라인이 자동 재시작된다.
+
+[구현] PAT-07 승인 → applyPatchDecision → 새 source_version 생성 → pg-boss analyze/build job 재큐잉. apps/api/src/services/source-patch-service.ts.",-,FIX-03
+재시도 한도,공통,P1,기타,완료,"[사용자] 같은 배포가 반복 실패하면 자동 재시도를 멈춘다.
+
+[구현] pg-boss retry policy (최대 재시도 횟수). apps/worker/src/register.ts 가 pg-boss retryLimit 설정.",-,FIX-04
+파이프라인 커스텀 단계 추가,공통,P2,기타,대기,"[사용자] 파이프라인에 사용자 단계를 추가한다.
+
+[구현] P2 미구현 (D-44).",-,CI-03
+로컬 CI 실행,공통,P2,기타,대기,"[사용자] 로컬에서 CI 결과를 미리 확인한다.
+
+[구현] P2 미구현 (D-44).",-,CI-04
+Git push 자동 배포,공통,P2,기타,대기,"[사용자] 코드 push 시 배포가 자동 시작된다.
+
+[구현] P2 미구현 (D-44). GitHub Webhook → POST /deployments 연동 미구현.",-,CI-01
+온프레미스 에이전트 등록,신은영,P0,기타,완료,"[사용자] 1회용 토큰으로 온프레미스 노드를 안전하게 등록한다 (D-09).
+
+[구현] apps/onprem-agent (v0.1.8) 설치 → POST /api/v1/environments 등록 토큰 → long-polling 으로 작업 수신. apps/api/src/services/agent-service.ts + migration 008.",POST /environments (onprem),REC-02
+온프레미스 에이전트 작업 폴링,신은영,P0,기타,완료,"[사용자] 에이전트가 큐에서 작업을 자동 받는다.
+
+[구현] apps/api/src/routes/agent-jobs.ts (long-polling) + apps/onprem-agent/src/control-plane-client.ts. onprem_agent_jobs 테이블. migration 009.",POST /agents/:id/jobs/claim,REC-03
+온프레미스 ECR 자격증명 공유,이정,P0,기타,완료,"[사용자] 온프레미스 노드가 ECR 에서 같은 이미지를 pull 한다 (D-33).
+
+[구현] POST /api/v1/agents/:id/ecr-credentials → apps/api/src/routes/agent-ecr-credentials.ts + agent-ecr-credential-service.ts. 임시 자격증명 발급. migration 011.",POST /agents/:id/ecr-credentials,REC-04
+에이전트 자동 정리,신은영,P1,기타,완료,"[사용자] 쓰지 않는 에이전트는 자동으로 정리된다.
+
+[구현] apps/api/src/services/agent-cleanup-job-service.ts + onprem_agent_cleanup_jobs. migration 018.",-,REC-05
+Agent 수동 수명주기,신은영,P0,기타,완료,"[사용자] 에이전트가 활성 + 스탠바이 2개 유지되어 롤백 가능하다 (Day 5 §10).
+
+[구현] agents 테이블 상태 추적 + heartbeat 재시도. apps/onprem-agent/src/launchd.ts (macOS) 로 자동 재시작. apps/api/src/services/agent-service.ts.",-,REC-07
+플랫폼 자체 CD (GitHub Actions),공통,P0,기타,완료,"[사용자] main 브랜치 push 시 플랫폼이 자동 재배포된다 (D-55).
+
+[구현] .github/workflows/ + OIDC → IAM 역할 → SSM Run Command → EC2 host deploy.sh. 역할 범위: main 브랜치만 (aud · sub StringEquals).",-,REC-08
+플랫폼 Terraform CI,공통,P1,기타,완료,"[사용자] 인프라 변경이 PR 에 plan 코멘트로 리뷰되고 main 머지 때만 apply 된다 (D-57).
+
+[구현] GitHub Actions tf-plan (PR · main 읽기 전용) + tf-apply (main 만 · 플랫폼 태그 리소스만). S3 remote state + use_lockfile.",-,REC-09
+배포 속도 최적화 - Provider 캐시,이정,P0,기타,완료,"[사용자] Terraform init 이 provider 를 다시 받지 않아 배포가 빠르다 (D-60).
+
+[구현] 워커 이미지에 profile lock 파일 provider 를 미리 받아 둠. terraform init -lockfile=readonly.",-,PRF-01
+배포 속도 최적화 - 재배포 refresh 생략,이정,P0,기타,완료,"[사용자] 이미지만 바꾼 재배포에서 상태 재조회가 생략되어 1~2분 안에 끝난다 (D-60).
+
+[구현] apps/worker/src/handlers/provision.ts + terraform-cli.ts: 입력 지문이 같으면 plan -refresh=false. 지문은 apply 전 deployments.terraform_inputs_hash 에 기록. migration 016.",-,PRF-02
+배포 속도 최적화 - 작업 폴더 재사용,이정,P0,기타,완료,"[사용자] 재배포 시 Terraform init · plan · apply 가 통합되어 더 빨라진다 (D-62).
+
+[구현] apps/worker/src/terraform-cli.ts: Terraform 작업 폴더를 state key 별로 영구 볼륨에 두고 .terraform 만 남김. 재배포는 apply -refresh=false -auto-approve 한 번으로 통합.",-,PRF-03
+배포 속도 최적화 - 정적 사이트 state 재사용,이정,P0,기타,완료,"[사용자] 이미지만 바꾼 정적 사이트 갱신은 Terraform 을 아예 스킵해 30초 안에 끝난다 (D-66).
+
+[구현] deployments.terraform_outputs (migration 021) 재사용. 입력 지문 같고 직전 성공 배포 outputs 있으면 Terraform skip, static-site-publisher.ts 가 S3 sync 만 수행. DNS 레코드도 그대로면 공개 주소 검증만.",-,PRF-04
+ECS 롤아웃 직접 추적,이정,P0,기타,완료,"[사용자] ECS 롤아웃 상태 (새 태스크 시작 · 타깃 등록 · healthy) 가 콘솔에 실시간 표시된다 (D-61).
+
+[구현] apps/worker/src/ecs-rollout.ts 가 Terraform 밖에서 2초마다 ECS DescribeServices → 정확한 task definition ARN 이 COMPLETED 되면 종료. 실패 시 ECS 중지 사유 · 컨테이너 종료 코드 · 서비스 이벤트 로그.",-,PRF-05
+배포 모드 저장 (앱 설정),이정,P0,기타,완료,"[사용자] 재배포 · 롤백 · 환경 전환 시 앱의 배포 형태 (container/serverless) 가 그대로 유지된다 (D-63).
+
+[구현] migration 019 projects.deploy_mode. POST /deployments 의 mode 가 앱에 저장되고 재배포 시 재사용.",-,PRF-06
+Postgres 큐 기반 작업 큐,공통,P0,기타,완료,"[사용자] 작업 큐가 Postgres 로 상태 전이와 한 트랜잭션으로 돈다 (D-11, D-29).
+
+[구현] pg-boss (SKIP LOCKED + LISTEN/NOTIFY). apps/worker/src/register.ts 에 analyze · build · provision · verify · teardown · address-change · diagnose 큐 등록.",-,NFR-04
+단일 프로세스 (API + 오케스트레이터),공통,P0,기타,완료,"[사용자] API 서버와 오케스트레이터가 한 프로세스로 돈다 (D-28).
+
+[구현] apps/api/src/main.ts 가 Fastify + pg-boss publisher. apps/worker/src/main.ts 는 별도 프로세스로 pg-boss consumer. EC2 한 대에 Docker Compose 로 함께 (D-54).",-,NFR-05
+플랫폼 호스팅 (EC2 + Compose),공통,P0,기타,완료,"[사용자] 콘솔은 console.camellia-deploy.app 로 접속한다 (D-54).
+
+[구현] EC2 1대 + Docker Compose (web · api · worker · Postgres · buildkit · cloudflared). 접속은 Cloudflare Named Tunnel. 시크릿은 SSM Parameter Store.",-,NFR-06

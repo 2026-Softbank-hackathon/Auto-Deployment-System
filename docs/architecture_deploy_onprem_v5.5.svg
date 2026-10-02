@@ -1,0 +1,480 @@
+<?xml version="1.0" encoding="UTF-8"?><svg width="2000" height="2401" viewBox="0 0 2000 2401" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif"><style>
+:root{--bg:#F6F8FA;--card:#FFFFFF;--line:#D5DBE3;--text:#1C2430;--muted:#5E6B7A;--edge:#7C8896;
+--cp-fill:#EFF6F2;--cp-line:#7DB596;--cp-text:#2F7A55;--pool:#9AA7B5;
+--ag-fill:#F3F0FD;--ag-line:#A99BE6;--async:#7B61D9;--prov:#D9731A;--user:#2F6FD1;
+--pg-f:#EEF3FB;--pg-l:#BCCDEA;--rd-f:#FCEFEE;--rd-l:#EBC0BB;--ob-f:#F2F4F6;--ob-l:#D2D8DF;--vt-f:#FBF4E6;--vt-l:#E4CC9C;--ai-f:#F3F0FD;--ai-l:#CFC5F1;--rg-f:#EEF6F1;--rg-l:#BCDAC8;
+--on:#5B6B7F;--obs:#1F9E89;--obs-f:#EAF6F4;--obs-l:#9FD3C8;--aws:#E07A1F;--gcp:#3B7BE0;--az:#1E8FD6;--strip:#FFFFFF;
+--gate:#C98A12;--gate-f:#FFF6E0;--gate-l:#E9C46A;--fail:#C0453A;--new:#2F7A55;--code-f:#1F2630;--code-t:#DCE3EA;--code-k:#8FC7A8}
+.bg{fill:var(--bg)}
+.card{fill:var(--card);stroke:var(--line);stroke-width:1}
+.agent{fill:var(--ag-fill);stroke:var(--ag-line);stroke-width:1.5}
+.st-pg{fill:var(--pg-f);stroke:var(--pg-l)}.st-rd{fill:var(--rd-f);stroke:var(--rd-l)}.st-ob{fill:var(--ob-f);stroke:var(--ob-l)}
+.st-vt{fill:var(--vt-f);stroke:var(--vt-l)}.st-ai{fill:var(--ai-f);stroke:var(--ai-l)}.st-rg{fill:var(--rg-f);stroke:var(--rg-l)}
+.cp{fill:var(--cp-fill);stroke:var(--cp-line);stroke-width:1.5;stroke-dasharray:7 6}
+.pool{fill:none;stroke:var(--pool);stroke-width:1.2;stroke-dasharray:5 5}
+.bd-on{fill:var(--on)}.bd-aws{fill:var(--aws)}.bd-gcp{fill:var(--gcp)}.bd-az{fill:var(--az)}
+.strip{fill:var(--strip);stroke:var(--line)}
+.gatec{fill:var(--gate-f);stroke:var(--gate-l);stroke-width:1.5}
+.failc{fill:var(--rd-f);stroke:var(--rd-l);stroke-width:1.2}
+.codec{fill:var(--code-f);stroke:none}
+.p0b{fill:var(--new)}.p1b{fill:var(--gate)}.p2b{fill:#8A95A3}
+.optc{fill:var(--card);stroke:var(--pool);stroke-width:1.3;stroke-dasharray:6 4}
+.h1{font-size:34px;font-weight:700;fill:var(--text)}
+.h2{font-size:17px;fill:var(--muted)}
+.ttl{font-size:19px;font-weight:700;fill:var(--text)}
+.ttl-s{font-size:16px;font-weight:700;fill:var(--text)}
+.sub{font-size:14.5px;fill:var(--muted)}
+.subd{font-size:14.5px;fill:var(--text)}
+.tag{font-size:13px;fill:var(--muted);font-weight:700}
+.stt{font-size:17px;font-weight:700;fill:var(--cp-text)}
+.lbl{font-size:13.5px;fill:var(--muted);font-weight:700}
+.leg{font-size:14.5px;fill:var(--muted)}
+.bdt{font-size:12.5px;font-weight:700;fill:#fff}
+.newt{font-size:11px;font-weight:700;fill:#fff;letter-spacing:.04em}
+.gatet{font-size:16px;font-weight:700;fill:var(--gate)}
+.failt{font-size:15px;font-weight:700;fill:var(--fail)}
+.code{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-t)}
+.codek{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-k)}
+.mono{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13px;fill:var(--muted)}
+.stn{font-size:15px;font-weight:700;fill:#fff}
+.e-api{stroke:var(--edge);stroke-width:1.5;fill:none}
+.e-async{stroke:var(--async);stroke-width:1.6;stroke-dasharray:6 4;fill:none}
+.e-prov{stroke:var(--prov);stroke-width:2;fill:none}
+.e-fail{stroke:var(--fail);stroke-width:1.8;stroke-dasharray:7 5;fill:none}
+.mk-e-api{fill:var(--edge)}.mk-e-async{fill:var(--async)}.mk-e-prov{fill:var(--prov)}.mk-e-fail{fill:var(--fail)}
+</style>
+<defs><marker id="m-e-api" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-api"/></marker><marker id="m-e-async" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-async"/></marker><marker id="m-e-prov" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-prov"/></marker><marker id="m-e-fail" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-fail"/></marker></defs>
+<rect width="2000" height="2401" class="bg"/>
+<rect x="48" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="436" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="824" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="1212" y="256" width="348" height="1367" rx="16" class="pool"/>
+<rect x="1600" y="256" width="348" height="1367" rx="16" class="pool"/>
+<text x="48" y="70" class="h1">온프레미스 배포 파이프라인 상세</text>
+<text x="48" y="106" class="h2">Agent v0.1.8 · 롱폴링 · 1회용 토큰 → 장기 키 → ECR Pull → Compose + Named Tunnel  |  v5.5</text>
+<line x1="1020" y1="50" x2="1070" y2="50" class="e-api"/>
+<text x="1086" y="55" class="leg">Agent ↔ API (HTTPS)</text>
+<line x1="1020" y1="84" x2="1070" y2="84" class="e-async"/>
+<text x="1086" y="89" class="leg">롱폴링 · lease · heartbeat</text>
+<line x1="1020" y1="118" x2="1070" y2="118" class="e-prov"/>
+<text x="1086" y="123" class="leg">컨테이너 · Tunnel 운영</text>
+<line x1="1350" y1="50" x2="1400" y2="50" class="e-fail"/>
+<text x="1416" y="55" class="leg">실패 → 재시도 · cleanup</text>
+<rect x="1350" y="74" width="27" height="20" rx="10" class="p0b"/>
+<text x="1364" y="88.5" class="newt" text-anchor="middle">P0</text>
+<text x="1416" y="89" class="leg">데모 핵심 흐름</text>
+<rect x="1350" y="108" width="27" height="20" rx="10" class="p1b"/>
+<text x="1364" y="122.5" class="newt" text-anchor="middle">P1</text>
+<text x="1416" y="123" class="leg">P0 안정화 후</text>
+<rect x="1680" y="40" width="48" height="22" rx="6" class="bd-on"/>
+<text x="1704" y="56" class="bdt" text-anchor="middle">ON</text>
+<text x="1740" y="57" class="leg">온프레미스 섹션 · 회색 뱃지</text>
+<rect x="1680" y="76" width="48" height="22" rx="6" style="fill:var(--ag-line)"/>
+<text x="1704" y="92" class="bdt" text-anchor="middle">AGT</text>
+<text x="1740" y="93" class="leg">Agent 전용 로직 (보라)</text>
+<text x="1680" y="123" class="leg">v0.1.8 · lease 90s · poll 20s/500ms</text>
+<polygon points="48,150 418,150 436,186.0 418,222 48,222" class="cp" style="stroke-dasharray:none"/>
+<circle cx="78" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="78" y="191.5" class="stn" text-anchor="middle">1</text>
+<text x="108" y="182" class="ttl">Agent 등록</text>
+<text x="108" y="206" class="sub">최초 1회 · 1회용 토큰 → 장기 키</text>
+<polygon points="436,150 806,150 824,186.0 806,222 436,222 454,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="476" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="476" y="191.5" class="stn" text-anchor="middle">2</text>
+<text x="506" y="182" class="ttl">Job 수신 (롱폴링)</text>
+<text x="506" y="206" class="sub">poll 20s · interval 500ms · lease 90s</text>
+<polygon points="824,150 1194,150 1212,186.0 1194,222 824,222 842,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="864" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="864" y="191.5" class="stn" text-anchor="middle">3</text>
+<text x="894" y="182" class="ttl">ECR Pull · Compose 렌더</text>
+<text x="894" y="206" class="sub">단기 자격증명 · digest · env 격리</text>
+<polygon points="1212,150 1582,150 1600,186.0 1582,222 1212,222 1230,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="1252" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="1252" y="191.5" class="stn" text-anchor="middle">4</text>
+<text x="1282" y="182" class="ttl">런타임 + Named Tunnel</text>
+<text x="1282" y="206" class="sub">compose up · cloudflared · ready</text>
+<polygon points="1600,150 1948,150 1948,186.0 1948,222 1600,222 1618,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="1640" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="1640" y="191.5" class="stn" text-anchor="middle">5</text>
+<text x="1670" y="182" class="ttl">검증 완료 · 보고</text>
+<text x="1670" y="206" class="sub">DNS · /health · 상태 전이 · 에러 캡처</text>
+<rect x="62" y="276" width="320" height="140" rx="12" class="card" />
+<text x="84" y="310" class="ttl-s">최초 1회 설치</text>
+<rect x="279.68" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="293" y="308.5" class="newt" text-anchor="middle">P0</text>
+<rect x="313" y="294" width="39" height="20" rx="6" class="bd-on"/>
+<text x="332.5" y="308.5" class="bdt" text-anchor="middle">ON</text>
+<text x="84" y="340" class="sub">curl -sL ... | bash → launchd plist</text>
+<text x="84" y="365" class="sub">VM: Intel Mac mini · Docker Desktop</text>
+<text x="84" y="390" class="mono">~/Library/Application Support/Camellia/</text>
+<rect x="62" y="450" width="320" height="140" rx="12" class="card" />
+<text x="84" y="484" class="ttl-s">1회용 등록 토큰</text>
+<rect x="276.4" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="290" y="482.5" class="newt" text-anchor="middle">P0</text>
+<rect x="310" y="468" width="39" height="20" rx="6" class="bd-on"/>
+<text x="329.5" y="482.5" class="bdt" text-anchor="middle">ON</text>
+<text x="84" y="514" class="mono">ONPREM_AGENT_REGISTRATION_TOKEN</text>
+<text x="84" y="539" class="sub">환경변수로만 전달 · 파일 X</text>
+<text x="84" y="564" class="sub">짧은 TTL · 서버가 발급 · 1회 소비</text>
+<rect x="62" y="624" width="320" height="140" rx="12" class="card" />
+<text x="84" y="658" class="ttl-s">POST /api/v1/agents/register</text>
+<rect x="306.0" y="642" width="27" height="20" rx="10" class="p0b"/>
+<text x="320" y="656.5" class="newt" text-anchor="middle">P0</text>
+<rect x="340" y="642" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="359.5" y="656.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="84" y="688" class="sub">req: registration_token · machine_id</text>
+<text x="84" y="713" class="sub">OS · docker version · agent version</text>
+<text x="84" y="738" class="sub">resp: 장기 Agent 인증키 (long-lived)</text>
+<rect x="62" y="798" width="320" height="140" rx="12" class="card" />
+<text x="84" y="832" class="ttl-s">credentials.json (600)</text>
+<rect x="229.6" y="816" width="27" height="20" rx="10" class="p0b"/>
+<text x="243" y="830.5" class="newt" text-anchor="middle">P0</text>
+<rect x="263" y="816" width="39" height="20" rx="6" class="bd-on"/>
+<text x="282.5" y="830.5" class="bdt" text-anchor="middle">ON</text>
+<text x="84" y="862" class="sub">장기 키 저장 · 재시작 시 재사용</text>
+<text x="84" y="887" class="sub">소유자/그룹만 읽기 (chmod 600)</text>
+<text x="84" y="912" class="sub">탈취 방지 · 토큰 로테이트 지원</text>
+<rect x="62" y="972" width="320" height="140" rx="12" class="agent" />
+<text x="84" y="1006" class="ttl-s">LaunchAgent 등록</text>
+<rect x="241.84" y="990" width="27" height="20" rx="10" class="p0b"/>
+<text x="255" y="1004.5" class="newt" text-anchor="middle">P0</text>
+<rect x="275" y="990" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="294.5" y="1004.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="84" y="1036" class="mono">com.camellia.onprem-agent.plist</text>
+<text x="84" y="1061" class="sub">로그인 시 자동 시작 · 재시작 복구</text>
+<text x="84" y="1086" class="sub">launchd KeepAlive · crash 자동 재기동</text>
+<rect x="62" y="1146" width="320" height="134" rx="12" class="st-pg" />
+<text x="84" y="1180" class="ttl-s">등록 결과</text>
+<text x="84" y="1210" class="subd">1 Agent = 1 VM = 1 장기 키</text>
+<text x="84" y="1235" class="sub">서버: agents 테이블 · 상태 · 버전</text>
+<text x="84" y="1260" class="sub">Agent: credentials.json (600) 보관</text>
+<rect x="450" y="276" width="320" height="140" rx="12" class="card" />
+<text x="472" y="310" class="ttl-s">GET /agents/jobs/poll</text>
+<rect x="672.0" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="686" y="308.5" class="newt" text-anchor="middle">P0</text>
+<rect x="706" y="294" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="725.5" y="308.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="472" y="340" class="mono">agentJobPollTimeoutMs = 20000</text>
+<text x="472" y="365" class="mono">agentJobPollIntervalMs = 500</text>
+<text x="472" y="390" class="sub">장기 Agent 키로 Bearer 인증</text>
+<rect x="450" y="450" width="320" height="164" rx="12" class="card" />
+<text x="472" y="484" class="ttl-s">Job 종류</text>
+<rect x="588.8" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="602" y="482.5" class="newt" text-anchor="middle">P0</text>
+<rect x="622" y="468" width="39" height="20" rx="6" class="bd-on"/>
+<text x="641.5" y="482.5" class="bdt" text-anchor="middle">ON</text>
+<text x="472" y="514" class="sub">deploy (신규 배포)</text>
+<text x="472" y="539" class="sub">env_switch (환경 전환 재배포)</text>
+<text x="472" y="564" class="sub">address_change (subdomain 변경)</text>
+<text x="472" y="589" class="sub">deactivate (15분 유예 후 cleanup)</text>
+<rect x="450" y="648" width="320" height="140" rx="12" class="card" />
+<text x="472" y="682" class="ttl-s">Lease 획득</text>
+<rect x="572.72" y="666" width="27" height="20" rx="10" class="p0b"/>
+<text x="586" y="680.5" class="newt" text-anchor="middle">P0</text>
+<rect x="606" y="666" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="625.5" y="680.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="472" y="712" class="mono">MAX_LEASE_SECONDS = 90</text>
+<text x="472" y="737" class="sub">lease 중 재시작 → heartbeat 로 복구</text>
+<text x="472" y="762" class="sub">만료 시 서버가 다른 Agent 에 재분배</text>
+<rect x="450" y="822" width="320" height="164" rx="12" class="agent" />
+<text x="472" y="856" class="ttl-s">POST /agents/heartbeat</text>
+<rect x="672.4" y="840" width="27" height="20" rx="10" class="p0b"/>
+<text x="686" y="854.5" class="newt" text-anchor="middle">P0</text>
+<rect x="706" y="840" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="725.5" y="854.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="472" y="886" class="sub">주기: 10초 · lease 갱신 트리거</text>
+<text x="472" y="911" class="mono">resp: leaseRenewed · jobCancelled</text>
+<text x="472" y="936" class="sub">payload: deploymentId · state · health</text>
+<text x="472" y="961" class="sub">routes/agents.ts:88-156 · last_seen_at</text>
+<rect x="450" y="1020" width="320" height="140" rx="12" class="card" />
+<text x="472" y="1054" class="ttl-s">실패 재시도</text>
+<rect x="579.6" y="1038" width="27" height="20" rx="10" class="p0b"/>
+<text x="593" y="1052.5" class="newt" text-anchor="middle">P0</text>
+<rect x="613" y="1038" width="39" height="20" rx="6" class="bd-on"/>
+<text x="632.5" y="1052.5" class="bdt" text-anchor="middle">ON</text>
+<text x="472" y="1084" class="sub">heartbeat 1회 실패: 즉시 중단 X</text>
+<text x="472" y="1109" class="sub">lease 만료 전까지 지수 백오프 재시도</text>
+<text x="472" y="1134" class="sub">네트워크 복구 시 자동 재연결</text>
+<rect x="450" y="1194" width="320" height="86" rx="12" class="st-pg" />
+<text x="472" y="1228" class="ttl-s">연결 요약</text>
+<text x="472" y="1256" class="sub">long-poll 20s + heartbeat 10s = 상시 접속</text>
+<rect x="838" y="276" width="320" height="140" rx="12" class="card" />
+<text x="860" y="310" class="ttl-s">ECR 단기 인증 조회</text>
+<rect x="1060.08" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1074" y="308.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1094" y="294" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="1113.5" y="308.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="860" y="340" class="mono">POST /api/v1/agents/ecr-login</text>
+<text x="860" y="365" class="sub">서버: STS GetAuthorizationToken</text>
+<text x="860" y="390" class="sub">ECR 전용 IAM · job 한정 자격증명</text>
+<rect x="838" y="450" width="320" height="140" rx="12" class="card" />
+<text x="860" y="484" class="ttl-s">docker login</text>
+<rect x="946.56" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="960" y="482.5" class="newt" text-anchor="middle">P0</text>
+<rect x="980" y="468" width="39" height="20" rx="6" class="bd-on"/>
+<text x="999.5" y="482.5" class="bdt" text-anchor="middle">ON</text>
+<text x="860" y="514" class="mono">docker login --password-stdin</text>
+<text x="860" y="539" class="sub">Registry · Region 검증 (hostname 매치)</text>
+<text x="860" y="564" class="subd">완료 후 **항상 logout** (자격증명 X)</text>
+<rect x="838" y="624" width="320" height="140" rx="12" class="card" />
+<text x="860" y="658" class="ttl-s">digest pull</text>
+<rect x="940.0" y="642" width="27" height="20" rx="10" class="p0b"/>
+<text x="954" y="656.5" class="newt" text-anchor="middle">P0</text>
+<rect x="974" y="642" width="39" height="20" rx="6" class="bd-on"/>
+<text x="993.5" y="656.5" class="bdt" text-anchor="middle">ON</text>
+<text x="860" y="688" class="mono">docker pull &lt;reg&gt;@sha256:...</text>
+<text x="860" y="713" class="sub">digest 기반 (태그 X) · 재현 보장</text>
+<text x="860" y="738" class="mono">docker inspect → digest 재검증</text>
+<rect x="838" y="798" width="320" height="200" rx="12" class="codec" />
+<text x="860" y="830" style="fill:var(--code-t);font-size:16px;font-weight:700">Compose 렌더 (격리 project)</text>
+<text x="860" y="862" xml:space="preserve"><tspan class="codek">services:</tspan></text>
+<text x="860" y="883" xml:space="preserve"><tspan class="codek">  app:</tspan></text>
+<text x="860" y="904" xml:space="preserve"><tspan class="codek">    image: </tspan><tspan class="code">&lt;reg&gt;@sha256:...</tspan></text>
+<text x="860" y="925" xml:space="preserve"><tspan class="codek">    ports: </tspan><tspan class="code">["127.0.0.1:${PORT}:${APP_PORT}"]</tspan></text>
+<text x="860" y="946" xml:space="preserve"><tspan class="codek">    environment: </tspan><tspan class="code">[DATABASE_URL, JWT_SECRET]</tspan></text>
+<text x="860" y="967" xml:space="preserve"><tspan class="code"># 이름만. 값은 compose 프로세스 env 로 주입</tspan></text>
+<text x="860" y="988" xml:space="preserve"><tspan class="code"># 동적 loopback 포트 · job 단위 격리</tspan></text>
+<rect x="838" y="1008" width="320" height="140" rx="12" class="card" />
+<text x="860" y="1042" class="ttl-s">임시 env 파일 생명주기</text>
+<rect x="1023.52" y="1026" width="27" height="20" rx="10" class="p0b"/>
+<text x="1037" y="1040.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1057" y="1026" width="39" height="20" rx="6" class="bd-on"/>
+<text x="1076.5" y="1040.5" class="bdt" text-anchor="middle">ON</text>
+<text x="860" y="1072" class="sub">docker compose up 때만 임시 생성</text>
+<text x="860" y="1097" class="sub">tmpfs / 메모리 · 디스크 쓰기 최소화</text>
+<text x="860" y="1122" class="subd">완료 즉시 삭제 · 로그에 값 미기록</text>
+<rect x="838" y="1182" width="320" height="98" rx="12" class="st-pg" />
+<text x="860" y="1216" class="ttl-s">산출물</text>
+<text x="860" y="1246" class="subd">검증된 image + 격리 compose project</text>
+<text x="860" y="1268" class="sub">digest 재검증 완료 · env 값은 메모리에만</text>
+<rect x="1226" y="276" width="320" height="140" rx="12" class="card" />
+<text x="1248" y="310" class="ttl-s">docker compose up -d</text>
+<rect x="1443.44" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1457" y="308.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1477" y="294" width="39" height="20" rx="6" class="bd-on"/>
+<text x="1496.5" y="308.5" class="bdt" text-anchor="middle">ON</text>
+<text x="1248" y="340" class="sub">격리 네트워크 (project 단위)</text>
+<text x="1248" y="365" class="sub">Docker DNS 내부 라우팅</text>
+<text x="1248" y="390" class="sub">loopback 바인딩 (외부 노출 X)</text>
+<rect x="1226" y="450" width="320" height="140" rx="12" class="agent" />
+<text x="1248" y="484" class="ttl-s">localPort 보고</text>
+<rect x="1385.68" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="1399" y="482.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1419" y="468" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="1438.5" y="482.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="1248" y="514" class="mono">POST /agents/tunnel/connect</text>
+<text x="1248" y="539" class="sub">req: deploymentId · localPort</text>
+<text x="1248" y="564" class="sub">서버: CF API 로 Named Tunnel 설정</text>
+<rect x="1226" y="624" width="320" height="140" rx="12" class="card" />
+<text x="1248" y="658" class="ttl-s">cloudflared 실행</text>
+<rect x="1395.84" y="642" width="27" height="20" rx="10" class="p0b"/>
+<text x="1409" y="656.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1429" y="642" width="39" height="20" rx="6" class="bd-on"/>
+<text x="1448.5" y="656.5" class="bdt" text-anchor="middle">ON</text>
+<text x="1248" y="688" class="mono">cloudflared tunnel run</text>
+<text x="1248" y="713" class="subd">TUNNEL_TOKEN 환경변수 (파일 X)</text>
+<text x="1248" y="738" class="sub">tunnel session → 외부로 노출</text>
+<rect x="1226" y="798" width="320" height="140" rx="12" class="card" />
+<text x="1248" y="832" class="ttl-s">metrics /ready 체크</text>
+<rect x="1420.48" y="816" width="27" height="20" rx="10" class="p0b"/>
+<text x="1434" y="830.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1454" y="816" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="1473.5" y="830.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="1248" y="862" class="mono">http://localhost:${metricsPort}/ready</text>
+<text x="1248" y="887" class="sub">성공해야 Tunnel active 간주</text>
+<text x="1248" y="912" class="sub">cloudflared 자체 메트릭 포트</text>
+<rect x="1226" y="972" width="320" height="164" rx="12" class="card" />
+<text x="1248" y="1006" class="ttl-s">Tunnel 교체 (환경 전환)</text>
+<rect x="1419.68" y="990" width="27" height="20" rx="10" class="p0b"/>
+<text x="1433" y="1004.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1453" y="990" width="39" height="20" rx="6" class="bd-on"/>
+<text x="1472.5" y="1004.5" class="bdt" text-anchor="middle">ON</text>
+<text x="1248" y="1036" class="sub">신규 cloudflared 기동 → ready OK</text>
+<text x="1248" y="1061" class="sub">기존 cloudflared 종료 (SIGTERM)</text>
+<text x="1248" y="1086" class="subd">다운타임 0 · DNS 유지</text>
+<text x="1248" y="1111" class="sub">환경 전환 데모 포인트</text>
+<rect x="1226" y="1170" width="320" height="110" rx="12" class="st-pg" />
+<text x="1248" y="1204" class="ttl-s">산출물</text>
+<text x="1248" y="1232" class="subd">localPort + Named Tunnel session</text>
+<text x="1248" y="1258" class="sub">공개 URL 후보: https://{subdomain}.…</text>
+<rect x="1614" y="276" width="320" height="140" rx="12" class="card" />
+<text x="1636" y="310" class="ttl-s">DNS 활성화 확인</text>
+<rect x="1792.56" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1806" y="308.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1826" y="294" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="1845.5" y="308.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="1636" y="340" class="sub">공개 DNS (1.1.1.1) 로 CNAME 전파 확인</text>
+<text x="1636" y="365" class="sub">음수 캐시 버그 fix (D-? 결정)</text>
+<text x="1636" y="390" class="sub">확인 후에만 HTTP 검증 시작</text>
+<rect x="1614" y="450" width="320" height="140" rx="12" class="card" />
+<text x="1636" y="484" class="ttl-s">ready_for_verify 보고</text>
+<rect x="1816.4" y="468" width="27" height="20" rx="10" class="p0b"/>
+<text x="1830" y="482.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1850" y="468" width="39" height="20" rx="6" style="fill:var(--ag-line)"/>
+<text x="1869.5" y="482.5" class="bdt" text-anchor="middle">AGT</text>
+<text x="1636" y="514" class="mono">POST /agents/jobs/{jobId}/complete</text>
+<text x="1636" y="539" class="sub">payload: publicUrl · digest</text>
+<text x="1636" y="564" class="sub">tunnel session id · metricsPort</text>
+<rect x="1614" y="624" width="320" height="140" rx="12" class="card" />
+<text x="1636" y="658" class="ttl-s">최종 HTTP 검증 (서버 측)</text>
+<rect x="1826.72" y="642" width="27" height="20" rx="10" class="p0b"/>
+<text x="1840" y="656.5" class="newt" text-anchor="middle">P0</text>
+<text x="1904" y="656" class="tag" text-anchor="end">VRF</text>
+<text x="1636" y="688" class="mono">/health → 200 x3 연속</text>
+<text x="1636" y="713" class="sub">타임아웃 3초 · 재시도 간격 5초</text>
+<text x="1636" y="738" class="sub">최대 12회 (약 60초)</text>
+<rect x="1614" y="798" width="320" height="140" rx="12" class="st-rg" />
+<text x="1636" y="832" class="ttl-s">status = succeeded</text>
+<rect x="1770.16" y="816" width="27" height="20" rx="10" class="p0b"/>
+<text x="1784" y="830.5" class="newt" text-anchor="middle">P0</text>
+<text x="1904" y="830" class="tag" text-anchor="end">ORC</text>
+<text x="1636" y="862" class="sub">env_lock 해제</text>
+<text x="1636" y="887" class="mono">SSE: state_changed → succeeded</text>
+<text x="1636" y="912" class="sub">deployments.public_url 기록</text>
+<rect x="1614" y="972" width="320" height="164" rx="12" class="card" />
+<text x="1636" y="1006" class="ttl-s">에러 리포트</text>
+<rect x="1771.68" y="990" width="27" height="20" rx="10" class="p0b"/>
+<text x="1785" y="1004.5" class="newt" text-anchor="middle">P0</text>
+<rect x="1805" y="990" width="39" height="20" rx="6" class="bd-on"/>
+<text x="1824.5" y="1004.5" class="bdt" text-anchor="middle">ON</text>
+<text x="1636" y="1036" class="sub">실패 시 stderr / stdout 캡처 → DB</text>
+<text x="1636" y="1061" class="sub">/ops 운영 대시보드에서 조회</text>
+<text x="1636" y="1086" class="sub">PR #203 효과 · 사후 분석 가능</text>
+<text x="1636" y="1111" class="sub">시크릿 값은 마스킹 후 저장</text>
+<rect x="1614" y="1170" width="320" height="110" rx="12" class="st-pg" />
+<text x="1636" y="1204" class="ttl-s">최종 결과</text>
+<text x="1636" y="1232" class="subd">https://{subdomain}.camellia-deploy.app</text>
+<text x="1636" y="1258" class="sub">환경 전환 가능 · 롤백 창 15분</text>
+<path d="M222 418 L222 446" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 592 L222 620" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 766 L222 794" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 940 L222 968" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 1114 L222 1140" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 418 L610 446" class="e-async" marker-end="url(#m-e-async)"/>
+<path d="M610 616 L610 644" class="e-async" marker-end="url(#m-e-async)"/>
+<path d="M610 790 L610 818" class="e-async" marker-end="url(#m-e-async)"/>
+<path d="M610 988 L610 1016" class="e-async" marker-end="url(#m-e-async)"/>
+<path d="M610 1162 L610 1188" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 418 L998 446" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 592 L998 620" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 766 L998 794" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 1000 L998 1004" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 1150 L998 1176" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 418 L1386 446" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M1386 592 L1386 620" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M1386 766 L1386 794" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M1386 940 L1386 968" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M1386 1138 L1386 1164" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M1774 418 L1774 446" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 592 L1774 620" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 766 L1774 794" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 940 L1774 968" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 1138 L1774 1164" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="62" y="1670" width="320" height="70" rx="10" class="st-pg" />
+<text x="82" y="1696" class="lbl">① 산출물</text>
+<text x="82" y="1720" class="subd">registered: Agent + credentials</text>
+<path d="M382 1705 L446 1705" class="e-async" marker-end="url(#m-e-async)"/>
+<rect x="450" y="1670" width="320" height="70" rx="10" class="st-pg" />
+<text x="470" y="1696" class="lbl">② 산출물</text>
+<text x="470" y="1720" class="subd">Job + lease (90s)</text>
+<path d="M770 1705 L834 1705" class="e-async" marker-end="url(#m-e-async)"/>
+<rect x="838" y="1670" width="320" height="70" rx="10" class="st-pg" />
+<text x="858" y="1696" class="lbl">③ 산출물</text>
+<text x="858" y="1720" class="subd">image + Compose project</text>
+<path d="M1158 1705 L1222 1705" class="e-prov" marker-end="url(#m-e-prov)"/>
+<rect x="1226" y="1670" width="320" height="70" rx="10" class="st-pg" />
+<text x="1246" y="1696" class="lbl">④ 산출물</text>
+<text x="1246" y="1720" class="subd">localPort + Tunnel session</text>
+<path d="M1546 1705 L1610 1705" class="e-prov" marker-end="url(#m-e-prov)"/>
+<rect x="1614" y="1670" width="320" height="70" rx="10" class="st-rg" />
+<text x="1634" y="1696" class="lbl">⑤ 결과</text>
+<text x="1634" y="1720" class="subd">https://{subdomain}.camellia-deploy.app</text>
+<rect x="48" y="1770" width="1904" height="190" rx="14" class="strip" />
+<text x="72" y="1804" class="stt">Agent 상태 머신</text>
+<text x="242.7" y="1804" class="sub">정상 경로 · 실패 복구 · 재시작 복구 (v0.1.8)</text>
+<text x="1928" y="1804" class="lbl" text-anchor="end">전이는 heartbeat payload 로 보고</text>
+<rect x="62" y="1828" width="78" height="24" rx="12" class="st-ob" />
+<text x="73" y="1845" class="mono">starting</text>
+<rect x="155" y="1828" width="92" height="24" rx="12" class="st-ob" />
+<text x="166" y="1845" class="mono">registered</text>
+<rect x="262" y="1828" width="52" height="24" rx="12" class="st-ob" />
+<text x="273" y="1845" class="mono">idle</text>
+<rect x="329" y="1828" width="76" height="24" rx="12" class="st-ob" />
+<text x="340" y="1845" class="mono">polling</text>
+<rect x="420" y="1828" width="118" height="24" rx="12" class="st-ob" />
+<text x="431" y="1845" class="mono">job_received</text>
+<rect x="553" y="1828" width="86" height="24" rx="12" class="st-ob" />
+<text x="564" y="1845" class="mono">pulling</text>
+<rect x="654" y="1828" width="104" height="24" rx="12" class="st-ob" />
+<text x="665" y="1845" class="mono">rendering</text>
+<rect x="773" y="1828" width="84" height="24" rx="12" class="st-ob" />
+<text x="784" y="1845" class="mono">running</text>
+<rect x="872" y="1828" width="106" height="24" rx="12" class="st-ob" />
+<text x="883" y="1845" class="mono">tunneling</text>
+<rect x="993" y="1828" width="68" height="24" rx="12" class="st-ob" />
+<text x="1004" y="1845" class="mono">ready</text>
+<rect x="1076" y="1828" width="104" height="24" rx="12" class="st-ob" />
+<text x="1087" y="1845" class="mono">reporting</text>
+<rect x="1195" y="1828" width="130" height="24" rx="12" class="st-rg" />
+<text x="1206" y="1845" class="mono">idle (복귀)</text>
+<path d="M140 1840 L155 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M247 1840 L262 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M314 1840 L329 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M405 1840 L420 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M538 1840 L553 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M639 1840 L654 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M758 1840 L773 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M857 1840 L872 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M978 1840 L993 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1061 1840 L1076 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1180 1840 L1195 1840" class="e-api" marker-end="url(#m-e-api)"/>
+<text x="72" y="1888" class="lbl">실패 경로</text>
+<rect x="155" y="1876" width="72" height="24" rx="12" class="failc" />
+<text x="166" y="1893" class="mono">failed</text>
+<rect x="242" y="1876" width="94" height="24" rx="12" class="failc" />
+<text x="253" y="1893" class="mono">cleaning</text>
+<rect x="351" y="1876" width="52" height="24" rx="12" class="st-rg" />
+<text x="362" y="1893" class="mono">idle</text>
+<path d="M227 1888 L242 1888" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M336 1888 L351 1888" class="e-fail" marker-end="url(#m-e-fail)"/>
+<text x="440" y="1888" class="lbl">재시작 복구</text>
+<rect x="553" y="1876" width="110" height="24" rx="12" class="st-ob" />
+<text x="564" y="1893" class="mono">recovering</text>
+<rect x="678" y="1876" width="178" height="24" rx="12" class="st-ob" />
+<text x="689" y="1893" class="mono">syncing_with_server</text>
+<rect x="871" y="1876" width="52" height="24" rx="12" class="st-rg" />
+<text x="882" y="1893" class="mono">idle</text>
+<path d="M663 1888 L678 1888" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M856 1888 L871 1888" class="e-api" marker-end="url(#m-e-api)"/>
+<text x="950" y="1888" class="lbl">heartbeat (10s)</text>
+<rect x="1060" y="1876" width="134" height="24" rx="12" class="st-ob" />
+<text x="1071" y="1893" class="mono">leaseRenewed</text>
+<rect x="1210" y="1876" width="128" height="24" rx="12" class="failc" />
+<text x="1221" y="1893" class="mono">jobCancelled</text>
+<text x="1360" y="1888" class="lbl">= heartbeat 응답 플래그</text>
+<text x="72" y="1930" class="lbl">주요 전이</text>
+<text x="155" y="1930" class="sub">starting→registered: /agents/register 성공  ·  idle→polling: /jobs/poll 호출  ·  pulling→rendering: digest OK</text>
+<text x="155" y="1952" class="sub">tunneling→ready: /ready 200  ·  reporting→idle: /complete ACK  ·  failed→cleaning: compose down · env 삭제 · stderr 보고</text>
+<rect x="48" y="1980" width="1904" height="222" rx="14" class="strip" />
+<text x="72" y="2014" class="stt">Agent 생명주기 정책 (Discussion Log Day 5 §10)</text>
+<text x="400" y="2014" class="sub">10개 정책 · 환경 전환 롤백 창 15분 · heartbeat 1회 실패 허용 · 서버 상태와 비교 후 고아 정리</text>
+<text x="1928" y="2014" class="lbl" text-anchor="end">P0 핵심 + P1 보강</text>
+<text x="62" y="2048" class="subd">① 이전 컨테이너 종료: <tspan class="failt">전환 15분 후</tspan> (롤백 창)</text>
+<text x="62" y="2074" class="subd">② 실패한 후보 컨테이너: <tspan class="failt">즉시 제거</tspan></text>
+<text x="62" y="2100" class="subd">③ 유지 런타임: <tspan class="gatet">활성 + 직전 스탠바이 최대 2개</tspan> (설계 — API 책임)</text>
+<text x="62" y="2126" class="subd">④ AWS ↔ On-Prem 동시 실행: 전환 + 15분 유예만</text>
+<text x="62" y="2152" class="subd">⑤ Agent 종료 시 active 컨테이너 유지 (업데이트 중 장애 방지)</text>
+<text x="1000" y="2048" class="subd">⑥ Agent 재시작 복구: 로컬 상태 + 서버 동기화</text>
+<text x="1000" y="2074" class="subd">⑦ heartbeat payload: deploymentId · digest · 상태 · health</text>
+<text x="1000" y="2100" class="subd">⑧ deactivate: 명시적 cleanup Job (deploy 아님)</text>
+<text x="1000" y="2126" class="subd">⑨ heartbeat 1회 실패: 중단 X · 재시도</text>
+<text x="1000" y="2152" class="subd">⑩ Agent 시작 시 서버 요구 상태와 비교 → 고아 컨테이너 정리</text>
+<text x="62" y="2184" class="lbl">근거: apps/onprem-agent/README.md · routes/agents.ts:88-156 · routes/agent-jobs.ts:34 (MAX_LEASE_SECONDS=90) · server.ts:90-93 (pollTimeoutMs 20000 · pollIntervalMs 500)</text>
+<rect x="48" y="2222" width="1904" height="138" rx="14" class="failc" />
+<text x="72" y="2256" class="failt">실패 경로</text>
+<text x="200" y="2256" class="sub">단계별 재시도 · lease 만료 · 자동 cleanup · stderr DB 저장</text>
+<text x="1928" y="2256" class="lbl" text-anchor="end">모든 실패는 /ops 대시보드로 가시화</text>
+<text x="62" y="2286" class="subd">· <tspan class="failt">ECR 인증 실패</tspan> → 재시도 (지수 백오프) → 지속 실패 시 서버가 jobCancelled 플래그 → Agent 는 cleaning 전이</text>
+<text x="62" y="2311" class="subd">· <tspan class="failt">docker pull 실패</tspan> → 네트워크 재시도 · digest 재검증 · 3회 초과 시 failed 보고 (stderr 포함)</text>
+<text x="62" y="2336" class="subd">· <tspan class="failt">Compose up 실패</tspan> → 즉시 cleanup (compose down -v) + stderr DB 저장 · <tspan class="failt">Tunnel ready 안 됨</tspan> → 타임아웃 60초 → Compose down · <tspan class="failt">Agent 재시작</tspan> → 로컬 상태 복원 → heartbeat 로 lease 재획득</text>
+</svg>

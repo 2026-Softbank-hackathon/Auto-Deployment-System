@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="UTF-8"?><svg width="1900" height="2254" viewBox="0 0 1900 2254" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif"><style>
+:root{--bg:#F6F8FA;--card:#FFFFFF;--line:#D5DBE3;--text:#1C2430;--muted:#5E6B7A;--edge:#7C8896;
+--cp-fill:#EFF6F2;--cp-line:#7DB596;--cp-text:#2F7A55;--pool:#9AA7B5;
+--ag-fill:#F3F0FD;--ag-line:#A99BE6;--async:#7B61D9;--prov:#D9731A;--user:#2F6FD1;
+--pg-f:#EEF3FB;--pg-l:#BCCDEA;--rd-f:#FCEFEE;--rd-l:#EBC0BB;--ob-f:#F2F4F6;--ob-l:#D2D8DF;--vt-f:#FBF4E6;--vt-l:#E4CC9C;--ai-f:#F3F0FD;--ai-l:#CFC5F1;--rg-f:#EEF6F1;--rg-l:#BCDAC8;
+--on:#5B6B7F;--obs:#1F9E89;--obs-f:#EAF6F4;--obs-l:#9FD3C8;--aws:#E07A1F;--gcp:#3B7BE0;--az:#1E8FD6;--strip:#FFFFFF;
+--gate:#C98A12;--gate-f:#FFF6E0;--gate-l:#E9C46A;--fail:#C0453A;--new:#2F7A55;--code-f:#1F2630;--code-t:#DCE3EA;--code-k:#8FC7A8}
+.bg{fill:var(--bg)}
+.card{fill:var(--card);stroke:var(--line);stroke-width:1}
+.agent{fill:var(--ag-fill);stroke:var(--ag-line);stroke-width:1.5}
+.st-pg{fill:var(--pg-f);stroke:var(--pg-l)}.st-rd{fill:var(--rd-f);stroke:var(--rd-l)}.st-ob{fill:var(--ob-f);stroke:var(--ob-l)}
+.st-vt{fill:var(--vt-f);stroke:var(--vt-l)}.st-ai{fill:var(--ai-f);stroke:var(--ai-l)}.st-rg{fill:var(--rg-f);stroke:var(--rg-l)}
+.cp{fill:var(--cp-fill);stroke:var(--cp-line);stroke-width:1.5;stroke-dasharray:7 6}
+.pool{fill:none;stroke:var(--pool);stroke-width:1.2;stroke-dasharray:5 5}
+.env{fill:var(--card);stroke-width:1.5}
+.env-on{stroke:var(--on)}.env-aws{stroke:var(--aws)}.env-gcp{stroke:var(--gcp)}.env-az{stroke:var(--az)}
+.bd-on{fill:var(--on)}.bd-aws{fill:var(--aws)}.bd-gcp{fill:var(--gcp)}.bd-az{fill:var(--az)}
+.dot-on{fill:var(--on)}.dot-aws{fill:var(--aws)}.dot-gcp{fill:var(--gcp)}.dot-az{fill:var(--az)}
+.strip{fill:var(--strip);stroke:var(--line)}
+.obsc{fill:var(--obs-f);stroke:var(--obs-l)}
+.gatec{fill:var(--gate-f);stroke:var(--gate-l);stroke-width:1.5}
+.failc{fill:var(--rd-f);stroke:var(--rd-l);stroke-width:1.2}
+.codec{fill:var(--code-f);stroke:none}
+.newb{fill:var(--new)}.p0b{fill:var(--new)}.p1b{fill:var(--gate)}.p2b{fill:#8A95A3}.optb{fill:var(--muted)}
+.optc{fill:var(--card);stroke:var(--pool);stroke-width:1.3;stroke-dasharray:6 4}
+.h1{font-size:34px;font-weight:700;fill:var(--text)}
+.h2{font-size:17px;fill:var(--muted)}
+.ttl{font-size:19px;font-weight:700;fill:var(--text)}
+.ttl-s{font-size:16px;font-weight:700;fill:var(--text)}
+.sub{font-size:14.5px;fill:var(--muted)}
+.subd{font-size:14.5px;fill:var(--text)}
+.tag{font-size:13px;fill:var(--muted);font-weight:700}
+.cpt{font-size:22px;font-weight:700;fill:var(--cp-text)}
+.pt{font-size:14.5px;font-weight:700;fill:var(--muted)}
+.stt{font-size:17px;font-weight:700;fill:var(--cp-text)}
+.lbl{font-size:13.5px;fill:var(--muted);font-weight:700}
+.leg{font-size:14.5px;fill:var(--muted)}
+.bdt{font-size:12.5px;font-weight:700;fill:#fff}
+.newt{font-size:11px;font-weight:700;fill:#fff;letter-spacing:.04em}
+.gatet{font-size:16px;font-weight:700;fill:var(--gate)}
+.failt{font-size:15px;font-weight:700;fill:var(--fail)}
+.code{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-t)}
+.codek{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-k)}
+.mono{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13px;fill:var(--muted)}
+.stn{font-size:15px;font-weight:700;fill:#fff}
+.e-api{stroke:var(--edge);stroke-width:1.5;fill:none}
+.e-async{stroke:var(--async);stroke-width:1.6;stroke-dasharray:6 4;fill:none}
+.e-prov{stroke:var(--prov);stroke-width:2.4;fill:none}
+.e-user{stroke:var(--user);stroke-width:2;fill:none}
+.e-obs{stroke:var(--obs);stroke-width:1.8;stroke-dasharray:3 3;fill:none}
+.e-gate{stroke:var(--gate);stroke-width:2;fill:none}
+.e-fail{stroke:var(--fail);stroke-width:1.8;stroke-dasharray:7 5;fill:none}
+.mk-e-obs{fill:var(--obs)}.mk-e-api{fill:var(--edge)}.mk-e-async{fill:var(--async)}.mk-e-prov{fill:var(--prov)}.mk-e-user{fill:var(--user)}.mk-e-gate{fill:var(--gate)}.mk-e-fail{fill:var(--fail)}
+</style>
+<defs><marker id="m-e-api" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-api"/></marker><marker id="m-e-async" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-async"/></marker><marker id="m-e-prov" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-prov"/></marker><marker id="m-e-user" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-user"/></marker><marker id="m-e-obs" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-obs"/></marker><marker id="m-e-gate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-gate"/></marker><marker id="m-e-fail" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-fail"/></marker></defs>
+<rect width="1900" height="2254" class="bg"/>
+<text x="48" y="70" class="h1">환경 전환 (AWS ↔ 온프레미스) · DNS CNAME 레벨</text>
+<text x="48" y="106" class="h2">같은 digest · 반대 환경 신규 배포 → 검증 → CF API CNAME 변경 (TTL=1s) → 15분 유예 → cleanup · v5.5</text>
+<line x1="1180" y1="52" x2="1230" y2="52" class="e-prov"/>
+<text x="1246" y="57" class="leg">전환 흐름 (프로비저닝 · 배포)</text>
+<line x1="1180" y1="86" x2="1230" y2="86" class="e-user"/>
+<text x="1246" y="91" class="leg">사용자 트래픽</text>
+<line x1="1500" y1="52" x2="1550" y2="52" class="e-fail"/>
+<text x="1566" y="57" class="leg">실패 경로</text>
+<line x1="1500" y1="86" x2="1550" y2="86" class="e-api"/>
+<text x="1566" y="91" class="leg">제어 (CF API)</text>
+<rect x="1750" y="42" width="27" height="20" rx="10" class="p1b"/>
+<text x="1764" y="56.5" class="newt" text-anchor="middle">P1</text>
+<text x="1786" y="57" class="leg">환경 전환 데모 포인트</text>
+<rect x="1750" y="76" width="27" height="20" rx="10" class="p0b"/>
+<text x="1764" y="90.5" class="newt" text-anchor="middle">P0</text>
+<text x="1786" y="91" class="leg">기존 완성 흐름 재사용</text>
+<rect x="48" y="160" width="672" height="240" rx="14" class="env env-aws" />
+<rect x="70" y="180" width="68" height="26" rx="7" class="bd-aws" />
+<text x="104" y="198.5" class="bdt" text-anchor="middle">ACTIVE</text>
+<text x="150" y="200" class="ttl">현재 상태 · Active = AWS</text>
+<rect x="70" y="222" width="394" height="156" rx="12" class="card" style="stroke:var(--aws);stroke-width:2.2"/>
+<rect x="86" y="238" width="56" height="26" rx="7" class="bd-aws" />
+<text x="114" y="256" class="bdt" text-anchor="middle">AWS</text>
+<text x="154" y="257" class="ttl-s">aws-ecs-basic · service-5</text>
+<text x="86" y="286" class="sub">digest sha256:a1b2c3d4e5f6... (고정)</text>
+<text x="86" y="310" class="sub">ALB → service-5.camellia-deploy.app</text>
+<text x="86" y="334" class="sub">deployments.active = true</text>
+<text x="86" y="358" class="sub">ECS 롤링 완료 · healthy 2/2</text>
+<rect x="486" y="222" width="214" height="156" rx="12" class="optc" />
+<rect x="500" y="238" width="80" height="22" rx="6" style="fill:var(--pool)" />
+<text x="540" y="254.5" class="bdt" text-anchor="middle">STANDBY</text>
+<text x="500" y="282" class="ttl-s">온프레미스</text>
+<text x="500" y="306" class="sub">onprem-docker-basic</text>
+<text x="500" y="328" class="sub">미배포 (not provisioned)</text>
+<text x="500" y="350" class="sub">Agent idle · 롱 폴링 대기</text>
+<path d="M720 280 L760 280" class="e-prov" marker-end="url(#m-e-prov)"/>
+<text x="740" y="268" class="lbl" text-anchor="middle">전환</text>
+<rect x="760" y="160" width="1092" height="240" rx="14" class="env env-on" />
+<rect x="782" y="180" width="68" height="26" rx="7" class="bd-on" />
+<text x="816" y="198.5" class="bdt" text-anchor="middle">ACTIVE</text>
+<text x="862" y="200" class="ttl">전환 후 상태 · Active = 온프레미스</text>
+<rect x="782" y="222" width="500" height="156" rx="12" class="card" style="stroke:var(--on);stroke-width:2.2"/>
+<rect x="798" y="238" width="46" height="26" rx="7" class="bd-on" />
+<text x="821" y="256" class="bdt" text-anchor="middle">ON</text>
+<text x="856" y="257" class="ttl-s">onprem-docker-basic · service-5</text>
+<text x="798" y="286" class="sub">같은 digest sha256:a1b2c3d4e5f6... (재사용)</text>
+<text x="798" y="310" class="sub">Named Tunnel → service-5.camellia-deploy.app</text>
+<text x="798" y="334" class="sub">deployments.active = true · active_deployment_id 갱신</text>
+<text x="798" y="358" class="sub">Compose up · /health 200 x3 확인</text>
+<rect x="1300" y="222" width="536" height="156" rx="12" class="optc" style="stroke:var(--aws);stroke-dasharray:6 4"/>
+<rect x="1316" y="238" width="186" height="22" rx="6" class="p1b" />
+<text x="1409" y="254.5" class="bdt" text-anchor="middle">STANDBY (15분 유예)</text>
+<text x="1316" y="282" class="ttl-s">AWS (구 origin 유지)</text>
+<text x="1316" y="306" class="sub">직전 service-5 origin 유지 · 롤백 창</text>
+<text x="1316" y="328" class="sub">ECS task 유지 · heartbeat 유지</text>
+<text x="1316" y="350" class="sub">CNAME 되돌리기 1 API call 로 즉시 복구</text>
+<text x="1316" y="372" class="sub">15분 경과 → deactivate Job → cleanup</text>
+<text x="48" y="440" class="cpt">6단계 전환 플로우</text>
+<text x="300" y="440" class="lbl">chevron 좌→우 · 각 단계 뱃지 좌상단</text>
+<polygon points="48,460 310,460 328,500 310,540 48,540" class="cp" style="stroke-dasharray:none;stroke:var(--prov);fill:#FFF4E8"/>
+<circle cx="78" cy="500" r="17" style="fill:var(--prov)"/>
+<text x="78" y="505.5" class="stn" text-anchor="middle">1</text>
+<text x="108" y="496" class="ttl-s">같은 digest 반대 환경 배포</text>
+<rect x="285" y="465" width="27" height="20" rx="10" class="p1b"/>
+<text x="299" y="479.5" class="newt" text-anchor="middle">P1</text>
+<text x="108" y="518" class="sub">AWS → 온프레미스 신규 배포 row</text>
+<text x="108" y="536" class="sub">같은 build_artifact_id · Analyze/Build 생략</text>
+<polygon points="328,460 590,460 608,500 590,540 328,540 346,500" class="cp" style="stroke-dasharray:none;stroke:var(--prov);fill:#FFF4E8"/>
+<circle cx="368" cy="500" r="17" style="fill:var(--prov)"/>
+<text x="368" y="505.5" class="stn" text-anchor="middle">2</text>
+<text x="398" y="496" class="ttl-s">반대 환경 검증</text>
+<rect x="565" y="465" width="27" height="20" rx="10" class="p0b"/>
+<text x="579" y="479.5" class="newt" text-anchor="middle">P0</text>
+<text x="398" y="518" class="sub">Agent → Compose up → Tunnel 활성화</text>
+<text x="398" y="536" class="sub">/health 200 x3 · 실패 시 CNAME 유지</text>
+<polygon points="608,460 870,460 888,500 870,540 608,540 626,500" class="cp" style="stroke-dasharray:none;stroke:var(--prov);fill:#FFF4E8"/>
+<circle cx="648" cy="500" r="17" style="fill:var(--prov)"/>
+<text x="648" y="505.5" class="stn" text-anchor="middle">3</text>
+<text x="678" y="496" class="ttl-s">CF API · CNAME target 변경</text>
+<rect x="845" y="465" width="27" height="20" rx="10" class="p1b"/>
+<text x="859" y="479.5" class="newt" text-anchor="middle">P1</text>
+<text x="678" y="518" class="sub">PATCH /zones/{zoneId}/dns_records/{id}</text>
+<text x="678" y="536" class="sub">proxied=true · ttl=1 (최소)</text>
+<polygon points="888,460 1150,460 1168,500 1150,540 888,540 906,500" class="cp" style="stroke-dasharray:none;stroke:var(--prov);fill:#FFF4E8"/>
+<circle cx="928" cy="500" r="17" style="fill:var(--prov)"/>
+<text x="928" y="505.5" class="stn" text-anchor="middle">4</text>
+<text x="958" y="496" class="ttl-s">DNS 수렴 (TTL=1s)</text>
+<rect x="1125" y="465" width="27" height="20" rx="10" class="p0b"/>
+<text x="1139" y="479.5" class="newt" text-anchor="middle">P0</text>
+<text x="958" y="518" class="sub">CF Edge 캐시 즉시 무효화</text>
+<text x="958" y="536" class="sub">리졸버 TTL 1초 · 실질 즉시 전환</text>
+<polygon points="1168,460 1430,460 1448,500 1430,540 1168,540 1186,500" class="cp" style="stroke-dasharray:none;stroke:var(--prov);fill:#FFF4E8"/>
+<circle cx="1208" cy="500" r="17" style="fill:var(--prov)"/>
+<text x="1208" y="505.5" class="stn" text-anchor="middle">5</text>
+<text x="1238" y="496" class="ttl-s">구 origin 15분 유예</text>
+<rect x="1405" y="465" width="27" height="20" rx="10" class="p1b"/>
+<text x="1419" y="479.5" class="newt" text-anchor="middle">P1</text>
+<text x="1238" y="518" class="sub">AWS ECS task 유지 · heartbeat 유지</text>
+<text x="1238" y="536" class="sub">롤백 창: CNAME 되돌리기 1 API call</text>
+<polygon points="1448,460 1836,460 1836,500 1836,540 1448,540 1466,500" class="cp" style="stroke-dasharray:none;stroke:var(--prov);fill:#FFF4E8"/>
+<circle cx="1488" cy="500" r="17" style="fill:var(--prov)"/>
+<text x="1488" y="505.5" class="stn" text-anchor="middle">6</text>
+<text x="1518" y="496" class="ttl-s">Cleanup</text>
+<rect x="1795" y="465" width="27" height="20" rx="10" class="p1b"/>
+<text x="1809" y="479.5" class="newt" text-anchor="middle">P1</text>
+<text x="1518" y="518" class="sub">deactivate Job → ECS scale-to-0 or Compose down</text>
+<text x="1518" y="536" class="sub">active_deployment_id 메타 갱신</text>
+<rect x="48" y="556" width="1788" height="162" rx="12" class="card" />
+<text x="68" y="588" class="ttl-s">단계별 상세</text>
+<rect x="68" y="604" width="285" height="100" rx="8" class="st-rg" />
+<text x="80" y="624" class="lbl">1 · 같은 digest 반대 환경 배포</text>
+<text x="80" y="646" class="sub">활성 환경이 AWS → 온프레미스에</text>
+<text x="80" y="664" class="sub">신규 배포 (deployments 신규 row)</text>
+<text x="80" y="682" class="sub">same build_artifact_id</text>
+<text x="80" y="700" class="sub">Analyze/Build 생략 · artifact 재사용</text>
+<rect x="363" y="604" width="285" height="100" rx="8" class="st-rg" />
+<text x="375" y="624" class="lbl">2 · 반대 환경 검증</text>
+<text x="375" y="646" class="sub">Agent → Compose up → Named Tunnel</text>
+<text x="375" y="664" class="sub">/health 200 연속 3회</text>
+<text x="375" y="682" class="sub">실패 → CNAME 변경 안 함</text>
+<text x="375" y="700" class="sub">전환 취소 · lock 해제</text>
+<rect x="658" y="604" width="285" height="100" rx="8" class="st-rg" />
+<text x="670" y="624" class="lbl">3 · CF API · CNAME target 변경</text>
+<text x="670" y="646" class="sub">토큰: camellia-platform-dns-tunnel</text>
+<text x="670" y="664" class="sub">scope: Zone DNS Edit · SSL Read</text>
+<text x="670" y="682" class="sub">응답 raw: client.ts:261-299</text>
+<text x="670" y="700" class="sub">proxied=true · ttl=1 (최소값)</text>
+<rect x="953" y="604" width="285" height="100" rx="8" class="st-rg" />
+<text x="965" y="624" class="lbl">4 · DNS 수렴 (TTL=1s)</text>
+<text x="965" y="646" class="sub">Cloudflare Edge 캐시 즉시 무효화</text>
+<text x="965" y="664" class="sub">클라이언트 리졸버 TTL 1초</text>
+<text x="965" y="682" class="sub">실질 즉시 전환</text>
+<text x="965" y="700" class="sub">60s 아님 · 1s</text>
+<rect x="1248" y="604" width="285" height="100" rx="8" class="st-rg" />
+<text x="1260" y="624" class="lbl">5 · 구 origin 15분 유예</text>
+<text x="1260" y="646" class="sub">AWS ECS task 유지</text>
+<text x="1260" y="664" class="sub">heartbeat 유지 · 요청 처리 가능</text>
+<text x="1260" y="682" class="sub">롤백 창: CNAME 되돌리기 1 call</text>
+<text x="1260" y="700" class="sub">즉시 복구 가능</text>
+<rect x="1543" y="604" width="285" height="100" rx="8" class="st-rg" />
+<text x="1555" y="624" class="lbl">6 · Cleanup</text>
+<text x="1555" y="646" class="sub">15분 경과 → deactivate Job 발행</text>
+<text x="1555" y="664" class="sub">ECS 서비스 scale-to-0</text>
+<text x="1555" y="682" class="sub">or Agent Compose down</text>
+<text x="1555" y="700" class="sub">active_deployment_id 메타 갱신</text>
+<text x="48" y="760" class="cpt">대안 비교 · 3안</text>
+<text x="300" y="760" class="lbl">Front Proxy / Worker+KV / DNS CNAME</text>
+<rect x="48" y="776" width="588" height="276" rx="14" class="card" />
+<text x="68" y="810" class="ttl-s">Front Proxy (ALB · API GW)</text>
+<rect x="258.16" y="794" width="27" height="20" rx="10" class="p2b"/>
+<text x="272" y="808.5" class="newt" text-anchor="middle">P2</text>
+<text x="68" y="840" class="lbl">메커니즘</text>
+<text x="68" y="860" class="sub">플랫폼 트래픽 경로에 Proxy 배치</text>
+<text x="68" y="878" class="sub">Proxy 가 active origin 결정</text>
+<text x="68" y="908" class="lbl">장점</text>
+<text x="68" y="928" class="sub">명확한 제어점 · 복잡한 라우팅 가능</text>
+<text x="68" y="946" class="sub">트래픽 미러 · 카나리 세팅 쉬움</text>
+<text x="68" y="976" class="lbl" style="fill:var(--fail)">단점</text>
+<text x="68" y="996" class="sub">SPOF · 운영 서버 + 가용성 비용</text>
+<text x="68" y="1014" class="sub">플랫폼이 사용자 트래픽 경로에 들어감</text>
+<text x="68" y="1032" class="sub">bandwidth 요금 (사용자 트래픽 전부)</text>
+<rect x="656" y="776" width="588" height="276" rx="14" class="card" />
+<text x="676" y="810" class="ttl-s">CF Worker + KV</text>
+<rect x="794.16" y="794" width="27" height="20" rx="10" class="p2b"/>
+<text x="808" y="808.5" class="newt" text-anchor="middle">P2</text>
+<text x="676" y="840" class="lbl">메커니즘</text>
+<text x="676" y="860" class="sub">Edge Worker 에서 KV 조회 · origin 플립</text>
+<text x="676" y="878" class="sub">KV active_origin 값 플랫폼이 갱신</text>
+<text x="676" y="908" class="lbl">장점</text>
+<text x="676" y="928" class="sub">운영 서버 안 늘어남 · Edge 처리</text>
+<text x="676" y="946" class="sub">세밀한 라우팅 로직 가능 (헤더 · 경로)</text>
+<text x="676" y="976" class="lbl" style="fill:var(--fail)">단점</text>
+<text x="676" y="996" class="sub">KV eventually consistent (수 초 지연)</text>
+<text x="676" y="1014" class="sub">전환 중 상태 노출 · Worker 비용</text>
+<text x="676" y="1032" class="sub">코드 (Worker JS) 유지 보수 필요</text>
+<rect x="1264" y="776" width="588" height="276" rx="14" class="card" style="stroke:var(--new);stroke-width:2.4"/>
+<rect x="1284" y="794" width="46" height="22" rx="6" class="newb" />
+<text x="1307" y="810.5" class="bdt" text-anchor="middle">채택</text>
+<text x="1338" y="810" class="ttl-s">DNS CNAME 전환 (v5.5 설계)</text>
+<rect x="1812" y="794" width="27" height="20" rx="10" class="p1b"/>
+<text x="1826" y="808.5" class="newt" text-anchor="middle">P1</text>
+<text x="1284" y="840" class="lbl">메커니즘</text>
+<text x="1284" y="860" class="sub">DNS Zone CNAME target 1 API call 로 변경</text>
+<text x="1284" y="878" class="sub">PATCH /zones/{zoneId}/dns_records/{id}</text>
+<text x="1284" y="908" class="lbl" style="fill:var(--new)">장점</text>
+<text x="1284" y="928" class="sub">CF 책임 범위 넓음 · 무료 (DNS Edit)</text>
+<text x="1284" y="946" class="sub">1 API call · TTL=1s 즉시 수렴</text>
+<text x="1284" y="964" class="sub">깔끔한 설명 · 플랫폼 트래픽 경로 밖</text>
+<text x="1284" y="994" class="lbl">트레이드오프</text>
+<text x="1284" y="1014" class="sub">CF Zone 소유 전제 · TTL=1 쿼리 ↑</text>
+<text x="1284" y="1032" class="sub">세밀한 라우팅은 못 함 (origin 단위)</text>
+<text x="48" y="1092" class="cpt">롤백 시나리오</text>
+<text x="260" y="1092" class="lbl">15분 유예 창 안 · CNAME 되돌리기 1 API call</text>
+<rect x="48" y="1110" width="1788" height="252" rx="14" class="card" />
+<rect x="68" y="1138" width="500" height="196" rx="12" class="env env-on" />
+<rect x="88" y="1156" width="68" height="26" rx="7" class="bd-on" />
+<text x="122" y="1174.5" class="bdt" text-anchor="middle">ACTIVE</text>
+<text x="168" y="1176" class="ttl-s">전환 완료 상태</text>
+<text x="88" y="1206" class="sub">Active = 온프레미스 · service-5</text>
+<text x="88" y="1230" class="sub">AWS ECS task 유지 (STANDBY)</text>
+<text x="88" y="1254" class="sub">15분 유예 창 안 (예: 7분 경과)</text>
+<text x="88" y="1278" class="sub">CNAME → onprem-tunnel 유지 중</text>
+<text x="88" y="1310" class="sub">deployments.active_deployment_id = 온프레미스</text>
+<rect x="590" y="1138" width="300" height="196" rx="12" class="gatec" />
+<path d="M620 1158 L636 1174 L620 1190 L604 1174 Z" style="fill:var(--gate)"/>
+<text x="620" y="1179" class="stn" text-anchor="middle">!</text>
+<text x="648" y="1180" class="gatet">롤백 트리거</text>
+<text x="610" y="1210" class="subd">사용자 승인 (수동 롤백)</text>
+<text x="610" y="1234" class="subd">or 자동 장애 감지</text>
+<text x="610" y="1258" class="sub">/health 실패 N회 → auto rollback</text>
+<text x="610" y="1280" class="sub">worker: POST /deployments/N/rollback</text>
+<text x="610" y="1304" class="sub">CF API 1 call · 즉시 수렴</text>
+<path d="M568 1236 L590 1236" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M890 1236 L912 1236" class="e-prov" marker-end="url(#m-e-prov)"/>
+<rect x="912" y="1138" width="500" height="196" rx="12" class="env env-aws" />
+<rect x="932" y="1156" width="68" height="26" rx="7" class="bd-aws" />
+<text x="966" y="1174.5" class="bdt" text-anchor="middle">ACTIVE</text>
+<text x="1012" y="1176" class="ttl-s">Active = AWS 복귀</text>
+<text x="932" y="1206" class="sub">CNAME → aws-alb 로 되돌림</text>
+<text x="932" y="1230" class="sub">AWS ECS task 그대로 트래픽 수신</text>
+<text x="932" y="1254" class="sub">cleanup 아직 안 됨 → 재배포 불필요</text>
+<text x="932" y="1278" class="sub">온프레미스는 STANDBY 로 전환</text>
+<text x="932" y="1310" class="sub">deployments.active_deployment_id = AWS</text>
+<rect x="1432" y="1138" width="384" height="196" rx="12" class="failc" />
+<text x="1452" y="1170" class="failt">15분 창 지난 뒤 롤백</text>
+<text x="1452" y="1200" class="subd">cleanup 완료 (ECS task 이미 정리)</text>
+<text x="1452" y="1224" class="sub">heartbeat 없음 · origin 비어 있음</text>
+<text x="1452" y="1248" class="sub">→ 재배포 필요 (처음부터)</text>
+<text x="1452" y="1272" class="sub">새 deployment row 생성 · Build/Deploy</text>
+<text x="1452" y="1296" class="sub">예상 소요: 2~3분 (artifact 재사용)</text>
+<text x="1452" y="1320" class="sub">15분 창 안 롤백은 수 초, 창 밖은 수 분</text>
+<text x="48" y="1402" class="cpt">실패 경로</text>
+<text x="195" y="1402" class="lbl">전환 중 어느 단계든</text>
+<rect x="48" y="1420" width="1788" height="200" rx="14" class="failc" />
+<rect x="68" y="1446" width="564" height="156" rx="12" class="card" />
+<text x="88" y="1478" class="failt">반대 환경 검증 실패</text>
+<text x="88" y="1502" class="subd">단계 2 · /health 미달 (200 x3 실패)</text>
+<text x="88" y="1526" class="sub">CNAME 변경 안 함 · 트래픽 영향 0</text>
+<text x="88" y="1548" class="sub">env_lock 해제 · deployment status=failed</text>
+<text x="88" y="1570" class="sub">AI 진단 로그 꼬리 · 재시도 유도</text>
+<text x="88" y="1592" class="sub">이전 환경 (AWS) 그대로 Active</text>
+<rect x="648" y="1446" width="564" height="156" rx="12" class="card" />
+<text x="668" y="1478" class="failt">CF API 호출 실패</text>
+<text x="668" y="1502" class="subd">단계 3 · PATCH /dns_records 5xx · 네트워크</text>
+<text x="668" y="1526" class="sub">retry 지수 백오프 (max 3회)</text>
+<text x="668" y="1548" class="sub">지속 실패 → lock 해제 · 수동 전환 유도</text>
+<text x="668" y="1570" class="sub">사용자에게 CF 콘솔 수동 경로 안내</text>
+<text x="668" y="1592" class="sub">반대 환경 origin 은 이미 up 상태 유지</text>
+<rect x="1228" y="1446" width="588" height="156" rx="12" class="card" />
+<text x="1248" y="1478" class="failt">15분 유예 중 재배포 트리거</text>
+<text x="1248" y="1502" class="subd">단계 5 · 유예 창 안 새 배포 요청</text>
+<text x="1248" y="1526" class="sub">유예 즉시 종료 · 구 origin cleanup 선행</text>
+<text x="1248" y="1548" class="sub">신규 플로우 (단계 1~6) 재시작</text>
+<text x="1248" y="1570" class="sub">env_lock 재획득 · active 환경 기준</text>
+<text x="1248" y="1592" class="sub">롤백 창은 새 배포 완료 후 다시 15분</text>
+<text x="48" y="1660" class="cpt">SSL/TLS 모드 (CF edge)</text>
+<text x="400" y="1660" class="lbl">Flexible 선택 근거</text>
+<rect x="48" y="1678" width="1788" height="202" rx="14" class="card" />
+<rect x="68" y="1702" width="564" height="160" rx="12" class="st-rg" style="stroke-width:2.2;stroke:var(--new)"/>
+<rect x="88" y="1720" width="46" height="22" rx="6" class="newb" />
+<text x="111" y="1736.5" class="bdt" text-anchor="middle">채택</text>
+<text x="142" y="1736" class="ttl-s">Flexible</text>
+<text x="88" y="1762" class="lbl">동작</text>
+<text x="88" y="1782" class="sub">CF edge TLS · origin HTTP</text>
+<text x="88" y="1806" class="lbl" style="fill:var(--new)">결과</text>
+<text x="88" y="1826" class="sub">기존 ALB 설계 일치 · 추가 작업 없음</text>
+<text x="88" y="1844" class="sub">인증서 · 리스너 변경 없음</text>
+<rect x="648" y="1702" width="564" height="160" rx="12" class="card" />
+<text x="668" y="1736" class="ttl-s">Full</text>
+<text x="668" y="1762" class="lbl">동작</text>
+<text x="668" y="1782" class="sub">CF ↔ origin HTTPS · 인증서 검증 없음</text>
+<text x="668" y="1806" class="lbl" style="fill:var(--fail)">결과</text>
+<text x="668" y="1826" class="sub">ALB 443 리스너 + 인증서 추가 필요</text>
+<text x="668" y="1844" class="sub">현 단계 과잉 · 운영 복잡도 ↑</text>
+<rect x="1228" y="1702" width="588" height="160" rx="12" class="card" />
+<text x="1248" y="1736" class="ttl-s">Full (Strict)</text>
+<text x="1248" y="1762" class="lbl">동작</text>
+<text x="1248" y="1782" class="sub">CF ↔ origin HTTPS · 인증서 체인 검증</text>
+<text x="1248" y="1806" class="lbl" style="fill:var(--fail)">결과</text>
+<text x="1248" y="1826" class="sub">ACM · Let's Encrypt 통합 필요</text>
+<text x="1248" y="1844" class="sub">이 단계 과잉 · 데모 범위 벗어남</text>
+<rect x="48" y="1890" width="1788" height="54" rx="10" class="st-pg" />
+<text x="68" y="1912" class="lbl">근거</text>
+<text x="118" y="1912" class="subd">infra/terraform/profiles/aws-ecs-basic/variables.tf:100-104</text>
+<text x="118" y="1932" class="sub">주석: "Public TLS is terminated at the Cloudflare platform edge; this ALB origin remains HTTP."</text>
+<text x="48" y="1980" class="cpt">상태 머신 전환 흐름</text>
+<text x="340" y="1980" class="lbl">환경 전환 = 신규 deployment row · 16 상태 그대로 돈다 (Analyze/Build 생략)</text>
+<rect x="48" y="1998" width="1788" height="92" rx="12" class="strip" />
+<rect x="68" y="2018" width="100" height="26" rx="12" class="st-ob" />
+<text x="80" y="2036" class="mono">received</text>
+<path d="M172 2031 L190 2031" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="194" y="2018" width="186" height="26" rx="12" class="st-ob" style="opacity:0.5"/>
+<text x="206" y="2036" class="mono">analyzing (skip)</text>
+<path d="M384 2031 L402 2031" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="406" y="2018" width="100" height="26" rx="12" class="st-ob" />
+<text x="418" y="2036" class="mono">queued</text>
+<path d="M510 2031 L528 2031" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="532" y="2018" width="140" height="26" rx="12" class="st-ob" />
+<text x="544" y="2036" class="mono">provisioning</text>
+<path d="M676 2031 L694 2031" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="698" y="2018" width="120" height="26" rx="12" class="st-ob" />
+<text x="710" y="2036" class="mono">deploying</text>
+<path d="M822 2031 L840 2031" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="844" y="2018" width="120" height="26" rx="12" class="st-ob" />
+<text x="856" y="2036" class="mono">verifying</text>
+<path d="M968 2031 L986 2031" class="e-api" marker-end="url(#m-e-api)"/>
+<rect x="990" y="2018" width="130" height="26" rx="12" class="st-rg" />
+<text x="1002" y="2036" class="mono">succeeded</text>
+<path d="M1124 2031 L1142 2031" class="e-prov" marker-end="url(#m-e-prov)"/>
+<rect x="1146" y="2010" width="298" height="42" rx="12" class="gatec" />
+<text x="1156" y="2028" class="gatet">↓ 이 시점 CNAME 변경</text>
+<text x="1156" y="2045" class="mono" style="fill:var(--text)">CF API PATCH · TTL=1 · proxied=true</text>
+<path d="M1448 2031 L1466 2031" class="e-prov" marker-end="url(#m-e-prov)"/>
+<rect x="1470" y="2018" width="180" height="26" rx="12" class="st-rg" style="stroke:var(--new);stroke-width:1.6"/>
+<text x="1482" y="2036" class="mono" style="fill:var(--new);font-weight:700">전환 완료</text>
+<rect x="1670" y="2018" width="146" height="26" rx="12" class="st-ob" style="opacity:0.5"/>
+<text x="1682" y="2036" class="mono">+ 15분 유예</text>
+<text x="68" y="2074" class="sub">artifact (image digest) 재사용 → analyzing 은 캐시 참조만, building 은 생략 · state_machine.ts:21-38 그대로</text>
+<rect x="48" y="2110" width="1788" height="128" rx="14" class="strip" />
+<text x="68" y="2142" class="cpt">설계 원칙</text>
+<text x="68" y="2168" class="sub">v5.5 · 환경 전환 핵심 가치 (D-57 CF 토큰 scope · D-61 롤아웃 참조)</text>
+<text x="440" y="2144" class="stt">트래픽 경로 밖</text>
+<text x="440" y="2168" class="sub">플랫폼은 트래픽 경로에 없음</text>
+<text x="440" y="2188" class="sub">CF Edge 가 사용자 리소스로 직결</text>
+<text x="440" y="2208" class="sub">bandwidth · SPOF 없음</text>
+<text x="800" y="2144" class="stt">즉시 수렴</text>
+<text x="800" y="2168" class="sub">1 API call · TTL=1s</text>
+<text x="800" y="2188" class="sub">실질 즉시 전환 (수 초)</text>
+<text x="800" y="2208" class="sub">60s 아님</text>
+<text x="1120" y="2144" class="stt">롤백 1 call</text>
+<text x="1120" y="2168" class="sub">15분 유예 창</text>
+<text x="1120" y="2188" class="sub">CNAME 되돌리기 1 API call</text>
+<text x="1120" y="2208" class="sub">즉시 복구 · 재배포 없음</text>
+<text x="1440" y="2144" class="stt">코드 재배포 아님</text>
+<text x="1440" y="2168" class="sub">같은 digest 유지</text>
+<text x="1440" y="2188" class="sub">build_artifact_id 재사용</text>
+<text x="1440" y="2208" class="sub">Analyze · Build 생략</text>
+</svg>

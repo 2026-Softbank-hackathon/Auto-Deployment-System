@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="UTF-8"?><svg width="2000" height="2401" viewBox="0 0 2000 2401" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif"><style>
+:root{--bg:#F6F8FA;--card:#FFFFFF;--line:#D5DBE3;--text:#1C2430;--muted:#5E6B7A;--edge:#7C8896;
+--cp-fill:#EFF6F2;--cp-line:#7DB596;--cp-text:#2F7A55;--pool:#9AA7B5;
+--ag-fill:#F3F0FD;--ag-line:#A99BE6;--async:#7B61D9;--prov:#D9731A;--user:#2F6FD1;
+--pg-f:#EEF3FB;--pg-l:#BCCDEA;--rd-f:#FCEFEE;--rd-l:#EBC0BB;--ob-f:#F2F4F6;--ob-l:#D2D8DF;--vt-f:#FBF4E6;--vt-l:#E4CC9C;--ai-f:#F3F0FD;--ai-l:#CFC5F1;--rg-f:#EEF6F1;--rg-l:#BCDAC8;
+--on:#5B6B7F;--obs:#1F9E89;--obs-f:#EAF6F4;--obs-l:#9FD3C8;--aws:#E07A1F;--gcp:#3B7BE0;--az:#1E8FD6;--strip:#FFFFFF;
+--gate:#C98A12;--gate-f:#FFF6E0;--gate-l:#E9C46A;--fail:#C0453A;--new:#2F7A55;--code-f:#1F2630;--code-t:#DCE3EA;--code-k:#8FC7A8}
+.bg{fill:var(--bg)}
+.card{fill:var(--card);stroke:var(--line);stroke-width:1}
+.agent{fill:var(--ag-fill);stroke:var(--ag-line);stroke-width:1.5}
+.st-pg{fill:var(--pg-f);stroke:var(--pg-l)}.st-rd{fill:var(--rd-f);stroke:var(--rd-l)}.st-ob{fill:var(--ob-f);stroke:var(--ob-l)}
+.st-vt{fill:var(--vt-f);stroke:var(--vt-l)}.st-ai{fill:var(--ai-f);stroke:var(--ai-l)}.st-rg{fill:var(--rg-f);stroke:var(--rg-l)}
+.cp{fill:var(--cp-fill);stroke:var(--cp-line);stroke-width:1.5;stroke-dasharray:7 6}
+.pool{fill:none;stroke:var(--pool);stroke-width:1.2;stroke-dasharray:5 5}
+.bd-on{fill:var(--on)}.bd-aws{fill:var(--aws)}.bd-gcp{fill:var(--gcp)}.bd-az{fill:var(--az)}
+.strip{fill:var(--strip);stroke:var(--line)}
+.gatec{fill:var(--gate-f);stroke:var(--gate-l);stroke-width:1.5}
+.failc{fill:var(--rd-f);stroke:var(--rd-l);stroke-width:1.2}
+.codec{fill:var(--code-f);stroke:none}
+.p0b{fill:var(--new)}.p1b{fill:var(--gate)}.p2b{fill:#8A95A3}
+.optc{fill:var(--card);stroke:var(--pool);stroke-width:1.3;stroke-dasharray:6 4}
+.h1{font-size:34px;font-weight:700;fill:var(--text)}
+.h2{font-size:17px;fill:var(--muted)}
+.ttl{font-size:19px;font-weight:700;fill:var(--text)}
+.ttl-s{font-size:16px;font-weight:700;fill:var(--text)}
+.sub{font-size:14.5px;fill:var(--muted)}
+.subd{font-size:14.5px;fill:var(--text)}
+.tag{font-size:13px;fill:var(--muted);font-weight:700}
+.stt{font-size:17px;font-weight:700;fill:var(--cp-text)}
+.lbl{font-size:13.5px;fill:var(--muted);font-weight:700}
+.leg{font-size:14.5px;fill:var(--muted)}
+.bdt{font-size:12.5px;font-weight:700;fill:#fff}
+.newt{font-size:11px;font-weight:700;fill:#fff;letter-spacing:.04em}
+.gatet{font-size:16px;font-weight:700;fill:var(--gate)}
+.failt{font-size:15px;font-weight:700;fill:var(--fail)}
+.code{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-t)}
+.codek{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13.5px;fill:var(--code-k)}
+.mono{font-family:"IBM Plex Mono","DejaVu Sans Mono",monospace;font-size:13px;fill:var(--muted)}
+.stn{font-size:15px;font-weight:700;fill:#fff}
+.e-api{stroke:var(--edge);stroke-width:1.5;fill:none}
+.e-async{stroke:var(--async);stroke-width:1.6;stroke-dasharray:6 4;fill:none}
+.e-prov{stroke:var(--prov);stroke-width:2;fill:none}
+.e-fail{stroke:var(--fail);stroke-width:1.8;stroke-dasharray:7 5;fill:none}
+.mk-e-api{fill:var(--edge)}.mk-e-async{fill:var(--async)}.mk-e-prov{fill:var(--prov)}.mk-e-fail{fill:var(--fail)}
+</style>
+<defs><marker id="m-e-api" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-api"/></marker><marker id="m-e-async" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-async"/></marker><marker id="m-e-prov" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-prov"/></marker><marker id="m-e-fail" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" class="mk-e-fail"/></marker></defs>
+<rect width="2000" height="2401" class="bg"/>
+<rect x="48" y="256" width="348" height="1364" rx="16" class="pool"/>
+<rect x="436" y="256" width="348" height="1364" rx="16" class="pool"/>
+<rect x="824" y="256" width="348" height="1364" rx="16" class="pool"/>
+<rect x="1212" y="256" width="348" height="1364" rx="16" class="pool"/>
+<rect x="1600" y="256" width="348" height="1364" rx="16" class="pool"/>
+<text x="48" y="70" class="h1">AWS 배포 파이프라인 상세</text>
+<text x="48" y="106" class="h2">같은 digest → 프로필 분기 (ECS · Lambda · S3 Static) → 워커 롤아웃 체크 → 공개 URL · 검증  |  v5.5</text>
+<line x1="1020" y1="50" x2="1070" y2="50" class="e-api"/>
+<text x="1086" y="55" class="leg">단계 내 흐름 · 산출물 전달</text>
+<line x1="1020" y1="84" x2="1070" y2="84" class="e-async"/>
+<text x="1086" y="89" class="leg">작업 큐 (Postgres SKIP LOCKED)</text>
+<path d="M1045 107 L1056 118 L1045 129 L1034 118 Z" class="gatec"/>
+<text x="1086" y="123" class="leg">사람 승인 게이트 (웹 · CLI)</text>
+<line x1="1350" y1="50" x2="1400" y2="50" class="e-prov"/>
+<text x="1416" y="55" class="leg">인프라 반영 (Terraform · AWS SDK)</text>
+<line x1="1350" y1="84" x2="1400" y2="84" class="e-fail"/>
+<text x="1416" y="89" class="leg">실패 → 서킷 브레이커 · 재시도</text>
+<rect x="1350" y="108" width="27" height="20" rx="10" class="p0b"/>
+<text x="1364" y="122.5" class="newt" text-anchor="middle">P0</text>
+<text x="1416" y="123" class="leg">데모 핵심 흐름</text>
+<rect x="1680" y="40" width="27" height="20" rx="10" class="p1b"/>
+<text x="1694" y="54.5" class="newt" text-anchor="middle">P1</text>
+<text x="1746" y="55" class="leg">P0 안정화 후</text>
+<rect x="1680" y="74" width="27" height="20" rx="10" class="p2b"/>
+<text x="1694" y="88.5" class="newt" text-anchor="middle">P2</text>
+<text x="1746" y="89" class="leg">시간 남으면</text>
+<polygon points="48,150 418,150 436,186.0 418,222 48,222" class="cp" style="stroke-dasharray:none"/>
+<circle cx="78" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="78" y="191.5" class="stn" text-anchor="middle">1</text>
+<text x="108" y="182" class="ttl">State 백엔드 세팅</text>
+<text x="108" y="206" class="sub">S3 + use_lockfile · 스택 격리</text>
+<polygon points="436,150 806,150 824,186.0 806,222 436,222 454,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="476" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="476" y="191.5" class="stn" text-anchor="middle">2</text>
+<text x="506" y="182" class="ttl">Terraform plan · apply</text>
+<text x="506" y="206" class="sub">프로필 선택 · 변수 바인딩 · 승인</text>
+<polygon points="824,150 1194,150 1212,186.0 1194,222 824,222 842,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="864" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="864" y="191.5" class="stn" text-anchor="middle">3</text>
+<text x="894" y="182" class="ttl">배포 유형 분기</text>
+<text x="894" y="206" class="sub">ECS · Lambda · S3 Static</text>
+<polygon points="1212,150 1582,150 1600,186.0 1582,222 1212,222 1230,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="1252" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="1252" y="191.5" class="stn" text-anchor="middle">4</text>
+<text x="1282" y="182" class="ttl">롤아웃 대기 (워커 직접)</text>
+<text x="1282" y="206" class="sub">ECS DescribeServices 폴링</text>
+<polygon points="1600,150 1948,150 1948,186.0 1948,222 1600,222 1618,186.0" class="cp" style="stroke-dasharray:none"/>
+<circle cx="1640" cy="186.0" r="17" style="fill:var(--cp-text)"/>
+<text x="1640" y="191.5" class="stn" text-anchor="middle">5</text>
+<text x="1670" y="182" class="ttl">공개 URL · 검증</text>
+<text x="1670" y="206" class="sub">DNS · SSL · /health x3</text>
+
+<!-- Column 1: State backend (x=48~396) -->
+<rect x="62" y="276" width="320" height="150" rx="12" class="card" />
+<text x="84" y="310" class="ttl-s">S3 Backend</text>
+<rect x="222.72" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="236" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="308" class="tag" text-anchor="end">PRV</text>
+<text x="84" y="340" class="mono">camellia-tfstate-725072160743</text>
+<text x="84" y="365" class="sub">region ap-northeast-2</text>
+<text x="84" y="388" class="sub">key: projects/&#123;projectId&#125;/</text>
+<text x="84" y="408" class="sub">   environments/&#123;envId&#125;/terraform.tfstate</text>
+<rect x="62" y="446" width="320" height="138" rx="12" class="card" />
+<text x="84" y="480" class="ttl-s">use_lockfile = true</text>
+<rect x="241.6" y="464" width="27" height="20" rx="10" class="p0b"/>
+<text x="255" y="478.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="478" class="tag" text-anchor="end">PRV</text>
+<text x="84" y="510" class="sub">DynamoDB 아님 — S3 네이티브 락</text>
+<text x="84" y="535" class="sub">Terraform 1.10+ 지원</text>
+<text x="84" y="560" class="sub">SSE-KMS 암호화 · 버전 관리</text>
+<rect x="62" y="604" width="320" height="138" rx="12" class="card" />
+<text x="84" y="638" class="ttl-s">State 분리</text>
+<rect x="169.44" y="622" width="27" height="20" rx="10" class="p0b"/>
+<text x="183" y="636.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="636" class="tag" text-anchor="end">PRV</text>
+<text x="84" y="668" class="sub">프로젝트 × 환경 단위 state</text>
+<text x="84" y="693" class="sub">스택별 격리 → destroy 영향 없음</text>
+<text x="84" y="718" class="sub">같은 state key: 컴퓨트 전환 (D-63)</text>
+<rect x="62" y="762" width="320" height="222" rx="12" class="codec" />
+<text x="82" y="794" style="fill:var(--code-t);font-size:16px;font-weight:700">backend &quot;s3&quot; 설정</text>
+<text x="82" y="824" xml:space="preserve"><tspan class="codek">terraform {</tspan></text>
+<text x="82" y="845" xml:space="preserve"><tspan class="codek">  backend </tspan><tspan class="code">&quot;s3&quot; </tspan><tspan class="codek">{}</tspan></text>
+<text x="82" y="866" xml:space="preserve"><tspan class="codek">}</tspan></text>
+<text x="82" y="892" xml:space="preserve"><tspan class="code"># -backend-config 로 주입</tspan></text>
+<text x="82" y="913" xml:space="preserve"><tspan class="code">bucket=camellia-tfstate-...</tspan></text>
+<text x="82" y="934" xml:space="preserve"><tspan class="code">key=projects/42/env/prod/...</tspan></text>
+<text x="82" y="955" xml:space="preserve"><tspan class="code">use_lockfile=true</tspan></text>
+<text x="82" y="976" xml:space="preserve"><tspan class="code">encrypt=true</tspan></text>
+<rect x="62" y="1004" width="320" height="138" rx="12" class="card" />
+<text x="84" y="1038" class="ttl-s">init -backend-config</text>
+<rect x="252.32" y="1022" width="27" height="20" rx="10" class="p0b"/>
+<text x="266" y="1036.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="1036" class="tag" text-anchor="end">PRV</text>
+<text x="84" y="1068" class="sub">provider lock 재사용 (D-60)</text>
+<text x="84" y="1093" class="sub">plugin 캐시 이미지에 포함</text>
+<text x="84" y="1118" class="sub">네트워크 다운로드 생략 → 빠른 init</text>
+<rect x="62" y="1162" width="320" height="138" rx="12" class="card" />
+<text x="84" y="1196" class="ttl-s">작업 폴더 재사용 (D-62)</text>
+<rect x="258.4" y="1180" width="27" height="20" rx="10" class="p1b"/>
+<text x="272" y="1194.5" class="newt" text-anchor="middle">P1</text>
+<text x="362" y="1194" class="tag" text-anchor="end">PRV</text>
+<text x="84" y="1226" class="sub">/data/terraform-work · state key별</text>
+<text x="84" y="1251" class="sub">.terraform 보존 · validate 생략</text>
+<text x="84" y="1276" class="sub">init · validate · plan · apply 로그 기록</text>
+<rect x="62" y="1320" width="320" height="138" rx="12" class="card" />
+<text x="84" y="1354" class="ttl-s">상태 전환</text>
+<rect x="150.08" y="1338" width="27" height="20" rx="10" class="p0b"/>
+<text x="164" y="1352.5" class="newt" text-anchor="middle">P0</text>
+<text x="362" y="1352" class="tag" text-anchor="end">DEP</text>
+<text x="84" y="1384" class="sub">deployments: queued → planning</text>
+<text x="84" y="1409" class="sub">env_lock 획득 (환경 단위)</text>
+<text x="84" y="1434" class="sub">infra_plans row 생성 (지문 포함)</text>
+
+<!-- Column 2: Terraform plan / apply (x=436~784) -->
+<rect x="450" y="276" width="320" height="158" rx="12" class="card" />
+<text x="472" y="310" class="ttl-s">프로필 선택 (resolveProfile)</text>
+<rect x="653.84" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="667" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="308" class="tag" text-anchor="end">PRV</text>
+<text x="472" y="340" class="sub">분석 전: 연결 종류로 기본</text>
+<text x="472" y="365" class="sub">   → aws-ecs-basic</text>
+<text x="472" y="390" class="sub">분석 후: IR 재검사 (D-65)</text>
+<text x="472" y="415" class="sub">   정적 → static · 서버리스 → lambda</text>
+<rect x="450" y="454" width="320" height="158" rx="12" class="card" />
+<text x="472" y="488" class="ttl-s">모듈 변수 바인딩</text>
+<rect x="620.72" y="472" width="27" height="20" rx="10" class="p0b"/>
+<text x="634" y="486.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="486" class="tag" text-anchor="end">PRV</text>
+<text x="472" y="518" class="sub">IR 값 → tfvars</text>
+<text x="472" y="543" class="mono">image_tag · port · health_path</text>
+<text x="472" y="568" class="mono">env · size · public_ingress</text>
+<text x="472" y="593" class="sub">AWS access key ID → 지문에 포함</text>
+<rect x="450" y="632" width="320" height="188" rx="12" class="codec" />
+<text x="470" y="664" style="fill:var(--code-t);font-size:16px;font-weight:700">terraform plan</text>
+<text x="470" y="694" xml:space="preserve"><tspan class="code">$ terraform init \</tspan></text>
+<text x="470" y="715" xml:space="preserve"><tspan class="code">    -backend-config=&quot;...&quot;</tspan></text>
+<text x="470" y="736" xml:space="preserve"><tspan class="code">$ terraform plan \</tspan></text>
+<text x="470" y="757" xml:space="preserve"><tspan class="code">    -var-file=tf.auto.tfvars \</tspan></text>
+<text x="470" y="778" xml:space="preserve"><tspan class="code">    -out=plan.bin</tspan></text>
+<text x="470" y="799" xml:space="preserve"><tspan class="codek"># Plan: 9 add · 0 change · 0 destroy</tspan></text>
+<rect x="450" y="840" width="320" height="114" rx="12" class="gatec" />
+<path d="M478 856 L492 870 L478 884 L464 870 Z" style="fill:var(--gate)"/>
+<text x="478" y="875" class="stn" text-anchor="middle">3</text>
+<text x="504" y="876" class="gatet">승인 게이트 3 · plan</text>
+<text x="472" y="906" class="subd">plan preview → 사람 승인 → apply</text>
+<text x="472" y="931" class="subd">P0 데모: 자동 승인 · P1: 사람 승인</text>
+<rect x="450" y="974" width="320" height="158" rx="12" class="card" />
+<text x="472" y="1008" class="ttl-s">apply 속도 최적화 (D-60)</text>
+<rect x="651.44" y="992" width="27" height="20" rx="10" class="p0b"/>
+<text x="665" y="1006.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="1006" class="tag" text-anchor="end">PRV</text>
+<text x="472" y="1038" class="sub">입력 지문 같음 + 직전 성공 →</text>
+<text x="472" y="1063" class="mono">plan -refresh=false</text>
+<text x="472" y="1088" class="sub">약 25개 리소스 재조회 생략</text>
+<text x="472" y="1113" class="sub">이미지만 바뀐 재배포: 60초 → 30초</text>
+<rect x="450" y="1152" width="320" height="158" rx="12" class="card" />
+<text x="472" y="1186" class="ttl-s">skip apply (D-66 · static)</text>
+<rect x="641.68" y="1170" width="27" height="20" rx="10" class="p0b"/>
+<text x="655" y="1184.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="1184" class="tag" text-anchor="end">PRV</text>
+<text x="472" y="1216" class="sub">정적 사이트 + 지문 같음 + 출력 있음</text>
+<text x="472" y="1241" class="sub">→ Terraform 아예 안 돌림</text>
+<text x="472" y="1266" class="mono">deployments.terraform_outputs</text>
+<text x="472" y="1291" class="sub">값으로 바로 S3 sync · 44초 → 30초대</text>
+<rect x="450" y="1330" width="320" height="138" rx="12" class="card" />
+<text x="472" y="1364" class="ttl-s">apply 결과 → 상태</text>
+<rect x="606.08" y="1348" width="27" height="20" rx="10" class="p0b"/>
+<text x="620" y="1362.5" class="newt" text-anchor="middle">P0</text>
+<text x="750" y="1362" class="tag" text-anchor="end">PRV</text>
+<text x="472" y="1394" class="sub">deployments: planning → provisioning</text>
+<text x="472" y="1419" class="sub">step_completed SSE</text>
+<text x="472" y="1444" class="sub">실패 시 lock 해제 · failed</text>
+
+<!-- Column 3: Deploy branch (ECS / Lambda / Static) (x=824~1172) -->
+<!-- ECS section y=276~728 -->
+<rect x="838" y="276" width="320" height="452" rx="12" class="card" />
+<rect x="860" y="294" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="884.25" y="312" class="bdt" text-anchor="middle">AWS</text>
+<text x="918" y="313" class="ttl-s">aws-ecs-basic</text>
+<rect x="1104.4" y="298" width="27" height="20" rx="10" class="p0b"/>
+<text x="1118" y="312.5" class="newt" text-anchor="middle">P0</text>
+<text x="860" y="346" class="sub">기본 분기 (범용 HTTP · Docker)</text>
+<text x="860" y="376" class="subd">VPC · 퍼블릭 / 프라이빗 서브넷</text>
+<text x="860" y="401" class="sub">두 AZ 분산 · 보안 그룹</text>
+<text x="860" y="431" class="subd">ALB → public_url</text>
+<text x="860" y="456" class="sub">80 리스너 (HTTP) · target group</text>
+<text x="860" y="486" class="subd">ECS Fargate · 롤링 배포</text>
+<text x="860" y="511" class="sub">deployment_circuit_breaker rollback</text>
+<text x="860" y="536" class="sub">desired_count · task definition</text>
+<text x="860" y="566" class="subd">Cloud Map (service discovery)</text>
+<text x="860" y="591" class="sub">내부 라우팅 · DNS 자동</text>
+<text x="860" y="621" class="subd">CloudWatch Logs</text>
+<text x="860" y="646" class="sub">컨테이너 stdout → awslogs 드라이버</text>
+<text x="860" y="676" class="mono">ecs.tf · ecs_service · task_definition</text>
+<text x="860" y="701" class="sub">기본 포트 · health_path = IR 값</text>
+<!-- Lambda section y=744~1148 -->
+<rect x="838" y="744" width="320" height="404" rx="12" class="card" />
+<rect x="860" y="762" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="884.25" y="780" class="bdt" text-anchor="middle">AWS</text>
+<text x="918" y="781" class="ttl-s">aws-lambda-basic</text>
+<rect x="1104.4" y="766" width="27" height="20" rx="10" class="p1b"/>
+<text x="1118" y="780.5" class="newt" text-anchor="middle">P1</text>
+<text x="860" y="814" class="sub">고급 설정 (비용 · 콜드 스타트 수용)</text>
+<text x="860" y="844" class="subd">같은 digest · Lambda Web Adapter</text>
+<text x="860" y="869" class="sub">v1.1.0 · digest 고정 · 모든 이미지 포함</text>
+<text x="860" y="899" class="mono">/opt/extensions/lambda-adapter</text>
+<text x="860" y="924" class="sub">마지막 레이어로 삽입 · +1.7MB</text>
+<text x="860" y="954" class="subd">Lambda 환경변수로 설정 전달</text>
+<text x="860" y="979" class="mono">AWS_LWA_PORT=3000</text>
+<text x="860" y="1004" class="mono">AWS_LWA_READINESS_CHECK_PATH</text>
+<text x="860" y="1034" class="subd">ALB (lambda target group) → public_url</text>
+<text x="860" y="1059" class="sub">같은 ALB · 같은 state key</text>
+<text x="860" y="1089" class="subd">D-63: 컴퓨트만 바뀐다</text>
+<text x="860" y="1114" class="sub">앱 저장 · 재배포 · 롤백 · 전환 따름</text>
+<text x="860" y="1139" class="sub">공개 HTTP 하나가 아닌 앱: ECS 로 복귀</text>
+<!-- Static section y=1164~1600 -->
+<rect x="838" y="1164" width="320" height="436" rx="12" class="card" />
+<rect x="860" y="1182" width="48.5" height="26" rx="6" class="bd-aws" />
+<text x="884.25" y="1200" class="bdt" text-anchor="middle">AWS</text>
+<text x="918" y="1201" class="ttl-s">aws-static-basic</text>
+<rect x="1104.4" y="1186" width="27" height="20" rx="10" class="p0b"/>
+<text x="1118" y="1200.5" class="newt" text-anchor="middle">P0</text>
+<text x="860" y="1234" class="sub">분석 자동 (IR 로 선택 · D-65)</text>
+<text x="860" y="1264" class="subd">버킷 이름 = 공개 호스트</text>
+<text x="860" y="1289" class="mono">service-&lt;proj&gt;.camellia-deploy.app</text>
+<text x="860" y="1319" class="subd">S3 웹사이트 호스팅</text>
+<text x="860" y="1344" class="sub">서버 없음 · ALB · VPC 없음</text>
+<text x="860" y="1374" class="subd">이미지에서 파일 꺼내 S3 sync</text>
+<text x="860" y="1399" class="sub">nginx 이미지 → /usr/share/nginx/html</text>
+<text x="860" y="1424" class="sub">같은 digest 원칙 유지</text>
+<text x="860" y="1454" class="subd">Cloudflare 프록시 CNAME 연결</text>
+<text x="860" y="1479" class="sub">버킷 정책: CF IP + 워커 IP 만 읽기</text>
+<text x="860" y="1509" class="subd">D-66: 입력 지문 같으면 skip</text>
+<text x="860" y="1534" class="sub">terraform_outputs 재사용 → 파일 동기화만</text>
+<text x="860" y="1559" class="sub">44초 → 30초대 (실측 배포 #85)</text>
+<text x="860" y="1584" class="sub">SPA fallback · index.html</text>
+
+<!-- Column 4: Rollout wait (x=1212~1560) -->
+<rect x="1226" y="276" width="320" height="158" rx="12" class="card" />
+<text x="1248" y="310" class="ttl-s">wait_for_steady_state = false</text>
+<rect x="1479.44" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1493" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="308" class="tag" text-anchor="end">PRV</text>
+<text x="1248" y="340" class="mono">infra/.../aws-ecs-basic/ecs.tf:154</text>
+<text x="1248" y="365" class="sub">Terraform 은 서비스 갱신만 하고</text>
+<text x="1248" y="390" class="sub">즉시 반환 → 워커가 롤아웃 체크</text>
+<text x="1248" y="415" class="sub">기본 대기 20초 절약 (D-61)</text>
+<rect x="1226" y="454" width="320" height="222" rx="12" class="card" />
+<text x="1248" y="488" class="ttl-s">워커 직접 롤아웃 체크 (D-61)</text>
+<rect x="1507.76" y="472" width="27" height="20" rx="10" class="p0b"/>
+<text x="1521" y="486.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="486" class="tag" text-anchor="end">VRF</text>
+<text x="1248" y="518" class="mono">apps/worker/src/ecs-rollout.ts</text>
+<text x="1248" y="543" class="sub">2초 간격 폴링</text>
+<text x="1248" y="568" class="mono">ECS DescribeServices</text>
+<text x="1248" y="593" class="sub">primary deployment == COMPLETED</text>
+<text x="1248" y="618" class="sub">새 태스크 == desired · 타깃 healthy</text>
+<text x="1248" y="648" class="subd">task definition ARN 까지 확인</text>
+<text x="1248" y="668" class="sub">버전 매칭 → 롤백 오판 방지</text>
+<rect x="1226" y="696" width="320" height="188" rx="12" class="card" />
+<text x="1248" y="730" class="ttl-s">헬스체크 튜닝 (D-61)</text>
+<rect x="1431.6" y="714" width="27" height="20" rx="10" class="p0b"/>
+<text x="1445" y="728.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="728" class="tag" text-anchor="end">PRV</text>
+<text x="1248" y="760" class="mono">interval=5 · timeout=4</text>
+<text x="1248" y="785" class="mono">healthy=2 · unhealthy=3</text>
+<text x="1248" y="810" class="mono">deregistration_delay=5</text>
+<text x="1248" y="835" class="mono">grace_period=10</text>
+<text x="1248" y="860" class="sub">약 25초 넘게 뜨는 앱은 교체 리스크</text>
+<rect x="1226" y="904" width="320" height="188" rx="12" class="card" />
+<text x="1248" y="938" class="ttl-s">타임아웃 · 서킷 브레이커</text>
+<rect x="1403.6" y="922" width="27" height="20" rx="10" class="p0b"/>
+<text x="1417" y="936.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="936" class="tag" text-anchor="end">PRV</text>
+<text x="1248" y="968" class="subd">ECS 서킷 브레이커</text>
+<text x="1248" y="993" class="sub">배포 FAILED → 이전 task def 자동 복원</text>
+<text x="1248" y="1018" class="subd">워커 타임아웃: 10 ~ 15분</text>
+<text x="1248" y="1043" class="sub">초과 시 verifying 로 진행 안 함</text>
+<text x="1248" y="1068" class="sub">중지 사유 · 종료 코드 · 이벤트 수집</text>
+<rect x="1226" y="1112" width="320" height="188" rx="12" class="card" />
+<text x="1248" y="1146" class="ttl-s">Lambda 분기</text>
+<rect x="1360.48" y="1130" width="27" height="20" rx="10" class="p1b"/>
+<text x="1374" y="1144.5" class="newt" text-anchor="middle">P1</text>
+<text x="1526" y="1144" class="tag" text-anchor="end">VRF</text>
+<text x="1248" y="1176" class="mono">apps/worker/src/lambda-rollout.ts</text>
+<text x="1248" y="1201" class="sub">함수 버전 publish → 활성화 즉시</text>
+<text x="1248" y="1226" class="sub">ALB target group 등록 확인</text>
+<text x="1248" y="1251" class="sub">콜드 스타트 1회 워밍 (헬스 체크)</text>
+<text x="1248" y="1276" class="sub">ECS 보다 롤아웃 짧음</text>
+<rect x="1226" y="1320" width="320" height="188" rx="12" class="card" />
+<text x="1248" y="1354" class="ttl-s">Static 분기</text>
+<rect x="1346.56" y="1338" width="27" height="20" rx="10" class="p0b"/>
+<text x="1360" y="1352.5" class="newt" text-anchor="middle">P0</text>
+<text x="1526" y="1352" class="tag" text-anchor="end">VRF</text>
+<text x="1248" y="1384" class="mono">apps/worker/src/static-site-publisher.ts</text>
+<text x="1248" y="1409" class="sub">이미지에서 파일 추출 → S3 sync</text>
+<text x="1248" y="1434" class="sub">sync 완료 == 롤아웃 완료</text>
+<text x="1248" y="1459" class="sub">버전 추적 없음 · delete + put</text>
+<text x="1248" y="1484" class="sub">단계 로그에 바이트 수 기록</text>
+
+<!-- Column 5: Public URL / verify (x=1600~1948) -->
+<rect x="1614" y="276" width="320" height="158" rx="12" class="card" />
+<text x="1636" y="310" class="ttl-s">CF 레코드 생성</text>
+<rect x="1800.0" y="294" width="27" height="20" rx="10" class="p0b"/>
+<text x="1814" y="308.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="308" class="tag" text-anchor="end">PRV</text>
+<text x="1636" y="340" class="mono">&lt;subdomain&gt;.camellia-deploy.app</text>
+<text x="1636" y="365" class="sub">type=CNAME · proxied=true</text>
+<text x="1636" y="390" class="sub">ttl=1 (Cloudflare 자동)</text>
+<text x="1636" y="415" class="sub">ALB · S3 · Tunnel origin 가리킴</text>
+<rect x="1614" y="454" width="320" height="158" rx="12" class="card" />
+<text x="1636" y="488" class="ttl-s">SSL / TLS Flexible</text>
+<rect x="1793.84" y="472" width="27" height="20" rx="10" class="p0b"/>
+<text x="1807" y="486.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="486" class="tag" text-anchor="end">VRF</text>
+<text x="1636" y="518" class="sub">CF edge: TLS 1.3 (사용자 ↔ CF)</text>
+<text x="1636" y="543" class="sub">origin: HTTP (CF ↔ ALB · S3)</text>
+<text x="1636" y="568" class="sub">ALB 80 리스너 (443 없음 · 비용)</text>
+<text x="1636" y="593" class="sub">버킷 정책 · 보안 그룹: CF IP 만</text>
+<rect x="1614" y="632" width="320" height="208" rx="12" class="card" />
+<text x="1636" y="666" class="ttl-s">최종 검증 (VRF)</text>
+<rect x="1762.56" y="650" width="27" height="20" rx="10" class="p0b"/>
+<text x="1776" y="664.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="664" class="tag" text-anchor="end">VRF</text>
+<text x="1636" y="696" class="mono">apps/worker/src/final-url-verifier.ts</text>
+<text x="1636" y="721" class="subd">DNS 활성화 확인</text>
+<text x="1636" y="746" class="sub">1.1.1.1 resolver · 전파 대기</text>
+<text x="1636" y="776" class="subd">/health → 200 연속 x3</text>
+<text x="1636" y="801" class="sub">같은 digest · 간격 1초</text>
+<text x="1636" y="826" class="sub">재시도 5초 간격 · 최대 8회</text>
+<rect x="1614" y="860" width="320" height="208" rx="12" class="st-rg" />
+<text x="1636" y="894" class="ttl-s">deployment status=succeeded</text>
+<rect x="1869.84" y="878" width="27" height="20" rx="10" class="p0b"/>
+<text x="1883" y="892.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="892" class="tag" text-anchor="end">DEP</text>
+<text x="1636" y="924" class="subd">env_lock 해제</text>
+<text x="1636" y="949" class="sub">같은 환경 다음 배포 가능</text>
+<text x="1636" y="974" class="subd">SSE state_changed 이벤트</text>
+<text x="1636" y="999" class="sub">웹 대시보드 즉시 반영</text>
+<text x="1636" y="1024" class="subd">public_url 반환</text>
+<text x="1636" y="1049" class="mono">https://&lt;subdomain&gt;.camellia-deploy.app</text>
+<rect x="1614" y="1088" width="320" height="158" rx="12" class="card" />
+<text x="1636" y="1122" class="ttl-s">기록 · 관측</text>
+<rect x="1726.72" y="1106" width="27" height="20" rx="10" class="p0b"/>
+<text x="1740" y="1120.5" class="newt" text-anchor="middle">P0</text>
+<text x="1914" y="1120" class="tag" text-anchor="end">OBS</text>
+<text x="1636" y="1152" class="mono">provisioned_resources · deployment_steps</text>
+<text x="1636" y="1177" class="mono">deployments.public_url</text>
+<text x="1636" y="1202" class="mono">terraform_outputs (D-66)</text>
+<text x="1636" y="1227" class="sub">단계별 소요 시간 기록 (D-60)</text>
+<rect x="1614" y="1266" width="320" height="158" rx="12" class="optc" />
+<text x="1636" y="1300" class="ttl-s">환경 전환 · 롤백</text>
+<rect x="1725.44" y="1284" width="27" height="20" rx="10" class="p1b"/>
+<text x="1739" y="1298.5" class="newt" text-anchor="middle">P1</text>
+<text x="1914" y="1298" class="tag" text-anchor="end">SW</text>
+<text x="1636" y="1330" class="sub">실패 시 이전 digest 로 재배포</text>
+<text x="1636" y="1355" class="sub">같은 state key · 같은 ALB</text>
+<text x="1636" y="1380" class="sub">P2: AWS ↔ 온프레미스 자동 전환</text>
+<text x="1636" y="1405" class="sub">고정 공개 주소 유지</text>
+
+<!-- vertical flow arrows per column -->
+<path d="M222 428 L222 442" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 586 L222 600" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 744 L222 758" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 986 L222 1000" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 1144 L222 1158" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M222 1302 L222 1316" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 436 L610 450" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 614 L610 628" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 822 L610 836" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 956 L610 970" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 1134 L610 1148" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M610 1312 L610 1326" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M998 730 L998 744" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M998 1150 L998 1164" class="e-prov" marker-end="url(#m-e-prov)"/>
+<path d="M1386 436 L1386 450" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 678 L1386 692" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 886 L1386 900" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 1094 L1386 1108" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1386 1302 L1386 1316" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 436 L1774 450" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 614 L1774 628" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 842 L1774 858" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 1070 L1774 1086" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1774 1248 L1774 1264" class="e-api" marker-end="url(#m-e-api)"/>
+
+<!-- cross-column queue arrows (horizontal between pools) -->
+<path d="M382 1540 L446 1540" class="e-async" marker-end="url(#m-e-async)"/>
+<path d="M770 1540 L834 1540" class="e-api" marker-end="url(#m-e-api)"/>
+<path d="M1158 1540 L1222 1540" class="e-async" marker-end="url(#m-e-async)"/>
+<path d="M1546 1540 L1610 1540" class="e-prov" marker-end="url(#m-e-prov)"/>
+<text x="416" y="1530" class="lbl" text-anchor="middle">큐</text>
+<text x="1192" y="1530" class="lbl" text-anchor="middle">큐</text>
+
+<!-- Deliverables bar y=1510 -->
+<rect x="62" y="1512" width="320" height="58" rx="10" class="st-pg" />
+<text x="82" y="1536" class="lbl">산출물</text>
+<text x="82" y="1558" class="subd">tfstate 생성 · 로드 · 락 획득</text>
+<rect x="450" y="1512" width="320" height="58" rx="10" class="st-pg" />
+<text x="470" y="1536" class="lbl">산출물</text>
+<text x="470" y="1558" class="subd">image_tag → tfvars · 승인된 plan</text>
+<rect x="838" y="1512" width="320" height="58" rx="10" class="st-pg" />
+<text x="858" y="1536" class="lbl">산출물</text>
+<text x="858" y="1558" class="subd">ECS 서비스 · Lambda · S3 bucket</text>
+<rect x="1226" y="1512" width="320" height="58" rx="10" class="st-pg" />
+<text x="1246" y="1536" class="lbl">산출물</text>
+<text x="1246" y="1558" class="subd">롤아웃 완료 (task def · bucket)</text>
+<rect x="1614" y="1512" width="320" height="58" rx="10" class="st-pg" />
+<text x="1634" y="1536" class="lbl">결과</text>
+<text x="1634" y="1558" class="subd">https://&lt;subdomain&gt;.camellia-deploy.app</text>
+
+<!-- Failure path y=1660~1800 -->
+<rect x="48" y="1660" width="1904" height="140" rx="14" class="failc" />
+<text x="74" y="1696" class="failt">실패 경로 · 어느 단계든</text>
+<text x="74" y="1724" class="subd">Terraform plan 실패 → (P1) 패치 승인 재진입 · 입력 지문 재계산 → 재시도</text>
+<text x="74" y="1750" class="subd">apply 실패 → ECS 서킷 브레이커 자동 롤백 · env_lock 해제 · 로그 꼬리 수집 → failed</text>
+<text x="74" y="1776" class="subd">롤아웃 타임아웃 (10~15분) → 중지 사유 · 종료 코드 수집 → 재시도 · failed · (P1) 롤백</text>
+<text x="1032" y="1724" class="subd">Lambda 활성화 실패 → 이전 버전 pin 유지 · 재배포 트리거 · 콜드 스타트 로그</text>
+<text x="1032" y="1750" class="subd">S3 sync 실패 → 다음 배포는 Terraform 재실행 (D-66 지문 무효화)</text>
+<text x="1032" y="1776" class="subd">최종 검증 /health 실패 → (P1) 이전 digest 롤백 · DNS 유지 · public_url 반환 안 함</text>
+<path d="M778 1630 L778 1658" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M1166 1630 L1166 1658" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M1554 1630 L1554 1658" class="e-fail" marker-end="url(#m-e-fail)"/>
+<path d="M1942 1630 L1942 1658" class="e-fail" marker-end="url(#m-e-fail)"/>
+
+<!-- Branch decision table y=1820~2140 -->
+<rect x="48" y="1820" width="1904" height="316" rx="14" class="strip" />
+<text x="72" y="1856" class="stt">ECS · Lambda · Static 분기 결정 테이블</text>
+<text x="340" y="1856" class="sub">resolveProfile() 한 곳에서 (D-63 · D-65) · 분석 전은 연결 종류로 기본 · 분석 후 다시 선택</text>
+<line x1="72" y1="1876" x2="1928" y2="1876" class="e-api"/>
+<text x="92" y="1904" class="lbl">조건</text>
+<text x="712" y="1904" class="lbl">선택 프로필</text>
+<text x="1200" y="1904" class="lbl">이유</text>
+<line x1="72" y1="1918" x2="1928" y2="1918" class="e-api" style="stroke-dasharray:3 3"/>
+<text x="92" y="1948" class="subd">HTTP + Docker + 영구</text>
+<rect x="712" y="1932" width="48.5" height="22" rx="5" class="bd-aws"/>
+<text x="736.25" y="1948" class="bdt" text-anchor="middle">AWS</text>
+<text x="770" y="1948" class="subd">aws-ecs-basic (기본)</text>
+<text x="1200" y="1948" class="sub">범용 · 롤링 배포 · 서킷 브레이커 · Cloud Map</text>
+<line x1="72" y1="1964" x2="1928" y2="1964" class="e-api" style="stroke-dasharray:3 3"/>
+<text x="92" y="1994" class="subd">HTTP + 간단 + 비용 민감</text>
+<rect x="712" y="1978" width="48.5" height="22" rx="5" class="bd-aws"/>
+<text x="736.25" y="1994" class="bdt" text-anchor="middle">AWS</text>
+<text x="770" y="1994" class="subd">aws-lambda-basic (고급 설정)</text>
+<text x="1200" y="1994" class="sub">비용 효율 · 콜드 스타트 수용 · 같은 digest · LWA (D-63)</text>
+<line x1="72" y1="2010" x2="1928" y2="2010" class="e-api" style="stroke-dasharray:3 3"/>
+<text x="92" y="2040" class="subd">정적 (SPA · index.html · Vite 빌드)</text>
+<rect x="712" y="2024" width="48.5" height="22" rx="5" class="bd-aws"/>
+<text x="736.25" y="2040" class="bdt" text-anchor="middle">AWS</text>
+<text x="770" y="2040" class="subd">aws-static-basic (분석 자동)</text>
+<text x="1200" y="2040" class="sub">서버 없음 · 44초 배포 · 이미지에서 파일 추출 (D-65 · D-66)</text>
+<line x1="72" y1="2056" x2="1928" y2="2056" class="e-api" style="stroke-dasharray:3 3"/>
+<text x="92" y="2086" class="subd">복잡 (DB · 워커 · 공개 X)</text>
+<rect x="712" y="2070" width="48.5" height="22" rx="5" class="bd-aws"/>
+<text x="736.25" y="2086" class="bdt" text-anchor="middle">AWS</text>
+<text x="770" y="2086" class="subd">aws-ecs-basic 강제</text>
+<text x="1200" y="2086" class="sub">Lambda 로 못 띄움 · 공개 HTTP 하나 아님 → ECS 복귀 (D-63)</text>
+<line x1="72" y1="2102" x2="1928" y2="2102" class="e-api" style="stroke-dasharray:3 3"/>
+<text x="92" y="2126" class="sub">환경 전환 (ECS ↔ Lambda) 은 같은 state key · 같은 ALB · 같은 VPC 를 공유하므로 Terraform apply 한 번에 리소스가 바뀐다. 공개 주소는 유지된다 (D-63).</text>
+
+<!-- Design principles strip y=2160~2360 -->
+<rect x="48" y="2160" width="1904" height="200" rx="14" class="strip" />
+<text x="72" y="2196" class="stt">설계 원칙</text>
+<text x="238" y="2196" class="sub">AWS 배포 파이프라인의 다섯 가지 축 · 모든 분기가 공유</text>
+<text x="72" y="2232" class="stt" style="fill:var(--text);font-size:15px">같은 digest · 다른 컴퓨트</text>
+<text x="72" y="2258" class="sub">ECS · Lambda · 온프레미스 · S3 nginx 모두 같은 이미지</text>
+<text x="72" y="2278" class="sub">LWA 레이어는 Lambda 밖에서 실행 안 됨 · 영향 없음</text>
+<text x="72" y="2298" class="sub">image digest 가 배포 식별자 (D-38 · D-63)</text>
+<text x="482" y="2232" class="stt" style="fill:var(--text);font-size:15px">state 재사용 · 지문 최적화</text>
+<text x="482" y="2258" class="sub">입력 지문 같음 → plan -refresh=false (D-60)</text>
+<text x="482" y="2278" class="sub">정적 사이트 skip apply · outputs 재사용 (D-66)</text>
+<text x="482" y="2298" class="sub">60초 → 30초 · 44초 → 30초대</text>
+<text x="892" y="2232" class="stt" style="fill:var(--text);font-size:15px">워커 직접 롤아웃 체크</text>
+<text x="892" y="2258" class="sub">Terraform 는 서비스 갱신 후 즉시 반환</text>
+<text x="892" y="2278" class="sub">task definition ARN 까지 확인 · 롤백 오판 방지</text>
+<text x="892" y="2298" class="sub">진행 상황 · 실패 이유 즉시 콘솔 노출 (D-61)</text>
+<text x="1302" y="2232" class="stt" style="fill:var(--text);font-size:15px">SSL · ALB · CF Edge</text>
+<text x="1302" y="2258" class="sub">CF edge TLS 1.3 · origin HTTP (Flexible)</text>
+<text x="1302" y="2278" class="sub">ALB 80 리스너 · 443 없음 (비용 · ACM 불필요)</text>
+<text x="1302" y="2298" class="sub">버킷 · 보안 그룹 : CF IP + 워커 IP 만 허용</text>
+<text x="1662" y="2232" class="stt" style="fill:var(--text);font-size:15px">env_lock · 멱등 · 롤백</text>
+<text x="1662" y="2258" class="sub">환경 단위 락 · 승인 게이트 3 (plan)</text>
+<text x="1662" y="2278" class="sub">실패 → 이전 digest 재배포로 롤백</text>
+<text x="1662" y="2298" class="sub">같은 state key · 공개 주소 유지</text>
+</svg>

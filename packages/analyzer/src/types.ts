@@ -52,6 +52,19 @@ export type ResourceCandidate = {
   type: "postgres" | "mysql" | "redis" | "object_storage" | "unknown";
   /** 감지 근거 목록 */
   detected_from: string[];
+  /** 앱이 접속 정보를 읽을 환경변수 이름 (IR resources.*.connection_env) */
+  connection_env?: string;
+  /** 접속 정보가 없을 때 앱이 쓰는 로컬 저장소 (IR resources.*.local_fallback) */
+  local_fallback?: "sqlite";
+  /** SQLite 에서 옮겨 오는 DB 일 때 근거 — 수정안 생성 · 데이터 이전에 쓴다 */
+  sqlite?: {
+    /** 사용 중인 SQLite 라이브러리 (예: better-sqlite3, node:sqlite) */
+    libraries: string[];
+    /** SQLite 를 직접 쓰는 소스 파일 (서비스 폴더 기준 상대 경로) */
+    sources: string[];
+    /** 소스에 들어 있는 SQLite 데이터 파일 */
+    files: string[];
+  };
 };
 
 // ---------------------------------------------------------------------------

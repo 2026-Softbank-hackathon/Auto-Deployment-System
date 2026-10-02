@@ -300,3 +300,45 @@ describe("IrSchema — missing_resources_decisions", () => {
     expect(result.missing_resources_decisions?.[0].module_id).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Group: resources 연결 정보 (DB 추가 모듈, #276)
+// ---------------------------------------------------------------------------
+
+describe("IrSchema — resources 연결 환경변수 · 로컬 대체 저장소", () => {
+  const base = {
+    metadata: { name: "guestbook", version: "1.0.0" },
+    services: { web: { type: "http", port: 3000 } },
+    deploy: { profile: "aws-ecs-basic" },
+  };
+
+  it("connection_env · local_fallback 을 그대로 파싱한다", () => {
+    const result: Ir = IrSchema.parse({
+      ...base,
+      resources: {
+        db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" },
+      },
+    });
+
+    expect(result.resources?.["db"].connection_env).toBe("DATABASE_URL");
+    expect(result.resources?.["db"].local_fallback).toBe("sqlite");
+  });
+
+  it("connection_env 가 환경변수 이름 형식이 아니면 실패", () => {
+    expect(() =>
+      IrSchema.parse({
+        ...base,
+        resources: { db: { type: "postgres", connection_env: "database url" } },
+      }),
+    ).toThrow(z.ZodError);
+  });
+
+  it("local_fallback 은 sqlite 만 허용", () => {
+    expect(() =>
+      IrSchema.parse({
+        ...base,
+        resources: { db: { type: "postgres", local_fallback: "mysql" } },
+      }),
+    ).toThrow(z.ZodError);
+  });
+});

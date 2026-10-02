@@ -26,6 +26,8 @@ export type ImageRef = {
 export type BuildResult = {
   strategy: "dockerfile" | "railpack";
   platform: BuildPlatform;
+  /** 이미지에 넣은 Lambda Web Adapter 버전 — 서버리스(Lambda) 배포에 이 이미지를 쓸 수 있는지 판단한다 */
+  lambdaWebAdapter: string;
   image: ImageRef;
 };
 

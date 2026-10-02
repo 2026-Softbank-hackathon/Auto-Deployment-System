@@ -2,6 +2,12 @@ export { BuildHandler } from "./build-handler.js";
 export type { BuildHandlerOptions } from "./build-handler.js";
 export { NodeCommandRunner } from "./command-runner.js";
 export { BuildError, CommandExecutionError } from "./errors.js";
+export {
+  LAMBDA_WEB_ADAPTER_COPY,
+  LAMBDA_WEB_ADAPTER_IMAGE,
+  LAMBDA_WEB_ADAPTER_PATH,
+  LAMBDA_WEB_ADAPTER_VERSION,
+} from "./lambda-web-adapter.js";
 export type { BuildErrorCode } from "./errors.js";
 export {
   DEFAULT_BUILD_PLATFORM,

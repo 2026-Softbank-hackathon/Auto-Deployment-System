@@ -532,7 +532,16 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .run-cancel__confirm { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink); }
 .run-cancel__error { margin: 0; font-size: 14px; color: var(--brick-text); }
 
-/* 실패 상세 원문 (접어 둠) */
-.run-failure__detail { display: grid; gap: 8px; justify-items: start; text-align: left; }
-.run-failure__detail pre { width: 100%; max-height: 320px; margin: 0; overflow: auto; white-space: pre; font-size: 12px; }
-.run-failure__detail pre:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+/* 실패 상세 원문 (접어 둠). 실패 안내 영역의 폭을 넘지 않게 한다. */
+.failure-detail { align-self: stretch; min-width: 0; max-width: 100%; text-align: left; color: var(--ink-soft); }
+.failure-detail summary { width: fit-content; cursor: pointer; font-weight: 700; color: var(--ink); }
+.failure-detail summary:hover { color: var(--koro-text); }
+.failure-detail summary:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.failure-detail__box { margin-top: 10px; min-width: 0; background: var(--surface); border: var(--border); border-radius: var(--radius-input); overflow: hidden; }
+.failure-detail__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 8px 6px 14px; font-size: 12px; font-weight: 700; color: var(--ink-soft); border-bottom: var(--border); }
+.failure-detail__box pre { margin: 0; padding: 14px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--ink); background: transparent; }
+.failure-detail__box pre:focus-visible { outline: 3px solid var(--koro); outline-offset: -3px; }
+.failure-detail__copy { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 700; color: var(--ink); background: var(--paper-sunken); border: var(--border); border-radius: var(--radius-tape); cursor: pointer; }
+.failure-detail__copy:hover { border-color: var(--koro); color: var(--koro-text); }
+.failure-detail__copy:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.failure-detail__copy.is-copied { color: var(--moss-text); border-color: var(--moss-text); }

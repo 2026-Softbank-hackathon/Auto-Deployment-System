@@ -386,6 +386,7 @@ export const ko = {
     failureUnknown: '배포 중에 문제가 생겼어요. 아래 AI 진단과 작업 노트에서 자세한 내용을 확인해 주세요.',
     failureCode: (code: string) => `오류 코드: ${code}`,
     failureDetailToggle: '자세한 오류 보기',
+    failureDetailLabel: '오류 원문',
     /** 서버가 오류 원문을 같이 줬을 때는 작업 노트 대신 바로 아래의 원문을 가리킨다. 여기 없는 분류는 failureReasons 문구를 그대로 쓴다. */
     failureReasonsWithDetail: {
       build: '이미지를 만드는 중에 실패했어요. 아래 자세한 오류를 확인해 주세요.',

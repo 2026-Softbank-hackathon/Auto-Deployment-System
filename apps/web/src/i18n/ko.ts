@@ -473,6 +473,11 @@ export const ko = {
     aiUsage: (tokensIn: string, tokensOut: string, cost: string) => `AI 사용량 — 입력 ${tokensIn} · 출력 ${tokensOut} 토큰 · $${cost}`,
   },
   run: {
+    staticSite: {
+      badge: '정적 사이트',
+      aws: 'AWS에서는 서버 없이 S3 웹사이트로 서빙해요',
+      onprem: '같은 이미지를 nginx 컨테이너로 실행해요',
+    },
     titleActive: '배포 중',
     titleSucceeded: '배포 완료',
     titleFailed: '배포하지 못했어요',
@@ -624,6 +629,7 @@ export const ko = {
     failedCopy: '이 배포는 끝까지 가지 못했어요. 원인은 진행 화면에서 확인할 수 있어요.',
     copyUrl: '주소 복사',
     factTarget: '배포한 곳',
+    factRuntime: '실행 방식',
     factDuration: '걸린 시간',
     timelineTitle: '단계별 걸린 시간',
     factFinished: '완료 시각',

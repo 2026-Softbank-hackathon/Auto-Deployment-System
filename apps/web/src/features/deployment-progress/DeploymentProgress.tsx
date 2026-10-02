@@ -12,7 +12,7 @@ import { deploymentStatusView, railStages, type DeploymentStatusView } from '../
 import { useSound } from '../sound/SoundProvider';
 import { awsSceneStage, DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
-import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
+import { isAwsStaticSiteProfile, koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
@@ -259,6 +259,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     return () => { active = false; };
   }, [deploymentId, analysisDone]);
   const target = sceneTarget(text(status?.targetProfile));
+  // 정적 사이트: AWS 는 프로필로(서버 없이 S3), 온프레미스는 분석 결과로 안다 (#275)
+  const staticSite = isAwsStaticSiteProfile(text(status?.targetProfile)) || facts?.staticSite === true;
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
   // 장면에 쓰는 단계: AWS는 인프라 준비 도중에 비행 장면으로 넘어간다(서버의 "배포" 상태가 순식간이라서). 코로의 말은 실제 단계를 따른다.
@@ -339,6 +341,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         <p className="run-head__meta">
           {view.outcome === 'active' && approvalError === null && <span>{waitingForEnv ? t.run.review.waiting : currentStepLabel(currentStatus, t)}</span>}
           <span className="run-head__id">{projectName ? `${displayProjectName(projectName)} · ` : ''}{t.dashboard.deploymentNo(deploymentId)}</span>
+          {staticSite && <span className="run-head__static"><span className="static-site-badge">{t.run.staticSite.badge}</span> {target === 'aws' ? t.run.staticSite.aws : target === 'onprem' ? t.run.staticSite.onprem : ''}</span>}
         </p>
       </div>
 

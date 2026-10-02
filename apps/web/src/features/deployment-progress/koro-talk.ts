@@ -1,3 +1,4 @@
+import { STATIC_SITE_PROFILE } from '../../api/deployment-api';
 import type { KoroMood } from '../../components/ui/Koro';
 import type { Messages } from '../../i18n/ko';
 import type { SoundName } from '../sound/sound-engine';
@@ -10,17 +11,23 @@ import type { DeployStory } from './deploy-story';
  */
 
 /** 분석 리포트에서 말풍선에 쓸 사실만 꺼낸 것 */
-export interface AnalysisFacts { stack: string | null; port: number | null; services: number }
+export interface AnalysisFacts { stack: string | null; port: number | null; services: number; /** 서버 없는 정적 사이트 (#275) */ staticSite: boolean }
 
 export function readAnalysisFacts(services: unknown): AnalysisFacts | null {
   if (!Array.isArray(services) || !services.length) return null;
-  const first = services[0] as { framework?: unknown; language?: unknown; port?: unknown } | null;
+  const first = services[0] as { framework?: unknown; language?: unknown; port?: unknown; type?: unknown } | null;
   const name = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
   return {
     stack: name(first?.framework) ?? name(first?.language),
     port: typeof first?.port === 'number' ? first.port : null,
     services: services.length,
+    staticSite: services.length === 1 && first?.type === 'static',
   };
+}
+
+/** AWS 정적 사이트 프로필 — 서버 없이 S3 웹사이트로 서빙한다 (#275) */
+export function isAwsStaticSiteProfile(profile: string | null): boolean {
+  return profile === STATIC_SITE_PROFILE;
 }
 
 /** 한 문장을 보여 주는 시간(초) */

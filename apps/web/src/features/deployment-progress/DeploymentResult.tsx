@@ -10,6 +10,7 @@ import { StatusTape } from '../../components/ui/StatusTape';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView } from '../deployment-status/status-view';
+import { isAwsStaticSiteProfile } from './koro-talk';
 
 function text(value: unknown): string | null { return typeof value === 'string' && value.trim() ? value : null; }
 
@@ -108,7 +109,8 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       : <p className="result-card__note">{t.result.urlPending}</p>}
 
     <dl className="result-facts">
-      {target && <div><dt>{t.result.factTarget}</dt><dd>{target}{status.targetProfile === SERVERLESS_PROFILE && <> <span className="serverless-badge">{t.deploy.serverlessBadge}</span></>}</dd></div>}
+      {target && <div><dt>{t.result.factTarget}</dt><dd>{target}{status.targetProfile === SERVERLESS_PROFILE && <> <span className="serverless-badge">{t.deploy.serverlessBadge}</span></>}{isAwsStaticSiteProfile(text(status.targetProfile)) && <> <span className="static-site-badge">{t.run.staticSite.badge}</span></>}</dd></div>}
+      {isAwsStaticSiteProfile(text(status.targetProfile)) && <div><dt>{t.result.factRuntime}</dt><dd>{t.run.staticSite.aws}</dd></div>}
       {createdAt && succeededAt && <div><dt>{t.result.factDuration}</dt><dd>{elapsed(createdAt, Date.parse(succeededAt))}</dd></div>}
       {succeededAt && <div><dt>{t.result.factFinished}</dt><dd>{new Date(succeededAt).toLocaleString(t.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>}
     </dl>

@@ -117,7 +117,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       body: {
         type: "object",
         properties: {
-          targetEnvironmentId: { type: "string", pattern: "^\\d+$", description: "환경 override (없으면 소스 배포 환경 그대로)" },
+          targetEnvironmentId: { type: "string", pattern: "^\\d+$", description: "환경 override (없으면 소스 배포 환경 그대로). 다른 종류 환경이면 프로필 · Registry 재선정" },
         },
       },
     },

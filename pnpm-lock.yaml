@@ -176,6 +176,12 @@ importers:
 
   apps/worker:
     dependencies:
+      '@aws-sdk/client-ecs':
+        specifier: ^3.1145.0
+        version: 3.1145.0
+      '@aws-sdk/client-elastic-load-balancing-v2':
+        specifier: ^3.1145.0
+        version: 3.1145.0
       '@aws-sdk/client-s3':
         specifier: ^3.0.0
         version: 3.1145.0
@@ -479,6 +485,14 @@ packages:
 
   '@aws-sdk/client-ecr@3.1144.0':
     resolution: {integrity: sha512-IDi0QjHrolO2g+aA5NawvVjFzta0lwUF6Vas8awrnzJk5EUH0BALJzzGyUpGXRUoGLK5VXsA8YSBKY/4n9RU5w==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-ecs@3.1145.0':
+    resolution: {integrity: sha512-r3Kfyv+ax47DcXUKgMV/n9xUhKL1KjDBo3HC6+4CL+lOWXXYXsEJIWpQrDZYVwX8nbxuD7TXVFfEeY/38dmD1Q==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-elastic-load-balancing-v2@3.1145.0':
+    resolution: {integrity: sha512-HB4cCY0mS7GSJmWDr47tmwn4X6xhAPOz7YKFjHBAFaDpxnT97Rxo0ecVU+WH8R80R85OjG1zPPSJHkVQFUIOxw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-s3@3.1145.0':
@@ -3023,6 +3037,28 @@ snapshots:
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-ecs@3.1145.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.1
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-elastic-load-balancing-v2@3.1145.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.1
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-s3@3.1145.0':
     dependencies:
       '@aws-sdk/checksums': 3.1001.1
@@ -4113,14 +4149,6 @@ snapshots:
       '@vitest/utils': 2.1.9
       chai: 5.3.3
       tinyrainbow: 1.2.0
-
-  '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@20.19.43)(lightningcss@1.33.0))':
-    dependencies:
-      '@vitest/spy': 2.1.9
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 5.4.21(@types/node@20.19.43)(lightningcss@1.33.0)
 
   '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@22.20.4)(lightningcss@1.33.0))':
     dependencies:
@@ -5382,7 +5410,7 @@ snapshots:
   vitest@2.1.9(@types/node@20.19.43)(lightningcss@1.33.0):
     dependencies:
       '@vitest/expect': 2.1.9
-      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@20.19.43)(lightningcss@1.33.0))
+      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@22.20.4)(lightningcss@1.33.0))
       '@vitest/pretty-format': 2.1.9
       '@vitest/runner': 2.1.9
       '@vitest/snapshot': 2.1.9

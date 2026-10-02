@@ -37,8 +37,38 @@ run "plans_http_app_with_immutable_digest" {
   }
 
   assert {
-    condition     = aws_ecs_service.app.wait_for_steady_state
-    error_message = "Terraform must wait for the ECS service to reach steady state before Verify starts."
+    condition     = aws_ecs_service.app.wait_for_steady_state == false
+    error_message = "The worker waits for the ECS rollout itself, so Terraform must not block on steady state."
+  }
+
+  assert {
+    condition     = aws_ecs_service.app.deployment_circuit_breaker[0].enable && aws_ecs_service.app.deployment_circuit_breaker[0].rollback
+    error_message = "The ECS deployment circuit breaker must stay enabled with rollback."
+  }
+
+  assert {
+    condition     = aws_ecs_service.app.health_check_grace_period_seconds == 10
+    error_message = "The ECS service must ignore ALB health checks only for a short 10s grace period."
+  }
+
+  assert {
+    condition = (
+      aws_lb_target_group.app[0].health_check[0].interval == 5 &&
+      aws_lb_target_group.app[0].health_check[0].healthy_threshold == 2 &&
+      aws_lb_target_group.app[0].health_check[0].unhealthy_threshold == 3 &&
+      aws_lb_target_group.app[0].health_check[0].timeout == 4
+    )
+    error_message = "The target group health check must be 5s interval, 2 healthy, 3 unhealthy, 4s timeout."
+  }
+
+  assert {
+    condition     = aws_lb_target_group.app[0].health_check[0].timeout < aws_lb_target_group.app[0].health_check[0].interval
+    error_message = "The health check timeout must be shorter than its interval."
+  }
+
+  assert {
+    condition     = tonumber(aws_lb_target_group.app[0].deregistration_delay) == 5
+    error_message = "Old tasks must drain from the target group within 5 seconds."
   }
 }
 

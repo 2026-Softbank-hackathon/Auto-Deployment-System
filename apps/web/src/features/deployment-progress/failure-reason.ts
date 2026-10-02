@@ -6,7 +6,7 @@
  */
 export type FailureKind = 'awsKey' | 'awsKeyStored' | 'awsPermission' | 'registry' | 'source' | 'build' | 'buildTool'
   | 'setup' | 'appSecret' | 'envVar' | 'infra' | 'agent' | 'server'
-  | 'multiService' | 'resources' | 'port' | 'profile';
+  | 'multiService' | 'resources' | 'port' | 'profile' | 'appStart';
 
 const kinds: Record<string, FailureKind> = {
   AWS_ECR_AUTHENTICATION_FAILED: 'awsKey',
@@ -49,6 +49,12 @@ const kinds: Record<string, FailureKind> = {
   TERRAFORM_OUTPUT_FAILED: 'infra',
   TERRAFORM_OUTPUT_INVALID: 'infra',
   TERRAFORM_OUTPUT_MISSING: 'infra',
+  // ECS 롤아웃 대기 (apps/worker ecs-rollout.ts) — 새 태스크가 뜨지 않거나 헬스체크를 못 넘김
+  ECS_TASK_STOPPED: 'appStart',
+  ECS_ROLLOUT_FAILED: 'appStart',
+  ECS_ROLLOUT_TIMEOUT: 'appStart',
+  ECS_SERVICE_NOT_FOUND: 'infra',
+  ECS_ROLLOUT_CHECK_FAILED: 'infra',
   BUILD_ARTIFACT_MISSING: 'build',
   IMAGE_PLATFORM_UNSUPPORTED: 'build',
   ECR_REPOSITORY_INVALID: 'registry',

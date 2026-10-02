@@ -111,6 +111,10 @@ resource "aws_lb_target_group" "app" {
   target_type = "ip"
   vpc_id      = aws_vpc.main.id
 
+  # 교체 배포 때 이전 태스크가 빨리 빠지도록 기본 300초 대신 5초만 드레이닝한다.
+  deregistration_delay = 5
+
+  # 새 태스크가 빨리 healthy 가 되도록 5초 간격으로 확인한다 (timeout 은 interval 보다 짧아야 한다).
   health_check {
     enabled             = true
     path                = var.health_check_path
@@ -118,8 +122,8 @@ resource "aws_lb_target_group" "app" {
     protocol            = "HTTP"
     healthy_threshold   = 2
     unhealthy_threshold = 3
-    interval            = 15
-    timeout             = 5
+    interval            = 5
+    timeout             = 4
   }
 
   tags = local.tags
@@ -139,12 +143,15 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_ecs_service" "app" {
-  name                  = var.resource_name
-  cluster               = aws_ecs_cluster.main.id
-  task_definition       = aws_ecs_task_definition.app.arn
-  desired_count         = var.desired_count
-  launch_type           = "FARGATE"
-  wait_for_steady_state = true
+  name            = var.resource_name
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.app.arn
+  desired_count   = var.desired_count
+  launch_type     = "FARGATE"
+
+  # 롤아웃 완료는 워커가 ECS 를 직접 확인해 기다린다 (apps/worker/src/ecs-rollout.ts).
+  # Terraform 은 서비스 갱신만 하고 바로 돌아온다.
+  wait_for_steady_state = false
 
   deployment_circuit_breaker {
     enable   = true
@@ -166,7 +173,7 @@ resource "aws_ecs_service" "app" {
     assign_public_ip = true
   }
 
-  health_check_grace_period_seconds = var.public_ingress ? 60 : null
+  health_check_grace_period_seconds = var.public_ingress ? 10 : null
 
   depends_on = [
     aws_lb_listener.http,

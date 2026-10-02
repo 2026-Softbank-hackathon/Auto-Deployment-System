@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, listProjectDeployments, type DeploymentLogStep, type ProjectDeploymentSummary, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
@@ -294,6 +294,16 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     observer.observe(sceneElement);
     return () => observer.disconnect();
   }, [sceneElement]);
+  // 입체감: 마우스 위치에 따라 장면을 살짝 기울인다 (무대를 들여다보는 느낌). 다시 그리지 않고 CSS 변수만 바꾼다.
+  function tiltScene(event: MouseEvent<HTMLElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty('--tilt-x', (((event.clientX - bounds.left) / bounds.width) * 2 - 1).toFixed(3));
+    event.currentTarget.style.setProperty('--tilt-y', (((event.clientY - bounds.top) / bounds.height) * 2 - 1).toFixed(3));
+  }
+  function resetTilt(event: MouseEvent<HTMLElement>) {
+    event.currentTarget.style.setProperty('--tilt-x', '0');
+    event.currentTarget.style.setProperty('--tilt-y', '0');
+  }
   // 말풍선은 항상 코로 머리에 붙인다. 장면이 작게 그려지면 말풍선도 같이 줄인다(읽을 수 있는 크기까지만).
   const sceneScale = sceneWidth !== null ? sceneWidth / box.width : 1;
   const thinkScale = Math.min(1, Math.max(THINK_MIN_SCALE, sceneScale / 0.9));
@@ -401,7 +411,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           <Keycap variant="secondary" onClick={() => void approveGate(approvalError.gate)}>{t.run.approveRetry}</Keycap>
         </div>}
 
-        <figure ref={setSceneElement} className="run-scene is-attached" style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
+        <figure ref={setSceneElement} className="run-scene is-attached" onMouseMove={tiltScene} onMouseLeave={resetTilt} style={{ '--scene-share': box.width / SCENE_SIZE.width } as CSSProperties}>
           <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} eventTick={liveLog?.tick ?? 0} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.

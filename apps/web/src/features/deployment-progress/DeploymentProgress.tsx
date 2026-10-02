@@ -71,6 +71,12 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
 /** 로그 줄 앞의 "[ISO 시각]"으로 가장 최근 줄을 고른다. */
 /** 진행 탭의 "지금" 자리에 보여 주는 최근 로그 줄 수 (좁은 화면에서는 마지막 한 줄만 보인다) */
 const RECENT_LINES = 3;
+/** 로그 한 줄("[ISO 시각] 내용")을 내용과 시각으로 나눈다. 시각이 없거나 읽지 못하면 줄 전체를 내용으로 둔다. */
+function splitNote(line: string): { text: string; at: Date | null } {
+  const match = /^\[([^\]]+)\] (.*)$/.exec(line);
+  const at = match ? new Date(match[1]) : null;
+  return match && at && !Number.isNaN(at.getTime()) ? { text: match[2], at } : { text: line, at: null };
+}
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
 
 /** 진행 중일 때만 1초마다 다시 그린다. 경과 시간은 서버의 createdAt 기준 실제 값이다. */
@@ -289,6 +295,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const failureParts = parseFailure(failureMessage);
   const publicUrl = safeHttpUrl(text(status?.publicUrl));
 
+  const latestNote = recentLines.length ? splitNote(localizeLogLine(recentLines[recentLines.length - 1]!, t.logLines)) : null;
+
   async function loadLogs() {
     const results = await Promise.allSettled(deploymentLogSteps.map(async (step) => ({ step, text: await getDeploymentLogs(deploymentId, step) })));
     const failure = results.find((result) => result.status === 'rejected');
@@ -413,7 +421,10 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     {shownTab === 'logs' && <section className="work-note" aria-label={t.run.workNote}>
       <div className="work-note__bar">
         <h2>{t.run.workNote}</h2>
-        <p className="work-note__line">{recentLines.length ? localizeLogLine(recentLines[recentLines.length - 1]!, t.logLines) : t.run.noNote}</p>
+        {/* 가장 최근 로그 한 줄. 내용을 먼저 보여 주고(넘치면 뒤가 잘린다), 시각은 화면 언어의 짧은 형식으로 뒤에 붙인다 (#321) */}
+        <p className="work-note__line">{latestNote
+          ? <><span className="work-note__text">{latestNote.text}</span>{latestNote.at && <time className="work-note__time" dateTime={latestNote.at.toISOString()}>{latestNote.at.toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time>}</>
+          : t.run.noNote}</p>
         <div className="work-note__actions">
           <Keycap variant="ghost" onClick={() => { void refresh(); void loadLogs(); }}>{t.progress.refresh}</Keycap>
         </div>

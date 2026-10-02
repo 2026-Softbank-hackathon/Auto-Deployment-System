@@ -228,6 +228,32 @@ describe("handleTeardown", () => {
     expect(h.stateStore.delete).toHaveBeenCalled();
   });
 
+  it("정적 사이트 — aws-static-basic 모듈과 같은 버킷 이름으로 destroy 한다 (force_destroy 로 파일까지) (#274)", async () => {
+    const h = harness({
+      envs: [awsEnv({
+        target_profile: "aws-static-basic",
+        ir_json: {
+          metadata: { name: "landing", version: "1.0.0" },
+          services: { site: { type: "static", port: 8080, health: { path: "/" }, static: { output_dir: "." } } },
+          deploy: { profile: "aws-static-basic" },
+        },
+      })],
+    });
+    Object.assign(h.deps, { platformDomain: "Example.com" });
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
+    const request = (h.destroy.mock.calls[0] as unknown as [{ moduleDirectory: string; variables: Record<string, unknown> }])[0];
+    expect(request.moduleDirectory.replaceAll("\\", "/")).toMatch(/profiles\/aws-static-basic$/);
+    expect(request.variables).toMatchObject({
+      app_name: "landing",
+      region: "ap-northeast-2",
+      bucket_name: "service-24.example.com",
+      spa_fallback: true,
+    });
+    expect(h.auditLog()).toMatchObject({ statusCode: 200, metadata: { destroyedEnvironments: ["5"] } });
+  });
+
   it("프로젝트 소유 연결이면 그 프로젝트 범위의 시크릿을 읽는다", async () => {
     const h = harness({ envs: [awsEnv({ environment_id: "9", environment_project_id: "24" })] });
 

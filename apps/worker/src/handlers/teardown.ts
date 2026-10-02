@@ -17,7 +17,12 @@ import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { TerraformCliError, type TerraformVariable } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
-import { resourceNameFor, safeContainerName, terraformStateKey } from "./provision.js";
+import {
+  resourceNameFor,
+  safeContainerName,
+  staticSiteBucketName,
+  terraformStateKey,
+} from "./provision.js";
 
 export type TeardownJobPayload = {
   project_id: number | string;
@@ -275,7 +280,7 @@ async function destroyEnvironment(
   };
   if (!(await terraformStateStore.exists(location))) return false;
 
-  const { moduleRef, variables } = destroyInputs(target);
+  const { moduleRef, variables } = destroyInputs(target, projectId, deps.platformDomain);
   const moduleDirectory = path.resolve(
     terraformModuleRoot,
     moduleRef.replace(/^infra\/terraform\/profiles\//, ""),
@@ -301,24 +306,36 @@ async function destroyEnvironment(
   return true;
 }
 
-function destroyInputs(target: AwsTargetRow): {
+function destroyInputs(
+  target: AwsTargetRow,
+  projectId: number,
+  platformDomain: string | undefined,
+): {
   moduleRef: string;
   variables: Record<string, TerraformVariable>;
 } {
+  let plan: ReturnType<typeof createDeploymentPlan> | null = null;
   try {
-    const plan = createDeploymentPlan(IrSchema.parse(target.ir_json), target.target_profile ?? "");
-    if (plan.target === "aws") {
-      return {
-        moduleRef: plan.provisioning.moduleRef,
-        variables: {
-          ...plan.provisioning.variables,
-          app_name: safeContainerName(plan.application.name),
-          container_image: target.immutable_ref ?? FALLBACK_VARIABLES.container_image,
-        },
-      };
-    }
+    plan = createDeploymentPlan(IrSchema.parse(target.ir_json), target.target_profile ?? "");
   } catch {
     // 옛 IR · 프로필 변경 등 — 아래 기본값으로 지운다
+  }
+  if (plan?.target === "aws") {
+    // 정적 사이트 (#274): 버킷 이름은 필수 변수 — provision 과 같은 규칙으로 만든다 (버킷은 force_destroy)
+    if (plan.runtime.type === "s3-website" && !platformDomain) {
+      throw new TeardownError("STATIC_SITE_DOMAIN_MISSING");
+    }
+    return {
+      moduleRef: plan.provisioning.moduleRef,
+      variables: {
+        ...plan.provisioning.variables,
+        app_name: safeContainerName(plan.application.name),
+        container_image: target.immutable_ref ?? FALLBACK_VARIABLES.container_image,
+        ...(plan.runtime.type === "s3-website" && platformDomain
+          ? { bucket_name: staticSiteBucketName(projectId, platformDomain) }
+          : {}),
+      },
+    };
   }
   return { moduleRef: DEFAULT_AWS_MODULE_REF, variables: { ...FALLBACK_VARIABLES } };
 }

@@ -122,7 +122,7 @@ export class DeploymentOriginActivator {
     let tunnelIngress: { tunnelId: string; hostname: string; serviceUrl: string } | undefined;
 
     if (payload.environmentType === "aws") {
-      originHostname = albHostname(payload.targetUrl);
+      originHostname = awsOriginHostname(payload.targetUrl);
     } else {
       const agentResult = parseAgentResult(row.agent_result);
       if (row.agent_status !== "ready_for_verify" ||
@@ -311,10 +311,21 @@ function isTargetVerified(
   }
 }
 
-function albHostname(value: string): string {
+/**
+ * AWS 프로필이 Terraform 출력으로 돌려주는 origin 만 공개 주소 CNAME 대상으로 받는다.
+ * 프로필을 추가하면 여기에 그 endpoint 형식을 더한다.
+ */
+const AWS_ORIGIN_HOSTNAMES = [
+  // aws-ecs-basic: ALB
+  /\.elb\.amazonaws\.com(?:\.cn)?$/,
+  // aws-static-basic (#274): S3 웹사이트 endpoint (리전에 따라 s3-website.<region> 또는 s3-website-<region>)
+  /^[a-z0-9.-]+\.s3-website[.-][a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/,
+];
+
+function awsOriginHostname(value: string): string {
   const url = safeUrl(value);
   if (!["http:", "https:"].includes(url.protocol) || url.port ||
-      !/\.elb\.amazonaws\.com(?:\.cn)?$/.test(url.hostname)) {
+      !AWS_ORIGIN_HOSTNAMES.some((pattern) => pattern.test(url.hostname))) {
     throw new OriginActivationError("ORIGIN_ALB_INVALID");
   }
   return url.hostname;

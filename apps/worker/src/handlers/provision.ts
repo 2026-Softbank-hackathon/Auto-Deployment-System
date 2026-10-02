@@ -3,8 +3,10 @@ import path from "node:path";
 import {
   createDeploymentPlan,
   AdapterError,
+  type AwsStaticDeploymentPlan,
   type OnpremDockerDeploymentPlan,
 } from "@camellia/adapters";
+import { AwsRegistryError } from "@camellia/aws-registry";
 import { AwsConfigSchema, PLATFORM_INJECTED_ENV_NAMES } from "@camellia/contracts";
 import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
@@ -14,6 +16,7 @@ import { TerraformCliError, type TerraformOutputs, type TerraformVariable } from
 import { OriginActivationError } from "../origin-activation.js";
 import { EcsRolloutError } from "../ecs-rollout.js";
 import { LambdaRolloutError } from "../lambda-rollout.js";
+import { StaticSitePublishError } from "../static-site-publisher.js";
 
 export type ProvisionJobPayload = {
   deployment_id: number | string;
@@ -191,6 +194,35 @@ export async function handleProvision(
 
     const stateKey = terraformStateKey(projectId, environmentId);
     const resourceName = resourceNameFor(projectId, environmentId);
+
+    if (plan.runtime.type === "s3-website") {
+      // 같은 state 에 이 환경의 PostgreSQL(RDS)이 있으면 정적 사이트 모듈이 DB 를 지우게 된다 — 데이터를 지키려고 멈춘다
+      if (await databaseProvisionedBefore(deps, projectId, environmentId, deploymentId)) {
+        await stepLog.line(
+          "이 환경에는 이전 배포 때 만든 PostgreSQL(RDS)이 있어 정적 사이트(S3)로 바꾸면 DB 가 지워집니다. 앱을 삭제한 뒤 다시 배포하세요.",
+        );
+        throw new Error("STATIC_SITE_ENVIRONMENT_HAS_DATABASE");
+      }
+      await provisionStaticSite({
+        deps,
+        stepLog,
+        context,
+        deploymentId,
+        projectId,
+        environmentId,
+        moduleDirectory,
+        stateKey,
+        resourceName,
+        plan: plan as AwsStaticDeploymentPlan,
+        region: awsConfig.region,
+        credentials: { accessKeyId, secretAccessKey },
+        onStatus: (status) => {
+          activeStatus = status;
+        },
+      });
+      return;
+    }
+
     // PostgreSQL 추가 모듈 (#278). 이번 IR 에 DB 가 없어도 이 환경에 만든 DB 는 앱 삭제 전까지 지우지 않는다
     // (수정안을 거절한 새 버전 등으로 DB 와 데이터가 같이 사라지는 것을 막는다).
     let databaseEnabled = plan.provisioning.variables["database_enabled"] === true;
@@ -318,7 +350,8 @@ export async function handleProvision(
     const errorDetail =
       (error instanceof TerraformCliError ||
         error instanceof EcsRolloutError ||
-        error instanceof LambdaRolloutError) && error.detail
+        error instanceof LambdaRolloutError ||
+        error instanceof StaticSitePublishError) && error.detail
         ? error.detail.slice(0, 2048)
         : undefined;
     deps.log?.error(
@@ -346,6 +379,134 @@ export async function handleProvision(
     }
     throw error;
   }
+}
+
+/**
+ * 정적 사이트 on AWS (#274) — 서버 없이 S3 웹사이트 호스팅.
+ * 1. Terraform 으로 버킷(이름 = 공개 호스트 이름) · 웹사이트 설정 · 버킷 정책 (입력이 같으면 -refresh=false 빠른 길)
+ * 2. 빌드한 이미지(같은 digest)에서 파일을 꺼내 버킷과 맞춘다
+ * 3. S3 웹사이트 endpoint 를 직접 검증한 뒤 verify 가 Cloudflare 공개 주소를 그쪽으로 바꾼다
+ */
+async function provisionStaticSite(input: {
+  deps: WorkerDeps;
+  stepLog: ReturnType<typeof createStepLogger>;
+  context: ProvisionContext;
+  deploymentId: number;
+  projectId: number;
+  environmentId: number;
+  moduleDirectory: string;
+  stateKey: string;
+  resourceName: string;
+  plan: AwsStaticDeploymentPlan;
+  region: string;
+  credentials: { accessKeyId: string; secretAccessKey: string };
+  onStatus: (status: Status) => void;
+}): Promise<void> {
+  const { deps, stepLog, context, deploymentId, plan, credentials, region } = input;
+  if (!deps.staticSitePublisher || !deps.awsRegistryFactory || !deps.registrySession) {
+    throw new Error("STATIC_SITE_DEPENDENCY_MISSING");
+  }
+  if (!deps.platformDomain) throw new Error("STATIC_SITE_DOMAIN_MISSING");
+  const bucket = staticSiteBucketName(input.projectId, deps.platformDomain);
+
+  // 버킷 정책은 Cloudflare 에서 오는 요청만 받는다 — 공개 주소를 바꾸기 전 직접 검증하려고 워커 IP 도 연다
+  const egressIp = await deps.egressIpResolver?.();
+  if (!egressIp) {
+    await stepLog.line("워커 공인 IP 를 확인하지 못했습니다. S3 직접 검증이 거부될 수 있습니다.");
+  }
+  const variables: Record<string, TerraformVariable> = {
+    ...plan.provisioning.variables,
+    app_name: safeContainerName(plan.application.name),
+    region,
+    bucket_name: bucket,
+    verifier_cidrs: egressIp ? [`${egressIp}/32`] : [],
+  };
+
+  await stepLog.line(`정적 사이트 — 서버 없이 S3 웹사이트 호스팅 (버킷 ${bucket})`);
+  const applied = context.status === "deploying" && context.origin_url
+    ? {
+        originUrl: context.origin_url,
+        outputs: await deps.terraformCli!.output({
+          moduleDirectory: input.moduleDirectory,
+          backend: { ...deps.terraformBackend!, stateKey: input.stateKey },
+          region,
+          credentials,
+          variables,
+          log: (line: string) => stepLog.line(line),
+        }),
+      }
+    : await applyTerraform({
+        deps,
+        stepLog,
+        deploymentId,
+        projectId: input.projectId,
+        environmentId: input.environmentId,
+        moduleDirectory: input.moduleDirectory,
+        stateKey: input.stateKey,
+        resourceName: input.resourceName,
+        variables,
+        credentials,
+        region,
+      });
+  const originUrl = applied.originUrl;
+  validateOriginUrl(originUrl);
+  await deps.pool.query(
+    "UPDATE deployments SET public_url = $1, updated_at = NOW() WHERE id = $2",
+    [originUrl, deploymentId],
+  );
+  if (context.status === "provisioning") {
+    await transitionTo(deps.pool, deploymentId, "deploying");
+    input.onStatus("deploying");
+    await deps.notifier?.notify(deploymentId, "state_changed", { status: "deploying" });
+  }
+
+  // 같은 이미지에서 파일을 꺼낸다 — ECR 로그인은 build 와 같은 방식
+  const registry = deps.awsRegistryFactory({
+    region: ecrRegionFromRepository(context.repository_uri!),
+    credentials,
+  });
+  const authorization = await registry.getAuthorization();
+  await stepLog.line(`이미지 ${context.image_digest} 에서 정적 파일을 꺼내 S3 에 올립니다.`);
+  await deps.registrySession.withAuthorization(authorization, (commandEnvironment) =>
+    deps.staticSitePublisher!.publish({
+      imageRef: context.immutable_ref!,
+      platform: normalizeImagePlatform(context.image_platform!),
+      commandEnvironment,
+      bucket: stringOutput(applied.outputs, "bucket_name") ?? bucket,
+      region,
+      credentials,
+      log: (line) => stepLog.line(line),
+    }),
+  );
+
+  await transitionTo(deps.pool, deploymentId, "verifying");
+  input.onStatus("verifying");
+  await deps.notifier?.notify(deploymentId, "state_changed", { status: "verifying" });
+  await stepLog.line("정적 파일 동기화 완료, S3 웹사이트 endpoint 검증을 시작합니다.");
+  await deps.boss.send("verify", {
+    jobId: `verify-deployment-${deploymentId}`,
+    attempt: 1,
+    deploymentId,
+    environmentId: String(input.environmentId),
+    environmentType: "aws",
+    serviceId: plan.service.name,
+    targetUrl: originUrl,
+    health: {
+      path: plan.health.path,
+      expectedStatus: plan.health.expectedStatus,
+      timeoutMs: plan.health.timeoutSeconds * 1000,
+    },
+    expectedDigest: context.image_digest,
+  });
+}
+
+/**
+ * 정적 사이트 버킷 이름 = 공개 호스트 이름 (#274). S3 웹사이트 endpoint 는 Host 헤더로 버킷을 찾으므로
+ * Cloudflare 가 service-{projectId}.{도메인} 으로 프록시하려면 버킷 이름이 정확히 같아야 한다.
+ */
+export function staticSiteBucketName(projectId: number, platformDomain: string): string {
+  const domain = platformDomain.trim().replace(/\.$/, "").toLowerCase();
+  return `service-${projectId}.${domain}`;
 }
 
 async function failProvisionStage(
@@ -390,7 +551,7 @@ async function applyTerraform(input: {
   moduleDirectory: string;
   stateKey: string;
   resourceName: string;
-  variables: Record<string, string | number | boolean | Record<string, string>>;
+  variables: Record<string, TerraformVariable>;
   credentials: { accessKeyId: string; secretAccessKey: string };
   region: string;
 }): Promise<{ originUrl: string; outputs: TerraformOutputs }> {
@@ -747,8 +908,15 @@ function normalizeProvisionFailure(error: unknown): string {
   if (error instanceof OriginActivationError) return error.code;
   if (error instanceof EcsRolloutError) return error.code;
   if (error instanceof LambdaRolloutError) return error.code;
+  if (error instanceof StaticSitePublishError) return error.code;
+  if (error instanceof AwsRegistryError) return error.code;
   if (error instanceof Error) {
     const allowed = new Set([
+      "STATIC_SITE_DEPENDENCY_MISSING",
+      "STATIC_SITE_DOMAIN_MISSING",
+      "STATIC_SITE_ENVIRONMENT_HAS_DATABASE",
+      "DOCKER_AUTH_UNAVAILABLE",
+      "DOCKER_AUTH_FAILED",
       "PROVISION_CONTEXT_NOT_FOUND",
       "PROVISION_STATE_INVALID",
       "PROVISION_TARGET_UNSUPPORTED",

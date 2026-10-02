@@ -23,6 +23,7 @@ import type { FinalUrlVerifier } from "./final-url-verifier.js";
 import type { TerraformStateStore } from "./terraform-state-store.js";
 import type { EcsRolloutWaiter } from "./ecs-rollout.js";
 import type { LambdaRolloutWaiter } from "./lambda-rollout.js";
+import type { StaticSitePublisher } from "./static-site-publisher.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -53,6 +54,12 @@ export type WorkerDeps = {
     "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
   >;
   finalUrlVerifier?: Pick<FinalUrlVerifier, "verify">;
+  /** 플랫폼 공개 도메인 (DEMO_PLATFORM_DOMAIN) — 정적 사이트 버킷 이름 = service-{projectId}.{도메인} (#274) */
+  platformDomain?: string;
+  /** 정적 사이트: 이미지에서 파일을 꺼내 S3 와 맞춘다 (#274) */
+  staticSitePublisher?: Pick<StaticSitePublisher, "publish">;
+  /** 정적 사이트: 버킷 정책이 직접 검증을 받도록 워커 공인 IP 확인 (#274) */
+  egressIpResolver?: () => Promise<string | null>;
   dnsActivationChecker?: Pick<PublicDnsActivationChecker, "waitUntilResolvable">;
   /** 프로젝트 삭제 시 Agent cleanup 확인 대기 설정. 테스트에서는 sleep을 주입할 수 있다. */
   onpremCleanupWait?: {

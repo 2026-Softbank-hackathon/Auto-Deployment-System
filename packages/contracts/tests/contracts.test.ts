@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   CreateEnvironmentBodySchema,
   CreateSecretBodySchema,
+  DeleteProjectResponseSchema,
   DEPLOYMENT_EVENT_NAMES,
   DeploymentEventSchema,
   DeploymentSchema,
@@ -32,6 +33,7 @@ const project = {
   updatedAt: "2026-09-30T03:00:00.000Z",
   live: null,
   latest: null,
+  deletion: null,
 };
 
 describe("TARGET_VENDORS", () => {
@@ -243,5 +245,35 @@ describe("공용 연결 (#215)", () => {
     expect(UpdateEnvironmentBodySchema.safeParse({ isDefault: false }).success).toBe(false);
     expect(UpdateEnvironmentBodySchema.safeParse({}).success).toBe(false);
     expect(UpdateEnvironmentBodySchema.safeParse({ isDefault: true, name: "x" }).success).toBe(false);
+  });
+});
+
+describe("앱 삭제 (#247)", () => {
+  const deletion = {
+    status: "deleting",
+    requestedAt: "2026-10-02T03:00:00.000Z",
+    error: null,
+    warnings: [],
+  };
+
+  it("Project.deletion — 삭제 중 · 실패(이유) · 없음(null), 빠지면 거부", () => {
+    expect(ProjectSchema.safeParse({ ...project, deletion }).success).toBe(true);
+    expect(
+      ProjectSchema.safeParse({
+        ...project,
+        deletion: { ...deletion, status: "failed", error: "TERRAFORM_DESTROY_FAILED", warnings: ["ONPREM_MANUAL_CLEANUP"] },
+      }).success,
+    ).toBe(true);
+    expect(ProjectSchema.safeParse({ ...project, deletion: { ...deletion, status: "deleted" } }).success).toBe(false);
+    expect(ProjectSchema.safeParse({ ...project, deletion: { ...deletion, warnings: ["UNKNOWN"] } }).success).toBe(false);
+    expect(ProjectSchema.safeParse({ ...project, deletion: { ...deletion, extra: 1 } }).success).toBe(false);
+    const { deletion: _deletion, ...missing } = project;
+    expect(ProjectSchema.safeParse(missing).success).toBe(false);
+  });
+
+  it("DELETE /projects/:id 202 응답 — projectId + deletion", () => {
+    expect(DeleteProjectResponseSchema.safeParse({ projectId: "24", deletion }).success).toBe(true);
+    expect(DeleteProjectResponseSchema.safeParse({ projectId: "24", deletion: null }).success).toBe(false);
+    expect(DeleteProjectResponseSchema.safeParse({ projectId: "24", deletion, extra: 1 }).success).toBe(false);
   });
 });

@@ -111,6 +111,12 @@ export class CloudflareClient {
     }
   }
 
+  /** 만들지 않고 찾기만 한다 (앱 삭제 정리용, #247) */
+  async findNamedTunnel(serviceId: string): Promise<CloudflareTunnel | null> {
+    const existing = await this.findTunnel(tunnelNameForService(serviceId));
+    return existing ? normalizeTunnel(existing) : null;
+  }
+
   async getTunnelToken(tunnelId: string): Promise<string> {
     const id = requireValue(tunnelId, "tunnelId");
     const token = await this.request<string>(
@@ -156,14 +162,20 @@ export class CloudflareClient {
     return { previousServiceUrl };
   }
 
+  /**
+   * hostname 의 ingress 규칙을 지운다. expectedServiceUrl 을 주면 현재 origin 이 같을 때만 지운다(롤백용).
+   * 생략하면 origin 과 상관없이 지운다 (앱 삭제, #247).
+   */
   async removeTunnelOrigin(input: {
     tunnelId: string;
     hostname: string;
-    expectedServiceUrl: string;
+    expectedServiceUrl?: string;
   }): Promise<void> {
     const tunnelId = requireValue(input.tunnelId, "tunnelId");
     const hostname = normalizeDomain(input.hostname);
-    const expectedServiceUrl = normalizeServiceUrl(input.expectedServiceUrl);
+    const expectedServiceUrl = input.expectedServiceUrl === undefined
+      ? undefined
+      : normalizeServiceUrl(input.expectedServiceUrl);
     const path = `/accounts/${encodeURIComponent(this.accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`;
     const current = await this.request<{
       config?: {
@@ -174,7 +186,7 @@ export class CloudflareClient {
     const currentIngress = current.config?.ingress ?? [];
     const currentRule = currentIngress.find((rule) => rule.hostname === hostname);
     if (!currentRule) return;
-    if (currentRule.service !== expectedServiceUrl) {
+    if (expectedServiceUrl !== undefined && currentRule.service !== expectedServiceUrl) {
       throw new CloudflareApiError(
         "CLOUDFLARE_INVALID_ARGUMENT",
         "현재 Tunnel origin이 예상값과 달라 삭제하지 않았습니다.",

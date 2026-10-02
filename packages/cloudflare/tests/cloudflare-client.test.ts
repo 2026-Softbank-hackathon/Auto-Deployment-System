@@ -287,6 +287,51 @@ describe("CloudflareClient", () => {
     });
   });
 
+  it("앱 삭제 (#247) — expectedServiceUrl 없이 부르면 현재 origin 과 상관없이 hostname 규칙을 지운다", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(apiResponse({
+        config: {
+          ingress: [
+            { hostname: "service-42.example.com", service: "http://127.0.0.1:50001" },
+            { hostname: "service-7.example.com", service: "http://127.0.0.1:50002" },
+            { service: "http_status:404" },
+          ],
+        },
+      }))
+      .mockResolvedValueOnce(apiResponse({ id: "ok" }));
+    const client = new CloudflareClient({ ...options, fetcher });
+
+    await client.removeTunnelOrigin({ tunnelId: "tunnel-1", hostname: "service-42.example.com" });
+
+    const updateRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(updateRequest[1].body))).toEqual({
+      config: {
+        ingress: [
+          { hostname: "service-7.example.com", service: "http://127.0.0.1:50002" },
+          { service: "http_status:404" },
+        ],
+      },
+    });
+  });
+
+  it("findNamedTunnel — 있으면 돌려주고 없으면 만들지 않고 null", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(apiResponse([{ id: "tunnel-1", name: "camellia-service-42" }]))
+      .mockResolvedValueOnce(apiResponse([]));
+    const client = new CloudflareClient({ ...options, fetcher });
+
+    await expect(client.findNamedTunnel("42")).resolves.toEqual({
+      id: "tunnel-1",
+      name: "camellia-service-42",
+      endpoint: "tunnel-1.cfargotunnel.com",
+    });
+    await expect(client.findNamedTunnel("43")).resolves.toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    for (const call of fetcher.mock.calls as unknown as Array<[string, RequestInit]>) {
+      expect(call[1].method ?? "GET").toBe("GET");
+    }
+  });
+
   it("Cloudflare API error message와 credential을 노출하지 않는다", async () => {
     const fetcher = vi.fn(async () => new Response(
       JSON.stringify({ success: false, errors: [{ code: 10000, message: options.apiToken }] }),

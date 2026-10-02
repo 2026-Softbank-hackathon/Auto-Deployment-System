@@ -26,7 +26,7 @@
 .pipeline-rail__stop.is-ready .pipeline-rail__note { color: var(--moss-text); }
 .pipeline-rail__koro .koro__body, .pipeline-rail__koro .koro__shine { display: none; }
 
-.zip-uploader { display: flex; flex-direction: column; gap: 10px; }
+.zip-uploader { display: flex; flex-direction: column; gap: 10px; container: zip-uploader / inline-size; }
 .dropzone {
   min-height: 260px; border-radius: var(--radius-card); background: var(--paper-sunken);
   transition: border-color var(--dur-quick), background-color var(--dur-quick);
@@ -47,6 +47,12 @@
 .dropzone__file-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
 .zip-uploader__error { font-size: 14px; color: var(--brick-text); }
 .zip-uploader__error-name { font-family: var(--font-mono); }
+/* 창 너비가 아니라 드롭존 너비로 판단한다. 사이드바가 있는 960px 창에서도 가로 배치면 파일 이름 칸이 100px 정도로 좁아진다. */
+@container zip-uploader (max-width: 720px) {
+  .dropzone--ready { flex-direction: column; align-items: flex-start; padding: 24px 20px; gap: 20px; }
+  .dropzone__file { align-self: stretch; }
+  .dropzone__file-actions { flex-direction: row; align-items: center; flex-wrap: wrap; }
+}
 
 .zip-art { flex-shrink: 0; }
 .zip-art__arrow { fill: none; stroke: var(--brass-deep); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
@@ -242,8 +248,6 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .deploy-card { padding: 24px 20px; }
   .pipeline-rail { --rail-start: 30px; --rail-end: 30px; }
   .pipeline-rail__stop { width: 60px; font-size: 12px; }
-  .dropzone--ready { flex-direction: column; align-items: flex-start; padding: 24px 20px; gap: 20px; }
-  .dropzone__file-actions { flex-direction: row; align-items: center; flex-wrap: wrap; }
   .deploy-card__footer .deploy-keycap { width: 100%; }
   .dashboard-empty { padding: 32px 20px; }
   .deployment-row { padding: 16px; }

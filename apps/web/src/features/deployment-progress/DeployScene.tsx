@@ -45,7 +45,13 @@ export function sceneTarget(profile: string | null): SceneTarget {
   return null;
 }
 
-export function DeployScene({ view, target = null }: { view: DeploymentStatusView; target?: SceneTarget }) {
+/** 코로의 중심 좌표 (viewBox 1200×500 기준). 말풍선을 같은 자리에 띄우는 데도 쓴다. */
+export function koroSpot(view: DeploymentStatusView): readonly [number, number] {
+  return view.outcome === 'failed' ? FALLEN_SPOT : koroSpots[Math.min(view.stage ?? 0, railStageCount)];
+}
+export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const;
+
+export function DeployScene({ view, target = null, idle = null }: { view: DeploymentStatusView; target?: SceneTarget; /** 한 단계에 오래 머물 때의 모습 (일하는 중일 때만 쓴다) */ idle?: { mood: KoroMood; dozing: boolean } | null }) {
   const { t } = useI18n();
   const analyze = gadgetState(0, view);
   const build = gadgetState(1, view);
@@ -56,9 +62,10 @@ export function DeployScene({ view, target = null }: { view: DeploymentStatusVie
   const launched = view.stage !== null;
 
   const fallen = view.outcome === 'failed';
-  const [cx, cy] = fallen ? FALLEN_SPOT : koroSpots[Math.min(view.stage ?? 0, railStageCount)];
-  const mood: KoroMood = fallen ? 'flustered' : view.outcome === 'success' ? 'happy' : view.waiting || view.outcome !== 'active' ? 'sleepy' : 'normal';
+  const [cx, cy] = koroSpot(view);
   const rolling = view.outcome === 'active' && !view.waiting;
+  const mood: KoroMood = fallen ? 'flustered' : view.outcome === 'success' ? 'happy' : !rolling ? 'sleepy' : idle?.mood ?? 'normal';
+  const dozing = rolling && idle?.dozing === true;
   const stageName = view.stage !== null && view.stage < railStageCount ? t.stages[railStages[view.stage]] : '';
   const label = fallen ? t.run.sceneFailed
     : view.outcome === 'success' ? t.run.sceneSucceeded
@@ -153,9 +160,10 @@ export function DeployScene({ view, target = null }: { view: DeploymentStatusVie
     </g>
 
     <g className="scene-koro" style={koroPosition}>
-      <g className={rolling ? 'scene-koro__bob' : undefined}>
+      <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         <Koro mood={mood} size={KORO_SIZE} />
       </g>
+      {dozing && <g className="scene-zzz" aria-hidden="true"><text x={KORO_SIZE - 4} y="4">z</text><text x={KORO_SIZE + 8} y="-10">z</text></g>}
     </g>
   </svg>;
 }

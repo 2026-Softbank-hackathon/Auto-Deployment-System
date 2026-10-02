@@ -178,6 +178,34 @@ function makeHarness(overrides: Partial<{
 }
 
 describe("handleProvision", () => {
+  it.each(["aws", "onprem"] as const)("%s 큐의 문자열 배포 ID를 숫자로 정규화한다", async (targetType) => {
+    const harness = makeHarness({ targetType });
+
+    await handleProvision({ data: { deployment_id: "99" } }, harness.deps);
+
+    expect(harness.getStatus()).toBe(targetType === "onprem" ? "deploying" : "verifying");
+    if (targetType === "onprem") {
+      expect(harness.originActivator.prepareOnpremVerification).toHaveBeenCalledWith({
+        deploymentId: 99,
+        projectId: 12,
+      });
+      const payload = JSON.parse(String(harness.agentJobQueries[0]?.params[4]));
+      expect(payload.deploymentId).toBe(99);
+    } else {
+      expect(harness.boss.send).toHaveBeenCalledWith("verify", expect.objectContaining({
+        deploymentId: 99,
+      }));
+    }
+  });
+
+  it.each(["invalid", "0", "-1", "1.5", "9007199254740992"])("잘못된 큐 배포 ID는 외부 실행 전에 거부한다: %s", async (deploymentId) => {
+    const harness = makeHarness({ targetType: "onprem" });
+    await expect(handleProvision({ data: { deployment_id: deploymentId } }, harness.deps))
+      .rejects.toThrow("DEPLOYMENT_ID_INVALID");
+    expect(harness.pool.query).not.toHaveBeenCalled();
+    expect(harness.originActivator.prepareOnpremVerification).not.toHaveBeenCalled();
+  });
+
   it("On-Prem Agent Job을 공개하기 전에 검증용 DNS를 준비한다", async () => {
     const harness = makeHarness({ targetType: "onprem" });
 

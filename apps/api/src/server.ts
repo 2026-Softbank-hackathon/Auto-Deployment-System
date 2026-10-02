@@ -33,6 +33,7 @@ import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
 import { AgentService } from "./services/agent-service.js";
 import { AuditLogService } from "./services/audit-log-service.js";
+import { OpsService } from "./services/ops-service.js";
 import {
   AgentEcrCredentialService,
   type AwsEcrRegistryFactory,
@@ -40,6 +41,7 @@ import {
 
 import projectsRoutes from "./routes/projects.js";
 import auditLogsRoutes from "./routes/audit-logs.js";
+import opsRoutes from "./routes/ops.js";
 import agentsRoutes from "./routes/agents.js";
 import projectEnvRoutes from "./routes/project-env.js";
 import deploymentsRoutes from "./routes/deployments.js";
@@ -159,6 +161,7 @@ export async function buildServer(opts: BuildServerOptions) {
     : undefined;
   const agentService = new AgentService(opts.pool);
   const auditLogService = new AuditLogService(opts.pool);
+  const opsService = new OpsService(opts.pool);
   const authenticateAgent = opts.agentAuthenticator ??
     ((token: string) => agentService.authenticate(token));
   const sseBroker = fastify.sseBroker;
@@ -316,6 +319,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(auditLogsRoutes, {
       prefix: "/audit-logs",
       auditLogService,
+    });
+
+    v1.register(opsRoutes, {
+      prefix: "/ops",
+      opsService,
     });
 
     v1.register(agentEcrCredentialRoutes, {

@@ -6,6 +6,7 @@ function count(value: unknown): number { return Array.isArray(value) ? value.len
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
 /** 분석 경고 한 건 (packages/analyzer Warning: code · message · path). 문구는 서버가 준 그대로 보여 준다. */
 interface AnalysisWarning { code: string; message: string; path: string | null }
+const RISK_PREFIX = 'ANL-06-';
 function warningsOf(value: unknown): AnalysisWarning[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): AnalysisWarning[] => {
@@ -93,6 +94,10 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
 
   const stack = strings(report?.detectedStack);
   const warnings = warningsOf(report?.warnings);
+  // 운영 위험 진단(ANL-06)만 "위험"으로 묶는다 (API-19-EXT: code 접두어로 구분). 그 밖의 경고(DB 전환 안 함 등)는 참고로 따로 보여 준다.
+  const risks = warnings.filter((warning) => warning.code.startsWith(RISK_PREFIX));
+  const notes = warnings.filter((warning) => !warning.code.startsWith(RISK_PREFIX));
+  const warningList = (list: AnalysisWarning[]) => <ul>{list.map((warning, index) => <li key={`${warning.code}-${warning.path ?? index}`}><span className="analysis-warnings__label">{t.analysis.warningLabels[warning.code] ?? warning.code}</span><span>{t.analysis.warningMessages[warning.code] ?? warning.message}</span>{warning.path && <code>{warning.path}</code>}</li>)}</ul>;
   const services = servicesOf(report?.services);
   const resources = resourcesOf(report?.resources);
   const irResources = ir?.ir && typeof ir.ir === 'object' ? (ir.ir as { resources?: unknown }).resources : null;
@@ -130,7 +135,8 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
           </> : <span>{t.analysis.databaseKept}</span>}
         </div>}
       </li>)}</ul></div>}
-      {warnings.length > 0 && <div className="notice analysis-warnings"><strong>{t.analysis.riskTitle}</strong><ul>{warnings.map((warning, index) => <li key={`${warning.code}-${warning.path ?? index}`}><span className="analysis-warnings__label">{t.analysis.warningLabels[warning.code] ?? warning.code}</span><span>{t.analysis.warningMessages[warning.code] ?? warning.message}</span>{warning.path && <code>{warning.path}</code>}</li>)}</ul></div>}{unresolved.length > 0 && <><p className="muted-copy">{t.analysis.unresolved(unresolved.length)}</p><details className="technical-details"><summary>{t.analysis.unresolvedList}</summary><ul className="analysis-lines">{unresolved.map((line, index) => <li key={index}>{line}</li>)}</ul></details></>}</>}
+      {risks.length > 0 && <div className="notice analysis-warnings"><strong>{t.analysis.riskTitle}</strong>{warningList(risks)}</div>}
+      {notes.length > 0 && <div className="notice analysis-warnings"><strong>{t.analysis.noteTitle}</strong>{warningList(notes)}</div>}{unresolved.length > 0 && <><p className="muted-copy">{t.analysis.unresolved(unresolved.length)}</p><details className="technical-details"><summary>{t.analysis.unresolvedList}</summary><ul className="analysis-lines">{unresolved.map((line, index) => <li key={index}>{line}</li>)}</ul></details></>}</>}
     {aiUsage && aiUsage.totalTokenIn + aiUsage.totalTokenOut > 0 && <p className="muted-copy analysis-ai-usage">{t.analysis.aiUsage(aiUsage.totalTokenIn.toLocaleString(t.locale), aiUsage.totalTokenOut.toLocaleString(t.locale), aiUsage.totalCostUsd.toFixed(4))}</p>}
     <details className="technical-details"><summary>{t.analysis.irToggle}</summary>{ir ? <pre>{printable(ir.ir)}</pre> : <p>{finished ? t.analysis.irNone : t.analysis.irPending}</p>}</details>
   </section>;

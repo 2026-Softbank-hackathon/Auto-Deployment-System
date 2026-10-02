@@ -27,12 +27,12 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
   const { t } = useI18n();
   const cacheKey = `project-deployments:${projectId}`;
   // 직전에 받은 배포 내역이 있으면 먼저 보여 주고, 바로 다시 읽는다.
-  const [state, setState] = useState<{ items: ProjectDeploymentSummary[]; loadedAt: number } | { error: unknown } | null>(() => readCache<{ items: ProjectDeploymentSummary[]; loadedAt: number }>(cacheKey) ?? null);
+  const [state, setState] = useState<{ items: ProjectDeploymentSummary[]; loadedAt: number; more?: boolean } | { error: unknown } | null>(() => readCache<{ items: ProjectDeploymentSummary[]; loadedAt: number; more?: boolean }>(cacheKey) ?? null);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let active = true;
     listProjectDeployments(projectId, { limit: DEPLOYMENTS_SHOWN }).then(
-      (page) => { const next = { items: page.items, loadedAt: Date.now() }; writeCache(cacheKey, next); if (active) setState(next); },
+      (page) => { const next = { items: page.items, loadedAt: Date.now(), more: page.nextCursor !== null }; writeCache(cacheKey, next); if (active) setState(next); },
       (error) => { if (active) setState({ error }); },
     );
     return () => { active = false; };
@@ -41,8 +41,12 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
   if (state === null) return <p className="dashboard-status" role="status">{t.dashboard.loading}</p>;
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
-  return <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
-    searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} projectId={projectId} />;
+  return <>
+    <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
+      searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} projectId={projectId} />
+    {/* 서버에 더 오래된 배포가 남아 있으면(nextCursor) 숨기지 않고 알린다 */}
+    {state.more && <p className="dashboard-status">{t.projects.olderHidden(DEPLOYMENTS_SHOWN)}</p>}
+  </>;
 }
 
 /**

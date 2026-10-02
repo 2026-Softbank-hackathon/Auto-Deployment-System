@@ -147,6 +147,7 @@ export const ko = {
     loading: '프로젝트를 불러오고 있어요…',
     loadError: '프로젝트를 불러오지 못했어요.',
     neverDeployed: '아직 배포하지 않았어요',
+    olderHidden: (shown: number) => `최근 ${shown}건만 보여 줘요. 더 오래된 배포는 이 목록에 나오지 않아요.`,
     deploy: '이 프로젝트로 배포',
     searchPlaceholder: '배포 번호, 주소',
     notFound: '프로젝트를 찾지 못했어요.',
@@ -539,7 +540,8 @@ export const ko = {
     count: (n: number) => `${n}개`,
     cases: (n: number) => `${n}건`,
     riskTitle: '운영 위험을 확인했어요.',
-    warningLabels: { 'ANL-06-HARDCODED-SECRET': '코드에 들어간 시크릿 의심', 'ANL-06-DOCKER-ROOT': 'root로 실행되는 컨테이너', 'ANL-06-SQLITE': 'SQLite 사용', 'ANL-06-SQLITE-FILE': 'SQLite 파일', 'PAT-02-SKIPPED': 'DB 전환 안 함' } as Record<string, string>,
+    noteTitle: '참고할 점이 있어요.',
+    warningLabels: { 'ANL-06-HARDCODED-SECRET': '코드에 들어간 시크릿 의심', 'ANL-06-DOCKER-ROOT': 'root로 실행되는 컨테이너', 'ANL-06-SQLITE': 'SQLite 사용', 'ANL-06-SQLITE-FILE': 'SQLite 파일', 'PAT-02-SKIPPED': 'DB 전환 안 함', 'ANL-PKG-PARSE': 'package.json을 읽지 못함' } as Record<string, string>,
     /** 경고 설명 — 비어 있으면 분석기가 쓴 설명(한국어)을 그대로 쓴다. 다른 언어 사전은 코드별로 채운다 (#147) */
     warningMessages: {} as Record<string, string>,
     databaseMove: 'SQLite에서 옮기는 DB',

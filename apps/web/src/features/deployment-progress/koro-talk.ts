@@ -1,5 +1,6 @@
 import type { KoroMood } from '../../components/ui/Koro';
 import type { Messages } from '../../i18n/ko';
+import type { SoundName } from '../sound/sound-engine';
 import type { SceneTarget } from './DeployScene';
 import type { DeployStory } from './deploy-story';
 
@@ -70,4 +71,20 @@ export function koroIdle(stepSeconds: number): KoroIdle {
   if (beat < 5) return { mood: 'yawn', dozing: false };
   if (beat < 30) return { mood: 'sleepy', dozing: true };
   return { mood: 'curious', dozing: false };
+}
+
+/**
+ * 코로가 새 일을 시작할 때 낼 효과음. 단계와 여정(배포할 곳 · 재사용 · 환경 전환)에 맞춘다.
+ * 반복해서 울리지 않는다 — 단계가 바뀌는 순간에 한 번만 낸다.
+ */
+export function sceneCue(stage: number | null, target: SceneTarget, story: DeployStory | null): SoundName | null {
+  const moving = story !== null && story.kind === 'switch' && story.reused;
+  switch (stage) {
+    case 0: return 'scan';
+    case 1: return moving ? null : story?.reused ? 'warehouse' : 'hammer';
+    case 2: return 'wrench';
+    case 3: return target === 'onprem' ? (moving ? 'parachute' : 'roll') : 'takeoff';
+    case 4: return 'check';
+    default: return null;
+  }
 }

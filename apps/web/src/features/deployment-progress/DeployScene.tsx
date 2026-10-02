@@ -20,6 +20,9 @@ import { KoroHat, KoroProp } from './KoroProp';
  *     이 배포가 성공하면 표지가 새 집으로 옮겨 가고 옛 집은 불이 꺼진다.
  *   - 환경 전환이면 두 도착점(구름 · 서버 옆)을 함께 그린다.
  *   - 전에 만든 이미지를 재사용하면 집을 짓지 않고 창고(이미지 저장소)에서 꺼낸다.
+ *   - 환경 전환(이미지 재사용)은 창고를 거치지 않고, 지금 환경에 있는 집과 같은 집이 다른 환경으로 건너간다:
+ *     AWS → 온프레미스는 구름에서 낙하산으로 내려오고, 온프레미스 → AWS는 서버 옆에서 비행기에 실려 올라간다.
+ *     (실제로는 같은 이미지를 저장소에서 받아 새 환경에 띄운다. 옛 환경의 집은 성공할 때까지 그대로 서비스한다.)
  *   - 집마다 이미지 이름표(그 이미지를 만든 배포 번호)가 붙는다. 같은 이름표 = 같은 이미지.
  * 코로와 집의 위치는 백엔드 status에서 나온 단계(view.stage)로만 정한다. 단계 사이를 추정해서 움직이지 않는다.
  */
@@ -63,10 +66,22 @@ function houseSpot(stage: number, onGround: boolean): Spot {
 }
 
 /** 코로의 중심 좌표 (viewBox 1200×500 기준). 생각 풍선을 같은 자리에 띄우는 데도 쓴다. */
-export function koroSpot(view: DeploymentStatusView, target: SceneTarget): Spot {
+export function koroSpot(view: DeploymentStatusView, target: SceneTarget, story: DeployStory | null = null): Spot {
   if (view.stage === null) return STOPPED_SPOT;
-  return (target === 'onprem' ? groundSpots : skySpots)[Math.min(view.stage, railStageCount)];
+  const stage = Math.min(view.stage, railStageCount);
+  if (isMoving(story)) {
+    // 환경 전환: 집을 짓지 않으니 짓는 곳에 서지 않는다. 온프레미스로 내려올 때는 집터 옆에서 기다린다.
+    if (stage === 1) return groundSpots[2];
+    if (target === 'onprem' && stage >= 2) return groundSpots[4];
+  }
+  return (target === 'onprem' ? groundSpots : skySpots)[stage];
 }
+/** 환경 전환이면서 이미지를 재사용하는 배포 — 집이 지금 환경에서 다른 환경으로 건너간다 */
+function isMoving(story: DeployStory | null): boolean {
+  return story !== null && story.kind === 'switch' && story.reused && story.prev !== null;
+}
+/** 낙하산으로 내려오는 중인 집의 바닥 중심 */
+const PARACHUTE_AIR: Spot = [1035, 310];
 export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const;
 /** 장면이 보여 주는 세로 범위. 온프레미스 여정은 땅에서만 일어나므로 빈 하늘을 잘라 낸다. */
 export function sceneBox(target: SceneTarget, story: DeployStory | null = null): { top: number; height: number } {
@@ -133,7 +148,10 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const showCloud = !onGround || (prev !== null && !prevOnGround);
   const showLot = onGround || (prev !== null && prevOnGround);
   const oldSlot = prevOnGround ? LOT_OLD_SLOT : CLOUD_OLD_SLOT;
-  const house = houseSpot(stage ?? 0, onGround);
+  // 환경 전환: 집은 옛 환경의 집 자리에서 출발한다(배포 단계 전에는 옛 집에 겹쳐 있으므로 숨긴다).
+  const moving = isMoving(story) && reached(1);
+  const parachuting = moving && onGround && stage === 3;
+  const house: Spot = moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround);
   const arrived = reached(4);
 
   const stageName = stage !== null && stage < railStageCount ? t.stages[railStages[stage]] : '';
@@ -141,10 +159,10 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     : succeeded ? t.run.sceneSucceeded
       : view.outcome !== 'active' ? t.run.sceneStopped
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
-          : (stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
+          : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
   const fullLabel = prev && !succeeded ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
 
-  const [cx, cy] = koroSpot(view, target);
+  const [cx, cy] = koroSpot(view, target, story);
 
   const box = sceneBox(target, story);
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
@@ -201,7 +219,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     {/* 1 · 집 짓는 곳 — 터와 비계 */}
     <rect className="jr-pad is-ready" x="476" y={GROUND - 6} width="88" height="6" rx="2" />
     {/* 이미지를 재사용하는 배포: 집을 짓지 않고 창고(이미지 저장소)에서 꺼낸다 */}
-    {reused && <g className="jr-warehouse">
+    {reused && !moving && <g className="jr-warehouse">
       <path className="jr-paper" d={`M446 ${GROUND} V352 Q520 318 594 352 V${GROUND} Z`} />
       <rect className="jr-warehouse__door" x="476" y="368" width="88" height="72" rx="3" />
       <text className="jr-sign jr-sign--small" x="520" y="312" textAnchor="middle">REGISTRY</text>
@@ -223,7 +241,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <circle className="jr-wheel" cx="-40" cy="-5" r="6" /><circle className="jr-wheel" cx="50" cy="-5" r="6" />
       <path className="jr-plane__prop" d="M116 -66 V-12" />
     </g>}
-    {onGround && <g className={`jr-cart ${stage === 2 || stage === 3 ? 'is-shown' : ''}`} style={place(stage !== null && stage >= 4 ? LOT_SLOT : stage === 3 ? [880, GROUND] : [745, GROUND])}>
+    {onGround && !moving && <g className={`jr-cart ${stage === 2 || stage === 3 ? 'is-shown' : ''}`} style={place(stage !== null && stage >= 4 ? LOT_SLOT : stage === 3 ? [880, GROUND] : [745, GROUND])}>
       <path className="jr-line jr-line--thick" d="M-48 -14 L-64 -42" />
       <rect className="jr-paper" x="-50" y="-18" width="100" height="9" rx="3" />
       <circle className="jr-wheel" cx="-30" cy="-7" r="7" />
@@ -231,7 +249,11 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 집 = 컨테이너 이미지. 한 번 지은 집이 그대로 배포할 곳까지 간다 */}
-    <g className="jr-house" style={place(house)}>
+    <g className={`jr-house ${moving && stage !== null && stage <= 2 ? 'is-hidden' : ''}`} style={place(house)}>
+      {parachuting && <g className="jr-parachute">
+        <path className="jr-line" d="M-58 -152 L-44 -80 M58 -152 L44 -80 M0 -176 V-108" />
+        <path className="jr-parachute__canopy" d="M-62 -150 Q0 -232 62 -150 Q31 -166 0 -150 Q-31 -166 -62 -150 Z" />
+      </g>}
       <House floors={floors} roofed={roofed} windows={arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
     </g>
 
@@ -244,7 +266,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     <g className="scene-koro" style={place([cx - KORO_SIZE / 2, cy - KORO_SIZE / 2])}>
       <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         {/* 팔과 도구는 몸 뒤에, 안전모는 몸 앞에 그린다. 일하는 중이 아니거나 조는 동안에는 팔만 내린다 */}
-        <KoroProp stage={succeeded ? 5 : rolling && !dozing ? stage : null} target={target} carrying={reused} />
+        <KoroProp stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : stage} target={parachuting ? 'aws' : target} carrying={reused && !moving} />
         <Koro mood={mood} size={KORO_SIZE} />
         {rolling && !dozing && ((stage === 1 && !reused) || stage === 2) && <KoroHat />}
       </g>

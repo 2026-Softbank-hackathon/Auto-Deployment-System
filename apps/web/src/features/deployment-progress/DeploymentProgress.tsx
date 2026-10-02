@@ -12,7 +12,7 @@ import { deploymentStatusView, railStages, type DeploymentStatusView } from '../
 import { useSound } from '../sound/SoundProvider';
 import { DeployScene, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom } from './deploy-story';
-import { koroIdle, koroLine, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
+import { koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
@@ -257,7 +257,20 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const target = sceneTarget(text(status?.targetProfile));
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
-  const [koroX, koroY] = koroSpot(view, target);
+  const [koroX, koroY] = koroSpot(view, target, story);
+  // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
+  // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
+  const cue = rolling ? sceneCue(view.stage, target, story) : null;
+  const cueSeen = useRef(false);
+  useEffect(() => {
+    if (!cueSeen.current) { cueSeen.current = true; return; }
+    if (!cue) return;
+    const timer = window.setTimeout(() => playRef.current(cue), 450);
+    return () => window.clearTimeout(timer);
+  }, [cue]);
+  // 빌드 중 집의 층이 올라갈 때마다 (장면의 층수 계산과 같은 박자: 8초마다, 3층까지)
+  const risingFloor = rolling && view.stage === 1 && !story?.reused ? Math.min(2, Math.floor(stepSeconds / 8)) : 0;
+  useEffect(() => { if (risingFloor > 0) playRef.current('floor'); }, [risingFloor]);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
   const failure = failureKind(failureMessage);

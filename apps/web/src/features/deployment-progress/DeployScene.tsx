@@ -45,12 +45,20 @@ export function sceneTarget(profile: string | null): SceneTarget {
 }
 
 type Spot = readonly [number, number];
-/** 비행기의 바닥 중심 좌표: 조립하는 곳(땅) → 날아가는 중(하늘). 집과 코로는 비행기 등(PLANE_TOP 높이)에 탄다 */
+/**
+ * 비행기의 바닥 중심 좌표: 조립하는 곳(땅) → 날아가는 중(하늘). 집과 코로는 비행기 등(PLANE_TOP 높이)에 탄다.
+ * 날아가는 자리는 구름에서 떨어진 길 중간이다 — 배포 단계 내내 여기 머무르므로, 코로의 생각 풍선이 구름 위의 집(서비스 중인 버전)을 가리지 않게 한다.
+ */
 const PLANE_GROUND: Spot = [800, GROUND];
-const PLANE_AIR: Spot = [900, 340];
+const PLANE_AIR: Spot = [640, 295];
+/** 환경 전환(온프레미스 → AWS)은 장면을 탈것 준비하는 곳부터 잘라 보여 주고 구름 위에 서비스 중인 집도 없으므로, 구름 가까이에서 난다 */
+const PLANE_AIR_MOVING: Spot = [900, 340];
 const PLANE_TOP = 64;
+function planeAir(moving: boolean): Spot { return moving ? PLANE_AIR_MOVING : PLANE_AIR; }
+/** 비행기 등에 탄 코로의 중심 좌표 */
+function koroOnPlane(moving: boolean): Spot { const [x, y] = planeAir(moving); return [x + 55, y - PLANE_TOP - KORO_SIZE / 2]; }
 /** 단계별 코로 중심 좌표 (0 설계도 · 1 집 짓는 곳 · 2 탈것 준비 · 3 이동 중 · 4 도착 · 5 완료) */
-const skySpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [640, KORO_Y], [PLANE_AIR[0] + 55, PLANE_AIR[1] - PLANE_TOP - KORO_SIZE / 2], [950, 114], [950, 114]];
+const skySpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [640, KORO_Y], koroOnPlane(false), [950, 114], [950, 114]];
 // 온프레미스: 집을 지은 뒤에는 에이전트 로봇이 알아서 옮긴다. 코로는 집 짓는 곳에서 넘겨주고 지켜보다가, 검증 때 서버 옆으로 간다.
 const groundSpots: readonly Spot[] = [[285, KORO_Y], [415, KORO_Y], [415, KORO_Y], [415, KORO_Y], [880, KORO_Y], [880, KORO_Y]];
 /** 에이전트 로봇의 바닥 중심: 서버 옆 대기 자리 → 집 옆(넘겨받기) → 집을 이고 가는 중 */
@@ -69,9 +77,9 @@ const STOPPED_SPOT: Spot = [600, KORO_Y];
 
 /** 단계별 집의 바닥 중심 좌표 (짓는 곳 → 이동 중 → 도착) */
 const HOUSE_SITE: Spot = [520, GROUND];
-function houseSpot(stage: number, onGround: boolean): Spot {
+function houseSpot(stage: number, onGround: boolean, moving: boolean): Spot {
   if (stage <= 2) return HOUSE_SITE;
-  if (stage === 3) return onGround ? [ROBOT_CARRY[0], GROUND - ROBOT_TOP] : [PLANE_AIR[0] - 38, PLANE_AIR[1] - PLANE_TOP];
+  if (stage === 3) return onGround ? [ROBOT_CARRY[0], GROUND - ROBOT_TOP] : [planeAir(moving)[0] - 38, planeAir(moving)[1] - PLANE_TOP];
   return onGround ? LOT_SLOT : CLOUD_SLOT;
 }
 
@@ -83,6 +91,7 @@ export function koroSpot(view: DeploymentStatusView, target: SceneTarget, story:
     // 환경 전환: 집을 짓지 않으니 짓는 곳에 서지 않는다. 온프레미스로 내려올 때는 집터 옆에서 기다린다.
     if (stage === 1) return [640, KORO_Y];
     if (target === 'onprem' && stage >= 2) return groundSpots[4];
+    if (stage === 3) return koroOnPlane(true);
   }
   return (target === 'onprem' ? groundSpots : skySpots)[stage];
 }
@@ -180,7 +189,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   // 환경 전환: 집은 옛 환경의 집 자리에서 출발한다(배포 단계 전에는 옛 집에 겹쳐 있으므로 숨긴다).
   const moving = isMoving(story) && reached(1);
   const parachuting = moving && onGround && stage === 3;
-  const house: Spot = moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround);
+  const house: Spot = moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround, moving);
 
   const stageName = stage !== null && stage < railStageCount ? t.stages[railStages[stage]] : '';
   const label = view.outcome === 'failed' ? t.run.sceneFailed
@@ -262,7 +271,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
 
     {/* 2 · 탈것 준비 — AWS: 조립하는 비행기 */}
     {!onGround && <g className={`jr-plane ${stage === 2 || stage === 3 ? 'is-shown' : ''} ${working(2) ? 'is-building' : ''} ${stage === 3 ? 'is-flying' : ''}`}
-      style={place(stage !== null && stage >= 4 ? [1320, 240] : stage === 3 ? PLANE_AIR : PLANE_GROUND)}>
+      style={place(stage !== null && stage >= 4 ? [1320, 240] : stage === 3 ? planeAir(moving) : PLANE_GROUND)}>
       {stage === 3 && <path className="jr-plane__wind" d="M-150 -52 H-118 M-164 -36 H-124 M-150 -20 H-118" />}
       <path className="jr-plane__tail" d="M-100 -60 L-122 -96 H-92 L-70 -64 Z" />
       <path className="jr-plane__body" d={`M-104 -${PLANE_TOP} H78 Q112 -${PLANE_TOP} 112 -39 Q112 -14 78 -14 H-70 Q-104 -14 -104 -${PLANE_TOP} Z`} />

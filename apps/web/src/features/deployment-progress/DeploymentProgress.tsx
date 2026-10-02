@@ -266,6 +266,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
   const box = sceneBox(target, story);
   const [koroX, koroY] = koroSpot(view, target, story);
+  // 환경 전환(AWS → 온프레미스)의 배포 단계: 코로 오른쪽 위로 집이 낙하산을 타고 내려오므로 풍선은 왼쪽으로 펼친다.
+  const parachuting = target === 'onprem' && view.stage === 3 && story?.kind === 'switch' && story.reused && story.prev !== null;
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
   // 빌드 단계는 "이미지 재사용" 로그가 바로 뒤따라올 수 있어서, 잠깐 기다렸다가 그때의 장면에 맞는 소리를 낸다.
   const cue = rolling ? sceneCue(view.stage, target, story) : null;
@@ -370,9 +372,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
           <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
-              풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
+              풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
-          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''}`}
+          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 || parachuting ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''}`}
             style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>

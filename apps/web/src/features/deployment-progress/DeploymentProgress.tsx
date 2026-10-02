@@ -78,7 +78,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function StageChips({ view }: { view: DeploymentStatusView }) {
+function StageChips({ view, currentElapsed }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null }) {
   const { t } = useI18n();
   return <ol className="stage-chips" aria-label={t.run.chipsLabel}>
     {railStages.map((stage, index) => {
@@ -90,7 +90,7 @@ function StageChips({ view }: { view: DeploymentStatusView }) {
       return <li key={stage} className={`stage-chip is-${state}`} aria-current={current ? 'step' : undefined}>
         <GadgetIcon kind={stage} size={18} />
         <span>{t.stages[stage]}</span>
-        {note && <span className="stage-chip__note">{done ? `✓ ${note}` : note}</span>}
+        {note && <span className="stage-chip__note">{done ? `✓ ${note}` : current && currentElapsed && !view.waiting ? `${note} ${currentElapsed}` : note}</span>}
       </li>;
     })}
   </ol>;
@@ -219,6 +219,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const finishedAt = text(status?.succeededAt) ?? text(status?.failedAt);
   const elapsedText = createdAt ? elapsed(createdAt, finishedAt ? Date.parse(finishedAt) : now) : null;
   const title = view.outcome === 'active' ? t.run.titleActive : view.outcome === 'success' ? t.run.titleSucceeded : view.outcome === 'failed' ? t.run.titleFailed : t.run.titleStopped;
+  // 서버가 준 현재 단계의 시작 시각. 단계 칩에 "그 단계에서 흐른 시간"을 보여 주는 데 쓴다(없으면 표시하지 않는다).
+  const currentStep = status?.currentStep && typeof status.currentStep === 'object' ? status.currentStep as { startedAt?: unknown } : null;
+  const stepStartedAt = text(currentStep?.startedAt);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
   const failure = failureKind(failureMessage);
@@ -282,7 +285,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </p>
       </div>
 
-      <StageChips view={view} />
+      <StageChips view={view} currentElapsed={stepStartedAt && view.outcome === 'active' ? elapsed(stepStartedAt, now) : null} />
 
       {error && <div className="notice error" role="alert"><strong>{t.progress.statusError}</strong><br />{errorMessage(error.cause, t, t.errors[error.fallback])}</div>}
 
@@ -305,6 +308,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className="run-scene"><DeployScene view={view} /></figure>
+
+        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 가장 최근 로그 한 줄(시각은 뗀다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
+        {view.outcome === 'active' && !view.waiting && latestLine && <p className="run-now" aria-live="polite"><span>{t.run.nowLabel}</span><code>{latestLine.replace(/^\[[^\]]+\]\s*/, '')}</code></p>}
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 

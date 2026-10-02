@@ -621,3 +621,34 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
     100% { opacity: 0; transform: translate(calc(var(--x) * 1.15), calc(var(--y) + 260px)) rotate(var(--spin)); }
   }
 }
+
+/* ── 장면: 빌드 · 인프라 준비 · 배포를 장치 하나씩으로 ─────────── */
+.scene-spiral ellipse { fill: none; stroke: var(--line); stroke-width: 6; stroke-linecap: round; transition: stroke var(--dur-scene) var(--ease-roll); }
+.scene-spiral.is-current ellipse { stroke: var(--koro); }
+.scene-spiral.is-done ellipse { stroke: var(--brass); }
+.scene-springboard line, .scene-springboard path { fill: none; stroke: var(--pebble); stroke-width: 3; stroke-linecap: round; transition: stroke var(--dur-roll); }
+.scene-springboard__bed { stroke-width: 5; }
+.scene-springboard.is-current line, .scene-springboard.is-current path { stroke: var(--koro); }
+.scene-springboard.is-done line, .scene-springboard.is-done path { stroke: var(--brass); }
+@media (prefers-reduced-motion: no-preference) {
+  /* 일하는 중인 장치의 움직임. 진행률이 아니라 "지금 여기서 일하고 있다"는 표시다. */
+  .scene-funnel.is-working .scene-funnel__level { animation: funnel-fill 1.4s ease-in-out infinite; }
+  .scene-funnel.is-working .scene-funnel__level + .scene-funnel__level { animation-delay: .35s; }
+  .scene-spiral.is-working ellipse { stroke-dasharray: 26 14; animation: spiral-run 1.6s linear infinite; }
+  .scene-spiral.is-working ellipse:nth-child(2) { animation-duration: 1.2s; animation-direction: reverse; }
+  .scene-spiral.is-working ellipse:nth-child(3) { animation-duration: .9s; }
+  .scene-springboard.is-working .scene-springboard__bed { animation: spring-bounce 1s ease-in-out infinite; }
+  .scene-scale.is-working { transform-origin: 1060px 392px; animation: scale-tilt 1.8s ease-in-out infinite; }
+  @keyframes funnel-fill { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  @keyframes spiral-run { to { stroke-dashoffset: -40; } }
+  @keyframes spring-bounce { 0%, 100% { d: path("M862 396 Q910 418 958 396"); } 50% { d: path("M862 396 Q910 404 958 396"); } }
+  @keyframes scale-tilt { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-1.6deg); } 75% { transform: rotate(1.6deg); } }
+}
+@media (max-width: 760px) {
+  .pipeline-rail__stop { width: 44px; font-size: 11px; }
+}
+
+/* 지금 서버가 하는 일 한 줄 */
+.run-now { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
+.run-now span { flex-shrink: 0; padding: 2px 8px; font-weight: 700; color: var(--koro-text); border: 1.5px solid var(--koro); border-radius: var(--radius-tape); }
+.run-now code { min-width: 0; font-family: var(--font-mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

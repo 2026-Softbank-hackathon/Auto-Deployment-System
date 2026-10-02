@@ -5,6 +5,7 @@
  *   GET  /projects/:id              → 200 Project
  *   GET  /projects/:id/deployments  → 200 ProjectDeploymentList (최신순 · 커서)
  *   DELETE /projects/:id            → 202 DeleteProjectResponse (리소스 정리를 시작, #247)
+ *   PATCH /projects/:id/subdomain   → 202 Project (주소 변경 작업 시작, #301) · 200 Project (서비스 중인 배포가 없어 바로 바꿈)
  */
 
 import { z } from "zod";
@@ -39,6 +40,14 @@ export const ListProjectDeploymentsQuerySchema = z.object({
   status: z.string().min(1).optional(),
 });
 export type ListProjectDeploymentsQuery = z.input<typeof ListProjectDeploymentsQuerySchema>;
+
+/** PATCH /projects/:id/subdomain — 앱 주소 변경 (#301) */
+export const UpdateProjectSubdomainBodySchema = z
+  .object({
+    subdomain: SubdomainSchema,
+  })
+  .strict();
+export type UpdateProjectSubdomainBody = z.input<typeof UpdateProjectSubdomainBodySchema>;
 
 // ── 응답 ──────────────────────────────────────────────────────────────────────
 
@@ -99,6 +108,27 @@ export const ProjectDeletionSchema = z
   .strict();
 export type ProjectDeletion = z.infer<typeof ProjectDeletionSchema>;
 
+/** 앱 주소 변경 진행 상태 (#301) — changing 인 동안 배포 · 앱 삭제를 막는다 */
+export const PROJECT_ADDRESS_CHANGE_STATUSES = ["changing", "succeeded", "failed"] as const;
+export const ProjectAddressChangeStatusSchema = z.enum(PROJECT_ADDRESS_CHANGE_STATUSES);
+export type ProjectAddressChangeStatus = z.infer<typeof ProjectAddressChangeStatusSchema>;
+
+export const ProjectAddressChangeSchema = z
+  .object({
+    status: ProjectAddressChangeStatusSchema,
+    /** 바꾸기 전 subdomain */
+    from: z.string(),
+    /** 바꾸려는 subdomain — 성공하면 Project.subdomain 과 같다 */
+    to: z.string(),
+    requestedAt: IsoDateTimeSchema,
+    /** 끝난 시각. 진행 중이면 null */
+    finishedAt: IsoDateTimeSchema.nullable(),
+    /** status=failed 일 때 실패 이유 (오류 코드 + 상세). 나머지는 null */
+    error: z.string().nullable(),
+  })
+  .strict();
+export type ProjectAddressChange = z.infer<typeof ProjectAddressChangeSchema>;
+
 export const ProjectSchema = z
   .object({
     id: IdStringSchema,
@@ -113,6 +143,8 @@ export const ProjectSchema = z
     subdomain: z.string(),
     /** 앱 공개 주소 https://{subdomain}.{플랫폼 도메인}. 서버에 플랫폼 도메인 설정이 없으면 null */
     publicUrl: z.string().nullable(),
+    /** 마지막 주소 변경 (#301). 바꾼 적이 없으면 null */
+    addressChange: ProjectAddressChangeSchema.nullable(),
     /** 지금 서비스 중인 배포 (POST /projects 응답은 항상 null) */
     live: ProjectLiveDeploymentSchema.nullable(),
     /** 가장 최근 배포 (POST /projects 응답은 항상 null) */

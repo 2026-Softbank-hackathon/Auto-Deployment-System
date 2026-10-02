@@ -84,7 +84,7 @@ describe("POST /projects — 앱 주소 (#300)", () => {
   });
 
   it("다른 앱이 쓰는 주소면 409 SUBDOMAIN_TAKEN", async () => {
-    pool.on(/FROM projects WHERE lower\(subdomain\)/, () => ({ rows: [{ id: 1 }] }));
+    pool.on(/lower\(subdomain\) = \$1/, () => ({ rows: [{ id: 1 }] }));
     pool.on(/INSERT INTO projects/, () => ({ rows: [projectRow(7, "shop")] }));
 
     const res = await server.inject({ method: "POST", url: "/api/v1/projects", payload: { name: "x", subdomain: "shop" } });
@@ -130,7 +130,7 @@ describe("GET /projects/subdomain-availability (#300)", () => {
   });
 
   it("다른 앱이 쓰는 주소는 taken", async () => {
-    pool.on(/FROM projects WHERE lower\(subdomain\)/, (params) => ({ rows: params[0] === "shop" ? [{ id: 1 }] : [] }));
+    pool.on(/lower\(subdomain\) = \$1/, (params) => ({ rows: params[0] === "shop" ? [{ id: 1 }] : [] }));
     expect(await check("shop")).toEqual({ name: "shop", available: false, reason: "taken" });
   });
 

@@ -162,6 +162,20 @@ export class CloudflareClient {
     return { previousServiceUrl };
   }
 
+  /** hostname 의 ingress 규칙이 가리키는 service. 규칙이 없으면 null (주소 변경, #301) */
+  async getTunnelOrigin(input: {
+    tunnelId: string;
+    hostname: string;
+  }): Promise<string | null> {
+    const tunnelId = requireValue(input.tunnelId, "tunnelId");
+    const hostname = normalizeDomain(input.hostname);
+    const current = await this.request<{
+      config?: { ingress?: Array<Record<string, unknown>> };
+    }>(`/accounts/${encodeURIComponent(this.accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`);
+    const rule = (current.config?.ingress ?? []).find((candidate) => candidate.hostname === hostname);
+    return typeof rule?.service === "string" ? rule.service : null;
+  }
+
   /**
    * hostname 의 ingress 규칙을 지운다. expectedServiceUrl 을 주면 현재 origin 이 같을 때만 지운다(롤백용).
    * 생략하면 origin 과 상관없이 지운다 (앱 삭제, #247).

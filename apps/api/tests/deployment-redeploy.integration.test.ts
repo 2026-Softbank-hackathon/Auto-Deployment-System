@@ -25,7 +25,7 @@ describe.skipIf(!databaseUrl)("DeploymentService.redeploy: isolated PostgreSQL",
     admin = new Pool({ connectionString: databaseUrl });
     await admin.query(`CREATE SCHEMA ${schema}`);
     pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}` });
-    for (const file of ["001_initial.sql", "004_secrets_environments.sql", "006_deployment_environments.sql", "007_build_artifacts.sql", "015_project_deletion.sql", "019_deploy_mode.sql"]) {
+    for (const file of ["001_initial.sql", "004_secrets_environments.sql", "006_deployment_environments.sql", "007_build_artifacts.sql", "015_project_deletion.sql", "019_deploy_mode.sql", "022_project_subdomain.sql", "023_project_address_change.sql"]) {
       await pool.query(await readFile(new URL(`../../../packages/db/migrations/${file}`, import.meta.url), "utf8"));
     }
     // 공용 환경(project_id NULL)은 별도 PR 에서 허용된다 — 여기서는 미리 풀어 둔다.

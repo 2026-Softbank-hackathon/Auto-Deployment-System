@@ -2,7 +2,8 @@
  * apps/api/src/routes/projects.ts
  * POST /projects, GET /projects, GET /projects/:id, GET /projects/:id/deployments,
  * DELETE /projects/:id (앱 삭제 — 리소스 정리를 시작, #247),
- * GET /projects/subdomain-availability (앱 주소 확인, #300)
+ * GET /projects/subdomain-availability (앱 주소 확인, #300),
+ * PATCH /projects/:id/subdomain (앱 주소 변경, #301)
  */
 
 import { type FastifyPluginAsync } from "fastify";
@@ -12,6 +13,7 @@ import {
   ListProjectDeploymentsQuerySchema as ListDeploymentsQuerySchema,
   ListProjectsQuerySchema,
   SubdomainAvailabilityQuerySchema,
+  UpdateProjectSubdomainBodySchema,
 } from "@camellia/contracts";
 import { ProjectService } from "../services/project-service.js";
 import { toJsonSchema } from "../plugins/swagger.js";
@@ -74,6 +76,21 @@ const projectsRoutes: FastifyPluginAsync<{ projectService: ProjectService }> = a
     const { id } = ProjectIdParamsSchema.parse(request.params);
     const result = await svc.requestDeletion(id);
     return reply.status(202).send(result);
+  });
+
+  // PATCH /projects/:id/subdomain — 202 주소 변경 작업 시작 · 200 바로 바꿈 (#301)
+  fastify.patch("/:id/subdomain", {
+    schema: {
+      tags: ["projects"],
+      summary: "앱 주소 변경 (새 주소 연결 · 검증 뒤 전환)",
+      params: toJsonSchema(ProjectIdParamsSchema),
+      body: toJsonSchema(UpdateProjectSubdomainBodySchema),
+    },
+  }, async (request, reply) => {
+    const { id } = ProjectIdParamsSchema.parse(request.params);
+    const { subdomain } = UpdateProjectSubdomainBodySchema.parse(request.body);
+    const result = await svc.requestSubdomainChange(id, subdomain);
+    return reply.status(result.accepted ? 202 : 200).send(result.project);
   });
 
   // GET /projects/:id/deployments — 배포 이력 (LOG-01 / API-22)

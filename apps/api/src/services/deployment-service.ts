@@ -21,6 +21,7 @@ import type {
 import { projectSubdomain, servicePublicUrl } from "@camellia/contracts";
 import { ApiError } from "../plugins/error-handler.js";
 import { resolveProfile } from "./profile-resolver.js";
+import { ADDRESS_CHANGE_ACTIVE_SQL, addressChangeInProgressError } from "./project-service.js";
 
 export interface DeploymentRow {
   id: number;
@@ -94,6 +95,21 @@ export function deploymentToDto(
   };
 }
 
+/**
+ * 주소 변경 중(#301)에는 배포를 만들지 않는다. 배포 row 를 넣는 트랜잭션에서 프로젝트 row 를 FOR SHARE 로 잠가
+ * 주소 변경 요청(FOR UPDATE)과 차례대로 처리한다 — 어느 쪽이 먼저든 나중 쪽이 409 를 받는다.
+ */
+async function assertNoAddressChange(
+  client: { query(sql: string, params: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }> },
+  projectId: number | string,
+): Promise<void> {
+  const result = await client.query(
+    `SELECT ${ADDRESS_CHANGE_ACTIVE_SQL} AS address_change_active FROM projects WHERE id = $1 FOR SHARE`,
+    [projectId],
+  );
+  if (result.rows[0]?.["address_change_active"] === true) throw addressChangeInProgressError();
+}
+
 export interface CreateDeploymentInput {
   projectId: number;
   /** environmentId 가 없으면 필수. 둘 다 있으면 연결 type 과 같아야 한다 */
@@ -139,6 +155,7 @@ export class DeploymentService {
     let sourceVersionId: number;
     try {
       await client.query("BEGIN");
+      await assertNoAddressChange(client, projectId);
 
       if (input.mode !== undefined) {
         await client.query(`UPDATE projects SET deploy_mode = $1 WHERE id = $2`, [input.mode, projectId]);
@@ -503,6 +520,7 @@ export class DeploymentService {
     let newDeploymentId: number;
     try {
       await client.query("BEGIN");
+      await assertNoAddressChange(client, src.project_id);
 
       if (options?.mode !== undefined) {
         await client.query(`UPDATE projects SET deploy_mode = $1 WHERE id = $2`, [options.mode, src.project_id]);

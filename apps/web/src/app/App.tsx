@@ -4,6 +4,7 @@ import { AppHeader } from '../components/layout/AppHeader';
 import { DeploymentProgress } from '../features/deployment-progress/DeploymentProgress';
 import { DeploymentResult } from '../features/deployment-progress/DeploymentResult';
 import { DashboardPage } from '../pages/DashboardPage';
+import { ConnectionsPage } from '../pages/ConnectionsPage';
 import { ProjectDetailPage } from '../pages/ProjectDetailPage';
 import { SimpleDeployPage } from '../pages/SimpleDeployPage';
 import { DeploymentNotifier } from '../features/notifications/DeploymentNotifier';
@@ -27,20 +28,15 @@ export function App() {
     setRoute(routeFromLocation());
   }
 
-  /** 뒤로 가기에 남기지 않고 화면을 바꾼다 (설정이 필요해서 자동으로 보낼 때). */
-  function redirect(path: string) {
-    window.history.replaceState(null, '', path);
-    setRoute(routeFromLocation());
-  }
-
   return <I18nProvider><SoundProvider><PreferencesProvider><DeployProjectProvider><div className="shell">
     <Sidebar activePage={route.page} onNavigate={navigate} />
     <div className="app-body"><AppHeader page={route.page} />
       <main className="content">
         {route.page === 'dashboard' && <DashboardPage onNavigate={navigate} />}
+        {route.page === 'connections' && <ConnectionsPage />}
         {route.page === 'project' && <ProjectDetailPage projectId={route.projectId} tab={route.tab} onNavigate={navigate} />}
-        {route.page === 'deploy' && <SimpleDeployPage onNavigate={navigate} onRedirect={redirect} onStarted={(deploymentId) => navigate(`/deployments/${encodeURIComponent(deploymentId)}`)} />}
-        {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} tab={route.tab} onNavigate={navigate} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={(projectId) => navigate(projectId ? `/projects/${encodeURIComponent(projectId)}/settings` : '/')} />}
+        {route.page === 'deploy' && <SimpleDeployPage onNavigate={navigate} onStarted={(deploymentId) => navigate(`/deployments/${encodeURIComponent(deploymentId)}`)} />}
+        {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} tab={route.tab} onNavigate={navigate} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={() => navigate('/connections')} />}
         {route.page === 'result' && <DeploymentResult deploymentId={route.deploymentId} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onBack={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}`)} onNewDeployment={() => navigate('/deploy')} />}
       </main>
     </div>

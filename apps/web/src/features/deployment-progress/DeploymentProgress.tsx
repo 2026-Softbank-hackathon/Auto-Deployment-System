@@ -103,7 +103,7 @@ function StageChips({ view, currentElapsed }: { view: DeploymentStatusView; /** 
   </ol>;
 }
 
-interface DeploymentProgressProps { deploymentId: string; /** 주소가 고른 탭 */ tab: DeploymentTab; onNavigate: Navigate; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 그 프로젝트의 설정으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
+interface DeploymentProgressProps { deploymentId: string; /** 주소가 고른 탭 */ tab: DeploymentTab; onNavigate: Navigate; onSucceeded?: () => void; onNewDeployment?: () => void; /** 연결(AWS 키 등)을 고치러 연결 화면으로 간다 */ onFixSettings?: (projectId: string | null) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed?: (deploymentId: string) => void }
 
 export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded, onNewDeployment, onFixSettings, onRedeployed }: DeploymentProgressProps) {
   const { t } = useI18n();

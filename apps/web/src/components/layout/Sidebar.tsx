@@ -12,7 +12,8 @@ interface SidebarProps {
 const menu = [
   { path: '/', label: 'dashboard', pages: ['dashboard', 'project'] },
   { path: '/deploy', label: 'deploy', pages: ['deploy', 'progress', 'result'] },
-] as const satisfies ReadonlyArray<{ path: string; label: 'dashboard' | 'deploy'; pages: ReadonlyArray<Route['page']> }>;
+  { path: '/connections', label: 'connections', pages: ['connections'] },
+] as const satisfies ReadonlyArray<{ path: string; label: 'dashboard' | 'deploy' | 'connections'; pages: ReadonlyArray<Route['page']> }>;
 
 function BrandMark() {
   return <svg className="brand-mark" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">

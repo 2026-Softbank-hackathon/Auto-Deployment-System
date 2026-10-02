@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getProject, listProjectDeployments, type ProjectDeploymentSummary, type ProjectLiveDeployment } from '../api/deployment-api';
+import { getProject, listProjectDeployments, type EnvironmentSummary, type ProjectDeploymentSummary, type ProjectLiveDeployment } from '../api/deployment-api';
 import { followAppLink, type Navigate } from '../app/navigation';
 import type { ProjectTab } from '../app/routes';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
@@ -7,8 +7,8 @@ import { Keycap } from '../components/ui/Keycap';
 import { DeploymentBrowser } from '../features/dashboard/DeploymentBrowser';
 import { EnvironmentIcon } from '../features/dashboard/DeploymentRow';
 import { displayProjectName, hostOf, safeHttpUrl } from '../features/dashboard/format';
-import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
-import { ConnectionCards } from '../features/setup/ConnectionCards';
+import { AgentState } from '../features/connections/AgentState';
+import { useDeployProject } from '../features/deployment-start/useDeployProject';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { readCache, writeCache } from '../lib/page-cache';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
@@ -66,14 +66,42 @@ function LiveSummary({ projectId }: { projectId: string }) {
 }
 
 /**
- * 프로젝트 상세 (#150): 한 프로젝트의 배포 내역 · 환경변수 · 설정(AWS · 온프레미스 연결)을 탭으로 본다.
- * 연결 카드는 "지금 고른 프로젝트"를 다루므로, 이 화면에 들어오면 그 프로젝트를 고른 것으로 맞춘다.
+ * 이 앱에만 묶인 예전 방식의 연결 (공용 연결 이전에 앱마다 등록한 것). 여기서는 보기만 하고, 새 연결은 연결 화면에서 등록한다 (#218).
+ * 간단 배포에서 이 앱을 고르면 공용 연결과 함께 고를 수 있다.
+ */
+function AppConnections({ environments, onNavigate }: { environments: EnvironmentSummary[]; onNavigate: Navigate }) {
+  const { t } = useI18n();
+  const copy = t.connections.legacy;
+  const now = Date.now();
+  return <section className="setup-card" aria-labelledby="app-connections-title">
+    <div className="setup-card__head"><h2 id="app-connections-title">{copy.title}</h2></div>
+    <div className="setup-card__body">
+      <p>{environments.length > 0 ? copy.copy : copy.none}</p>
+      {environments.length > 0 && <ul className="connection-list" aria-labelledby="app-connections-title">
+        {environments.map((environment) => <li key={environment.id} className="connection-row">
+          <div className="connection-row__main">
+            <strong>{t.deploy.targets[environment.type]} · {environment.type === 'aws' ? environment.region ?? environment.name : environment.hostname ?? environment.name}</strong>
+            <span>{environment.name}</span>
+          </div>
+          <div className="connection-row__state">
+            {environment.type === 'onprem' && <AgentState connection={environment} now={now} />}
+            {environment.isDefault && <span className="connection-badge">{t.connections.default}</span>}
+          </div>
+        </li>)}
+      </ul>}
+      <div><a className="setup-summary__link" href="/connections" onClick={(event) => followAppLink(event, onNavigate)}>{copy.manage}</a></div>
+    </div>
+  </section>;
+}
+
+/**
+ * 프로젝트 상세 (#150): 한 프로젝트의 배포 내역 · 환경변수 · 설정(이 앱에만 묶인 연결)을 탭으로 본다.
+ * 설정 탭은 "지금 고른 프로젝트"의 연결을 보여 주므로, 이 화면에 들어오면 그 프로젝트를 고른 것으로 맞춘다.
  */
 export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: string; tab: ProjectTab; onNavigate: Navigate }) {
   const { t } = useI18n();
   const copy = t.projects;
   const { state, refresh, selectProject } = useDeployProject();
-  const status = setupStatus(state);
   const known = state.phase === 'ready' ? state.projects.find((project) => project.id === projectId) ?? null : null;
   const selectedHere = state.phase === 'ready' && state.project?.id === projectId;
 
@@ -89,20 +117,14 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
   if (!known) return <>{back}<div className="notice error" role="alert">{copy.notFound}</div></>;
 
   const base = `/projects/${encodeURIComponent(projectId)}`;
-  const deployReady = selectedHere && status.ready && status.awsReady;
+  const appAws = state.environments.find((environment) => environment.type === 'aws' && environment.isDefault) ?? null;
   return <>
     {back}
     <div className="page-head">
       <div><h1>{displayProjectName(known.name)}</h1><p>{copy.detailDescription}</p><LiveSummary projectId={projectId} /></div>
-      {/* AWS 연결은 어느 대상이든 필수라, 등록 전에는 배포로 보내지 않는다. */}
-      {deployReady
-        ? <DeployKeycap href="/deploy" onClick={(event) => followAppLink(event, onNavigate)}>{copy.deploy}</DeployKeycap>
-        : <DeployKeycap disabled>{copy.deploy}</DeployKeycap>}
+      {/* 연결은 간단 배포에서 고른다. 이 앱을 골라 둔 채로 간다. */}
+      <DeployKeycap href={`/deploy?project=${encodeURIComponent(projectId)}`} onClick={(event) => followAppLink(event, onNavigate)}>{copy.deploy}</DeployKeycap>
     </div>
-    {selectedHere && !deployReady && <div className="notice" role="status">
-      {status.ready && status.keysMissing ? copy.needsKeyAgain : copy.needsAws}{' '}
-      {tab !== 'settings' && <a className="setup-summary__link" href={`${base}/settings`} onClick={(event) => followAppLink(event, onNavigate)}>{copy.goSettings}</a>}
-    </div>}
 
     <nav className="tabs" aria-label={copy.tabsLabel}>
       {tabs.map((item) => <a key={item.tab} href={`${base}${item.path}`} className="tabs__tab" aria-current={item.tab === tab ? 'page' : undefined}
@@ -113,8 +135,8 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
     {/* 환경변수 · 설정은 고른 프로젝트의 연결 상태를 쓰므로, 전환이 끝난 뒤에 보여 준다. */}
     {tab !== 'deployments' && !selectedHere && <p className="dashboard-status" role="status">{t.setup.loading}</p>}
     {tab === 'env' && selectedHere && <section className="setup-card" aria-label={t.setup.env.title}>
-      <div className="setup-card__body"><EnvVarsCard projectId={projectId} awsRegion={status.ready ? status.aws?.region ?? null : null} /></div>
+      <div className="setup-card__body"><EnvVarsCard projectId={projectId} awsRegion={appAws?.region ?? null} /></div>
     </section>}
-    {tab === 'settings' && selectedHere && <ConnectionCards />}
+    {tab === 'settings' && selectedHere && <AppConnections environments={state.environments} onNavigate={onNavigate} />}
   </>;
 }

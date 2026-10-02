@@ -86,14 +86,14 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
 }
 
 /**
- * Current backend contract for the P0 demo upload endpoint.
- * `target` is the vendor (aws | onprem); the server resolves it to a profile and to the project's default environment.
+ * 배포 생성. environment_id는 고른 연결(공용 연결 또는 이 프로젝트의 연결)이고, 연결의 종류가 배포할 곳(aws | onprem)을 정한다 (#215).
+ * 온프레미스면 서버가 이미지 저장소로 쓸 AWS 연결(프로젝트 기본 → 공용 기본)을 따로 고른다.
  */
-export async function createDeployment(source: File, projectId: string, target: string): Promise<CreateDeploymentResponse> {
+export async function createDeployment(source: File, projectId: string, environmentId: string): Promise<CreateDeploymentResponse> {
   const form = new FormData();
   form.append('source', source);
   form.append('project_id', projectId);
-  form.append('target', target);
+  form.append('environment_id', environmentId);
 
   const response = await fetch(endpoint('/api/v1/deployments'), {
     method: 'POST',
@@ -228,35 +228,20 @@ export async function approveDeploymentGate(deploymentId: string, gate: Approval
   await assertOk(response);
 }
 
-/** 배포 환경 (API-24). 화면에는 종류 · 기본 여부 · 표시용 값(리전 / 호스트 이름)만 쓴다. */
+/** 배포 연결(환경, API-24). 화면에는 종류 · 기본 여부 · 표시용 값(리전 / 호스트 이름) · Agent 상태만 쓴다. */
 export interface EnvironmentSummary {
   id: string; name: string; type: 'aws' | 'onprem'; isDefault: boolean; region: string | null; hostname: string | null;
+  /** 프로젝트 없이 등록한 공용 연결인지 (#215). false면 한 프로젝트에만 묶인 예전 방식의 연결 */
+  shared: boolean;
   /** 이 환경이 참조하는 시크릿 이름 (AWS access_key 방식). 값은 응답에 없다. */
   secretNames: string[];
-  /** 온프레미스 Agent가 마지막으로 연결을 알린 시각. 서버가 아직 채우지 않으면 null (모르는 상태). */
-  lastSeenAt: string | null;
-  /** 프로젝트 없이 등록한 공용 연결 (#215) */
-  shared?: boolean;
-  /** 온프레미스 Agent가 최근(90초 안)에 연락했는지. 서버가 주지 않으면 undefined (모르는 상태) */
-  agentOnline?: boolean;
+  /** 온프레미스 Agent가 최근 90초 안에 연락했는지 (서버 판정). AWS면 false */
+  agentOnline: boolean;
+  /** 등록된 Agent의 마지막 연락 시각. Agent를 아직 등록하지 않았으면 null */
+  agentLastSeenAt: string | null;
 }
 
-/** API-24 — 프로젝트에 등록된 배포 환경 목록. */
-export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
-  const response = await fetch(endpoint(`/api/v1/environments?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });
-  return toEnvironmentSummaries(await readJson(response));
-}
-
-/**
- * 공용 연결 목록 (#215) — projectId 없이 GET /environments. 프로젝트 전용 연결은 들어 있지 않다.
- * 이 기능이 없는 서버는 projectId 없이 부르면 400을 주므로, 부르는 쪽에서 실패를 빈 목록으로 다룬다.
- */
-export async function listSharedEnvironments(): Promise<EnvironmentSummary[]> {
-  const response = await fetch(endpoint('/api/v1/environments'), { credentials: 'include' });
-  return toEnvironmentSummaries(await readJson(response)).map((environment) => ({ ...environment, shared: true }));
-}
-
-function toEnvironmentSummaries(body: unknown): EnvironmentSummary[] {
+function environmentsOf(body: unknown): EnvironmentSummary[] {
   return (Array.isArray(body) ? body : []).flatMap((item): EnvironmentSummary[] => {
     if (!item || typeof item !== 'object') return [];
     const record = item as Record<string, unknown>;
@@ -266,36 +251,95 @@ function toEnvironmentSummaries(body: unknown): EnvironmentSummary[] {
     return [{
       id: String(record.id), name: typeof record.name === 'string' ? record.name : '', type: record.type, isDefault: record.isDefault === true,
       region: typeof aws.region === 'string' ? aws.region : null, hostname: typeof onprem.hostname === 'string' ? onprem.hostname : null,
-      secretNames: [aws.accessKeyIdSecretName, aws.secretAccessKeySecretName].filter((name): name is string => typeof name === 'string'),
-      lastSeenAt: typeof record.lastSeenAt === 'string' ? record.lastSeenAt : null,
       shared: record.shared === true,
-      ...(typeof record.agentOnline === 'boolean' ? { agentOnline: record.agentOnline } : {}),
+      secretNames: [aws.accessKeyIdSecretName, aws.secretAccessKeySecretName].filter((name): name is string => typeof name === 'string'),
+      agentOnline: record.agentOnline === true,
+      agentLastSeenAt: typeof record.agentLastSeenAt === 'string' ? record.agentLastSeenAt : null,
     }];
   });
 }
 
-/** 배포 환경 삭제. 진행 중인 배포가 있으면 409, 이 환경으로 배포한 기록이 있으면 서버가 거절한다(deployments가 환경을 참조). */
+/** API-24 — 한 프로젝트에만 묶인 (예전 방식의) 배포 연결 목록. 공용 연결은 들어 있지 않다. */
+export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
+  const response = await fetch(endpoint(`/api/v1/environments?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });
+  return environmentsOf(await readJson(response));
+}
+
+/** 공용 연결 목록 (#215). 한 번 등록하면 모든 앱이 배포할 때 고를 수 있다. */
+export async function listSharedEnvironments(): Promise<EnvironmentSummary[]> {
+  const response = await fetch(endpoint('/api/v1/environments'), { credentials: 'include' });
+  return environmentsOf(await readJson(response));
+}
+
+/** 배포 연결 삭제. 진행 중인 배포가 있거나 이 연결로 배포한 기록이 있으면 서버가 409로 거절한다(deployments가 연결을 참조). */
 export async function deleteEnvironment(environmentId: string): Promise<void> {
   const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}`), { method: 'DELETE', credentials: 'include' });
   await assertOk(response);
 }
 
-const ONPREM_ENVIRONMENT_NAME = 'onprem-default';
+function randomSuffix(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(4)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** 공용 연결 안에서 겹치지 않는 이름 (서버는 같은 이름을 409로 거절한다). 겹치면 -2, -3 …을 붙인다. */
+function uniqueName(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let n = 2; ; n += 1) if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
+}
+
+async function postEnvironment(body: Record<string, unknown>): Promise<string> {
+  const response = await fetch(endpoint('/api/v1/environments'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'include',
+  });
+  const created = asRecord(await readJson(response), '연결 등록');
+  return String(created.id);
+}
+
+/** 공용 시크릿 저장 (API-28, projectId 없음). 값은 응답에 돌아오지 않는다. */
+async function saveSharedSecret(name: string, value: string): Promise<void> {
+  const response = await fetch(endpoint('/api/v1/secrets'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, value }), credentials: 'include',
+  });
+  await assertOk(response);
+}
+
+/** 공용 시크릿 삭제. 연결을 지운 뒤 그 연결만 쓰던 키를 치울 때 쓴다. */
+export async function deleteSharedSecret(name: string): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/secrets/${encodeURIComponent(name)}`), { method: 'DELETE', credentials: 'include' });
+  await assertOk(response);
+}
 
 /**
- * 온프레미스 환경 등록 (API-23). 계약상 onpremConfig.agentRegistrationToken이 필수라 임의 값을 넣는다.
- * Agent 인증에는 쓰이지 않는다 — 실제 등록 토큰은 issueAgentRegistrationToken으로 따로 발급한다.
+ * 공용 AWS 연결 등록 — 키 두 개를 공용 시크릿으로 저장한 뒤 그 이름을 참조하는 연결을 만든다.
+ * 키 값은 시크릿 저장 요청에만 실리고, 연결에는 시크릿 이름과 리전만 들어간다. 시크릿 이름은 연결마다 새로 지어 다른 연결의 키와 섞이지 않게 한다.
+ * 연결을 만들지 못하면 방금 저장한 키를 지운다.
  */
-export async function createOnpremEnvironment(projectId: string, hostname: string): Promise<EnvironmentSummary> {
-  const placeholder = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
-  const response = await fetch(endpoint('/api/v1/environments'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId: Number(projectId), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: true, onpremConfig: { agentRegistrationToken: placeholder, hostname } }),
-    credentials: 'include',
-  });
-  const body = asRecord(await readJson(response), '환경 등록');
-  return { id: String(body.id), name: ONPREM_ENVIRONMENT_NAME, type: 'onprem', isDefault: body.isDefault === true, region: null, hostname, secretNames: [], lastSeenAt: null };
+export async function createSharedAwsConnection(input: { accessKeyId: string; secretAccessKey: string; region: string }, takenNames: string[]): Promise<void> {
+  const suffix = randomSuffix();
+  const keyIdName = `aws-access-key-id.${suffix}`;
+  const secretKeyName = `aws-secret-access-key.${suffix}`;
+  try {
+    await saveSharedSecret(keyIdName, input.accessKeyId);
+    await saveSharedSecret(secretKeyName, input.secretAccessKey);
+    await postEnvironment({
+      // 같은 리전에 계정을 여럿 등록해도 구분되게 Access Key ID 끝 네 자리를 붙인다 (Access Key ID는 비밀 값이 아니다).
+      name: uniqueName(`aws-${input.region}-${input.accessKeyId.slice(-4)}`, takenNames), type: 'aws',
+      awsConfig: { credentialsType: 'access_key', accessKeyIdSecretName: keyIdName, secretAccessKeySecretName: secretKeyName, region: input.region },
+    });
+  } catch (error) {
+    await Promise.allSettled([deleteSharedSecret(keyIdName), deleteSharedSecret(secretKeyName)]);
+    throw error;
+  }
+}
+
+/**
+ * 공용 온프레미스 연결 등록. 만든 연결의 ID를 돌려준다.
+ * 계약상 onpremConfig.agentRegistrationToken이 필수라 임의 값을 넣는다. Agent 인증에는 쓰이지 않는다 — 실제 등록 토큰은 issueAgentRegistrationToken으로 따로 발급한다.
+ */
+export async function createSharedOnpremConnection(hostname: string, takenNames: string[]): Promise<string> {
+  const placeholder = `${randomSuffix()}${randomSuffix()}${randomSuffix()}${randomSuffix()}`;
+  const base = `onprem-${hostname.toLowerCase().replace(/[^a-z0-9.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'server'}`;
+  return postEnvironment({ name: uniqueName(base, takenNames), type: 'onprem', onpremConfig: { agentRegistrationToken: placeholder, hostname } });
 }
 
 export interface AgentRegistrationToken { token: string; expiresAt: string }
@@ -306,13 +350,6 @@ export async function issueAgentRegistrationToken(environmentId: string): Promis
   const body = asRecord(await readJson(response), '등록 토큰');
   if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new Error('등록 토큰 응답 형식이 올바르지 않습니다.');
   return { token: body.token, expiresAt: body.expiresAt };
-}
-
-/** API-29 — 프로젝트에 저장된 시크릿 이름 목록 (값은 응답에 없다). */
-export async function listSecretNames(projectId: string): Promise<string[]> {
-  const response = await fetch(endpoint(`/api/v1/secrets?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });
-  const body = await readJson(response);
-  return (Array.isArray(body) ? body : []).flatMap((item) => (item && typeof item === 'object' && typeof (item as { name?: unknown }).name === 'string' ? [(item as { name: string }).name] : []));
 }
 
 export interface ProjectEnvVar { name: string; value: string; updatedAt: string | null }
@@ -337,49 +374,6 @@ export async function patchProjectEnv(projectId: string, vars: Record<string, st
     method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vars }),
   });
   return envVarsOf(await readJson(response));
-}
-
-/** 팀이 정한 시크릿 이름 (2026-10-01). 환경은 이 이름으로만 키를 참조한다. */
-const AWS_ACCESS_KEY_ID_SECRET = 'AWS_ACCESS_KEY_ID';
-const AWS_SECRET_ACCESS_KEY_SECRET = 'AWS_SECRET_ACCESS_KEY';
-const AWS_ENVIRONMENT_NAME = 'aws-default';
-
-/** API-28 · 30 — 시크릿 저장. 같은 이름이 있으면 지우고 다시 저장한다(키 교체). 값은 응답에 돌아오지 않는다. */
-async function saveSecret(projectId: string, name: string, value: string): Promise<void> {
-  const post = () => fetch(endpoint('/api/v1/secrets'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId: Number(projectId), name, value }),
-    credentials: 'include',
-  });
-  let response = await post();
-  if (response.status === 409) {
-    await assertOk(await fetch(endpoint(`/api/v1/secrets/${encodeURIComponent(name)}?projectId=${encodeURIComponent(projectId)}`), { method: 'DELETE', credentials: 'include' }));
-    response = await post();
-  }
-  await assertOk(response);
-}
-
-/**
- * AWS 키 등록 — 시크릿 2개 저장(API-28) 후 그 이름을 참조하는 기본 AWS 환경을 만든다(API-23).
- * 키 값은 시크릿 저장 요청에만 실리고, 환경에는 시크릿 이름과 리전만 들어간다.
- * 이미 등록된 환경(current)이 있으면 키만 바꾼다. 리전이 달라졌을 때만 새 기본 환경을 만든다(이전 환경은 기본에서 내려간다).
- */
-export async function registerAwsEnvironment(projectId: string, input: { accessKeyId: string; secretAccessKey: string; region: string }, current?: EnvironmentSummary | null): Promise<void> {
-  await saveSecret(projectId, AWS_ACCESS_KEY_ID_SECRET, input.accessKeyId);
-  await saveSecret(projectId, AWS_SECRET_ACCESS_KEY_SECRET, input.secretAccessKey);
-  if (current && current.region === input.region) return;
-  const name = current ? `aws-${input.region}-${Date.now()}` : AWS_ENVIRONMENT_NAME;
-  const response = await fetch(endpoint('/api/v1/environments'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      projectId: Number(projectId), name, type: 'aws', isDefault: true,
-      awsConfig: { credentialsType: 'access_key', accessKeyIdSecretName: AWS_ACCESS_KEY_ID_SECRET, secretAccessKeySecretName: AWS_SECRET_ACCESS_KEY_SECRET, region: input.region },
-    }),
-    credentials: 'include',
-  });
-  await assertOk(response);
 }
 
 export interface DeploymentAiUsageResponse { totalTokenIn: number; totalTokenOut: number; totalCostUsd: number }

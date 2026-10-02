@@ -26,5 +26,6 @@ export const MIGRATION_FILES = [
   "019_deploy_mode.sql",
   "020_source_patches.sql",
   "021_terraform_outputs.sql",
+  "022_project_subdomain.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

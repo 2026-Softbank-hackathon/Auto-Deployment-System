@@ -55,6 +55,7 @@ export const API_ERROR_CODES = [
   "AWS_REGISTRY_ENVIRONMENT_REQUIRED",
   "PROJECT_DEPLOYMENT_IN_PROGRESS",
   "PROJECT_DELETING",
+  "SUBDOMAIN_TAKEN",
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 

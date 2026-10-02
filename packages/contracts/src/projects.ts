@@ -1,6 +1,6 @@
 /**
  * packages/contracts/src/projects.ts
- *   POST /projects                  → 201 Project
+ *   POST /projects                  → 201 Project (subdomain 을 고르지 않으면 service-{id})
  *   GET  /projects                  → 200 ProjectList
  *   GET  /projects/:id              → 200 Project
  *   GET  /projects/:id/deployments  → 200 ProjectDeploymentList (최신순 · 커서)
@@ -15,12 +15,15 @@ import {
   IsoDateTimeSchema,
   TargetVendorSchema,
 } from "./common.js";
+import { SubdomainSchema } from "./subdomain.js";
 
 // ── 요청 ──────────────────────────────────────────────────────────────────────
 
 export const CreateProjectBodySchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
+  /** 앱 주소 {subdomain}.{플랫폼 도메인} (#300). 없으면 service-{id} */
+  subdomain: SubdomainSchema.optional(),
 });
 export type CreateProjectBody = z.input<typeof CreateProjectBodySchema>;
 
@@ -43,7 +46,7 @@ export type ListProjectDeploymentsQuery = z.input<typeof ListProjectDeploymentsQ
 const DeploymentEnvironmentTypeSchema = TargetVendorSchema.nullable();
 
 /**
- * 지금 프로젝트 주소(service-{projectId}.{domain})로 서비스 중인 배포.
+ * 지금 프로젝트 주소({subdomain}.{domain})로 서비스 중인 배포.
  * 가장 최근에 성공(succeeded)한 배포 하나 — 성공한 배포가 없으면 Project.live 가 null.
  */
 export const ProjectLiveDeploymentSchema = z
@@ -106,6 +109,10 @@ export const ProjectSchema = z
     updatedAt: IsoDateTimeSchema,
     /** 이 앱의 배포 형태 — 다음 배포 · 재배포 · 롤백이 따른다 (기본 container) */
     deployMode: DeployModeSchema,
+    /** 앱 주소의 subdomain (#300). 고르지 않았거나 이 기능 전에 만든 앱은 service-{id} */
+    subdomain: z.string(),
+    /** 앱 공개 주소 https://{subdomain}.{플랫폼 도메인}. 서버에 플랫폼 도메인 설정이 없으면 null */
+    publicUrl: z.string().nullable(),
     /** 지금 서비스 중인 배포 (POST /projects 응답은 항상 null) */
     live: ProjectLiveDeploymentSchema.nullable(),
     /** 가장 최근 배포 (POST /projects 응답은 항상 null) */

@@ -8,6 +8,7 @@
 
 export * from "./common.js";
 export * from "./projects.js";
+export * from "./subdomain.js";
 export * from "./env.js";
 export * from "./deployments.js";
 export * from "./secrets.js";

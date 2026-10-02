@@ -37,6 +37,8 @@ const project = {
   createdAt: "2026-09-30T03:00:00.000Z",
   updatedAt: "2026-09-30T03:00:00.000Z",
   deployMode: "container",
+  subdomain: "service-1",
+  publicUrl: "https://service-1.camellia-deploy.app",
   live: null,
   latest: null,
   deletion: null,

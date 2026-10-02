@@ -13,7 +13,7 @@ export interface OpsResource<T> {
 }
 
 /**
- * 카드 하나의 데이터를 10초마다 다시 받는다. 탭이 보이지 않으면 멈추고, 다시 보이면 바로 한 번 받은 뒤 이어 간다.
+ * 카드 하나의 데이터를 처음 한 번 받고, 이후 10초마다 다시 받는다. 탭이 보이지 않으면 멈추고, 다시 보이면 바로 한 번 받은 뒤 이어 간다.
  * 카드마다 따로 부르므로 한 API 가 실패해도 다른 카드는 그대로 보인다.
  */
 export function useOpsResource<T>(fetcher: () => Promise<T>): OpsResource<T> {
@@ -53,7 +53,9 @@ export function useOpsResource<T>(fetcher: () => Promise<T>): OpsResource<T> {
       if (document.hidden) window.clearInterval(timer);
       else start();
     };
-    if (!document.hidden) start();
+    // 처음 한 번은 탭이 가려져 있어도 받는다 — 백그라운드 탭으로 열면 다시 보일 때까지 "불러오는 중"에 멈춰 있었다
+    if (document.hidden) void load();
+    else start();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       alive.current = false;

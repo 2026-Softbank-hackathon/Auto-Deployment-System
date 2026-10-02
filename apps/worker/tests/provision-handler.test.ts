@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { WorkerDeps } from "../src/deps.js";
 import { handleProvision } from "../src/handlers/provision.js";
 import { TerraformCliError } from "../src/terraform-cli.js";
+import { EcsRolloutError } from "../src/ecs-rollout.js";
 
 
 const IMAGE_DIGEST = `sha256:${"a".repeat(64)}`;
@@ -37,6 +38,7 @@ function makeHarness(overrides: Partial<{
   dnsPreparationFailure: Error;
   targetOwnerProjectId: string | null;
   previousApply: { status: string; terraform_inputs_hash: string } | null;
+  rolloutFailure: Error;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
@@ -44,6 +46,7 @@ function makeHarness(overrides: Partial<{
     ? { ...IR, deploy: { profile: "onprem-docker-basic" } }
     : IR;
   const queries: Array<{ sql: string; params: unknown[] }> = [];
+  const order: string[] = [];
   const agentJobQueries: Array<{ sql: string; params: unknown[] }> = [];
   const onpremPreparationOrder: string[] = [];
   const client = {
@@ -130,11 +133,28 @@ function makeHarness(overrides: Partial<{
           if (overrides.statusAfterApplyFailure) status = overrides.statusAfterApplyFailure;
           throw overrides.terraformFailure;
         })
-      : vi.fn(async () => ({
-          origin_url: { value: "http://alb.example.test", sensitive: false },
-        })),
+      : vi.fn(async () => {
+          order.push("apply");
+          return {
+            origin_url: { value: "http://alb.example.test", sensitive: false },
+            cluster_name: { value: "cluster-from-output", sensitive: false },
+            service_name: { value: "service-from-output", sensitive: false },
+          };
+        }),
   };
-  const boss = { send: vi.fn(async (_queue: string, _payload: unknown) => "verify-job") };
+  const ecsRolloutWaiter = {
+    wait: vi.fn(async (input: { log: (line: string) => Promise<void> }) => {
+      order.push(`rollout:${status}`);
+      await input.log("헬스체크 통과 (1/1)");
+      if (overrides.rolloutFailure) throw overrides.rolloutFailure;
+    }),
+  };
+  const boss = {
+    send: vi.fn(async (queue: string, _payload: unknown) => {
+      order.push(`send:${queue}`);
+      return "verify-job";
+    }),
+  };
   const notifier = { notify: vi.fn(async () => {}) };
   const originActivator = {
     prepareOnpremVerification: vi.fn(async () => {
@@ -158,6 +178,7 @@ function makeHarness(overrides: Partial<{
     originActivator,
     secretReader,
     terraformCli,
+    ecsRolloutWaiter,
     terraformBackend: {
       bucket: "camellia-state",
       region: "ap-northeast-2",
@@ -175,6 +196,8 @@ function makeHarness(overrides: Partial<{
     originActivator,
     secretReader,
     terraformCli,
+    ecsRolloutWaiter,
+    order,
     queries,
     agentJobQueries,
     onpremPreparationOrder,
@@ -345,6 +368,61 @@ describe("handleProvision", () => {
     });
     expect(harness.getStatus()).toBe("verifying");
     expect(harness.queries.some((query) => query.sql.includes("DELETE FROM env_locks"))).toBe(false);
+  });
+
+  it("apply 뒤 ECS 롤아웃 완료를 기다린 다음 verifying 으로 넘기고 Verify 를 큐잉한다 (#253)", async () => {
+    const harness = makeHarness();
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.ecsRolloutWaiter.wait).toHaveBeenCalledWith(expect.objectContaining({
+      region: "ap-northeast-2",
+      credentials: { accessKeyId: "access-key-value", secretAccessKey: "secret-key-value" },
+      clusterName: "cluster-from-output",
+      serviceName: "service-from-output",
+      expectedImage: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo@${IMAGE_DIGEST}`,
+    }));
+    // 롤아웃 대기는 deploying 상태에서, Verify 큐잉보다 먼저
+    expect(harness.order).toEqual(["apply", "rollout:deploying", "send:verify"]);
+    const logLines = harness.notifier.notify.mock.calls
+      .filter(([, event]) => event === "log.line")
+      .map(([, , payload]) => payload as { step: string; line: string });
+    expect(logLines).toContainEqual(expect.objectContaining({
+      step: "provision",
+      line: expect.stringContaining("헬스체크 통과 (1/1)"),
+    }));
+    expect(harness.getStatus()).toBe("verifying");
+  });
+
+  it("deploying 에서 재시도되면 Terraform 은 건너뛰어도 롤아웃 대기는 다시 한다 (#253)", async () => {
+    const harness = makeHarness({ status: "deploying", originUrl: "http://alb.example.test" });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+    // outputs 가 없으면 프로필의 고정 리소스 이름(클러스터 = 서비스 = resource_name)을 쓴다
+    expect(harness.ecsRolloutWaiter.wait).toHaveBeenCalledWith(expect.objectContaining({
+      clusterName: expect.stringMatching(/^cam-[0-9a-f]{16}$/),
+      serviceName: expect.stringMatching(/^cam-[0-9a-f]{16}$/),
+    }));
+    const call = harness.ecsRolloutWaiter.wait.mock.calls[0]![0] as unknown as { clusterName: string; serviceName: string };
+    expect(call.clusterName).toBe(call.serviceName);
+    expect(harness.order).toEqual(["rollout:deploying", "send:verify"]);
+  });
+
+  it("ECS 롤아웃 실패는 코드와 ECS 사유를 남기고 Verify 없이 실패 처리한다 (#253)", async () => {
+    const detail = "새 태스크가 중지되었습니다: Essential container in task exited\n컨테이너 api: 종료 코드 1";
+    const harness = makeHarness({ rolloutFailure: new EcsRolloutError("ECS_TASK_STOPPED", detail) });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.getStatus()).toBe("failed");
+    const failQuery = harness.queries.find(({ sql }) => sql.includes("SET status = 'failed'"));
+    expect(failQuery?.params[0]).toBe(`ECS_TASK_STOPPED\n${detail}`);
+    expect(failQuery?.params[2]).toBe("deploying");
+    expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(true);
+    expect(harness.boss.send).not.toHaveBeenCalledWith("verify", expect.anything());
+    expect(harness.boss.send).toHaveBeenCalledWith("diagnose", { deployment_id: 99 });
   });
 
   it("Terraform apply 실패를 상태 코드로 정규화하고 환경 락을 해제한다", async () => {

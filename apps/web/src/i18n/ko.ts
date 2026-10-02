@@ -514,6 +514,7 @@ export const ko = {
       resources: '이 앱은 DB나 캐시 같은 리소스가 필요한데, 아직 자동으로 만들어 줄 수 없어요.',
       port: '앱이 사용하는 포트를 찾지 못했어요. Dockerfile의 EXPOSE나 서버가 여는 포트를 확인해 주세요.',
       profile: '이 앱은 고른 배포 대상의 구성과 맞지 않아요. 다른 대상으로 배포해 보거나 분석 결과의 경고를 확인해 주세요.',
+      appStart: '새 버전의 컨테이너가 켜지지 않았거나 헬스체크를 통과하지 못했어요. 아래 작업 노트에서 로그를 확인해 주세요.',
     },
     failureUnknown: '배포 중에 문제가 생겼어요. 아래 AI 진단과 작업 노트에서 자세한 내용을 확인해 주세요.',
     failureCode: (code: string) => `오류 코드: ${code}`,
@@ -523,6 +524,7 @@ export const ko = {
     failureReasonsWithDetail: {
       build: '이미지를 만드는 중에 실패했어요. 아래 자세한 오류를 확인해 주세요.',
       infra: '배포 환경을 만드는 중에 실패했어요. 아래 자세한 오류를 확인해 주세요.',
+      appStart: '새 버전의 컨테이너가 켜지지 않았거나 헬스체크를 통과하지 못했어요. 아래 자세한 오류를 확인해 주세요.',
     } as Partial<Record<string, string>>,
     fixAwsKey: '연결 화면으로',
     viewResult: '결과 보기',

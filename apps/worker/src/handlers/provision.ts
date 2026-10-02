@@ -10,8 +10,9 @@ import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
 import { transitionTo, type Status } from "../state-machine.js";
-import { TerraformCliError, type TerraformVariable } from "../terraform-cli.js";
+import { TerraformCliError, type TerraformOutputs, type TerraformVariable } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
+import { EcsRolloutError } from "../ecs-rollout.js";
 
 export type ProvisionJobPayload = {
   deployment_id: number | string;
@@ -143,7 +144,13 @@ export async function handleProvision(
     if (plan.target !== "aws" || context.target_environment_type !== "aws") {
       throw new Error("PROVISION_TARGET_UNSUPPORTED");
     }
-    if (!deps.secretReader || !deps.terraformCli || !deps.terraformBackend || !deps.terraformModuleRoot) {
+    if (
+      !deps.secretReader ||
+      !deps.terraformCli ||
+      !deps.terraformBackend ||
+      !deps.terraformModuleRoot ||
+      !deps.ecsRolloutWaiter
+    ) {
       throw new Error("TERRAFORM_DEPENDENCY_MISSING");
     }
     const awsConfig = AwsConfigSchema.parse(context.aws_config);
@@ -175,8 +182,8 @@ export async function handleProvision(
 
     const stateKey = terraformStateKey(projectId, environmentId);
     const resourceName = resourceNameFor(projectId, environmentId);
-    const originUrl = context.status === "deploying" && context.origin_url
-      ? context.origin_url
+    const applied = context.status === "deploying" && context.origin_url
+      ? { originUrl: context.origin_url, outputs: {} as TerraformOutputs }
       : await applyTerraform({
           deps,
           stepLog,
@@ -198,6 +205,7 @@ export async function handleProvision(
           credentials: { accessKeyId, secretAccessKey },
           region: awsConfig.region,
         });
+    const originUrl = applied.originUrl;
 
     validateOriginUrl(originUrl);
     await deps.pool.query(
@@ -213,12 +221,23 @@ export async function handleProvision(
       });
     }
 
+    // Terraform 은 서비스 갱신만 하고 돌아온다 (wait_for_steady_state = false, #253).
+    // 롤아웃 완료를 여기서 기다린 뒤 최종 검증으로 넘긴다. 재시도로 apply 를 건너뛴 경우에도 다시 확인한다.
+    await deps.ecsRolloutWaiter.wait({
+      region: awsConfig.region,
+      credentials: { accessKeyId, secretAccessKey },
+      clusterName: stringOutput(applied.outputs, "cluster_name") ?? resourceName,
+      serviceName: stringOutput(applied.outputs, "service_name") ?? resourceName,
+      expectedImage: context.immutable_ref,
+      log: (line) => stepLog.line(line),
+    });
+
     await transitionTo(deps.pool, deploymentId, "verifying");
     activeStatus = "verifying";
     await deps.notifier?.notify(deploymentId, "state_changed", {
       status: "verifying",
     });
-    await stepLog.line("인프라 적용 완료, 롤아웃 및 헬스체크 검증을 시작합니다.");
+    await stepLog.line("ECS 롤아웃 완료, 헬스체크 검증을 시작합니다.");
     await deps.boss.send("verify", {
       jobId: `verify-deployment-${deploymentId}`,
       attempt: 1,
@@ -237,7 +256,7 @@ export async function handleProvision(
   } catch (error) {
     const errorCode = normalizeProvisionFailure(error);
     const errorDetail =
-      error instanceof TerraformCliError && error.detail
+      (error instanceof TerraformCliError || error instanceof EcsRolloutError) && error.detail
         ? error.detail.slice(0, 2048)
         : undefined;
     deps.log?.error(
@@ -312,7 +331,7 @@ async function applyTerraform(input: {
   variables: Record<string, string | number | boolean | Record<string, string>>;
   credentials: { accessKeyId: string; secretAccessKey: string };
   region: string;
-}): Promise<string> {
+}): Promise<{ originUrl: string; outputs: TerraformOutputs }> {
   const { deps } = input;
   const refresh = await decideStateRefresh(input);
   await input.stepLog.line("Terraform init · validate · plan · apply 시작");
@@ -334,7 +353,7 @@ async function applyTerraform(input: {
       throw new Error("TERRAFORM_OUTPUT_MISSING");
     }
     await input.stepLog.line("Terraform apply 완료, origin endpoint를 수집했습니다.");
-    return originUrl;
+    return { originUrl, outputs };
   } catch (error) {
     if (error instanceof TerraformCliError) throw error;
     if (error instanceof AdapterError) throw error;
@@ -620,6 +639,11 @@ function validateOriginUrl(value: string): void {
   }
 }
 
+function stringOutput(outputs: TerraformOutputs, name: string): string | undefined {
+  const value = outputs[name]?.value;
+  return typeof value === "string" && value ? value : undefined;
+}
+
 function parsePositiveId(value: number | string | null, errorCode: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(errorCode);
@@ -630,6 +654,7 @@ function normalizeProvisionFailure(error: unknown): string {
   if (error instanceof TerraformCliError) return error.code;
   if (error instanceof AdapterError) return error.code;
   if (error instanceof OriginActivationError) return error.code;
+  if (error instanceof EcsRolloutError) return error.code;
   if (error instanceof Error) {
     const allowed = new Set([
       "PROVISION_CONTEXT_NOT_FOUND",

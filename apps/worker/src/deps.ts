@@ -21,6 +21,7 @@ import type { DeploymentOriginActivator } from "./origin-activation.js";
 import type { PublicDnsActivationChecker } from "./public-dns-activation.js";
 import type { FinalUrlVerifier } from "./final-url-verifier.js";
 import type { TerraformStateStore } from "./terraform-state-store.js";
+import type { EcsRolloutWaiter } from "./ecs-rollout.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -42,6 +43,8 @@ export type WorkerDeps = {
   terraformModuleRoot?: string;
   /** 앱 삭제 때 Terraform state 파일 확인 · 삭제 (#247) */
   terraformStateStore?: TerraformStateStore;
+  /** Terraform apply 뒤 ECS 롤아웃 완료 대기 (#253) */
+  ecsRolloutWaiter?: Pick<EcsRolloutWaiter, "wait">;
   originActivator?: Pick<
     DeploymentOriginActivator,
     "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"

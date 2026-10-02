@@ -104,8 +104,8 @@ describe("capabilities", () => {
 });
 
 describe("PROFILES map", () => {
-  it("contains both profiles", () => {
-    expect(Object.keys(PROFILES)).toHaveLength(2);
+  it("contains the container, serverless, and on-prem profiles", () => {
+    expect(Object.keys(PROFILES)).toHaveLength(3);
     expect(PROFILES["aws-ecs-basic"]).toBe(awsEcsBasic);
     expect(PROFILES["onprem-docker-basic"]).toBe(onpremDockerBasic);
   });

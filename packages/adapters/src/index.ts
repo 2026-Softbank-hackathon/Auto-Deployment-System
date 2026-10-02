@@ -3,6 +3,7 @@ export { AdapterError } from "./errors.js";
 export type { AdapterErrorCode } from "./errors.js";
 export { createDeploymentPlan, getRegisteredProfileIds } from "./registry.js";
 export { awsEcsAdapter } from "./aws-ecs.js";
+export { awsLambdaAdapter } from "./aws-lambda.js";
 export { onpremDockerAdapter } from "./onprem-docker.js";
 export type {
   BuildPlan,
@@ -13,6 +14,7 @@ export type {
   ServicePlan,
   CommonDeploymentPlan,
   AwsEcsDeploymentPlan,
+  AwsLambdaDeploymentPlan,
   OnpremDockerDeploymentPlan,
   DeploymentPlan,
 } from "./types.js";

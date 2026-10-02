@@ -55,7 +55,9 @@ describe("aws-ecs-basic Adapter", () => {
       );
 
       expect(plan.target).toBe("aws");
-      if (plan.target !== "aws") throw new Error("expected AWS plan");
+      if (plan.target !== "aws" || plan.runtime.type !== "ecs-fargate") {
+        throw new Error("expected AWS ECS plan");
+      }
       expect(plan.runtime.taskCpu).toBe(taskCpu);
       expect(plan.runtime.taskMemoryMiB).toBe(taskMemoryMiB);
     },

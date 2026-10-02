@@ -1,7 +1,7 @@
 import { IrSchema } from "@camellia/ir-schema";
 
 export function createSimpleHttpIr(
-  profile: "aws-ecs-basic" | "onprem-docker-basic",
+  profile: "aws-ecs-basic" | "aws-lambda-basic" | "onprem-docker-basic",
   size: "small" | "medium" | "large" = "small",
 ) {
   return IrSchema.parse({

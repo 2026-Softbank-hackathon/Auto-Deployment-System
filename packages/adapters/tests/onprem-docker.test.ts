@@ -33,9 +33,10 @@ describe("onprem-docker-basic Adapter", () => {
     });
   });
 
-  it("registers both P0 profile adapters", () => {
+  it("registers the profile adapters", () => {
     expect(getRegisteredProfileIds().sort()).toEqual([
       "aws-ecs-basic",
+      "aws-lambda-basic",
       "onprem-docker-basic",
     ]);
   });

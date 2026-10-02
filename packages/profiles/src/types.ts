@@ -15,7 +15,7 @@ export const ComputeSizeSchema = z.object({
 });
 
 export const RuntimeProfileSchema = z.object({
-  type: z.enum(["ecs-fargate", "docker-compose"]),
+  type: z.enum(["ecs-fargate", "docker-compose", "lambda"]),
   replicas: z.number().int().positive(),
   size_map: z.record(
     z.enum(["small", "medium", "large"]),

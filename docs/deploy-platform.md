@@ -212,6 +212,7 @@ main push ─▶ GitHub Actions (.github/workflows/deploy-platform.yml)
 - **동시 실행**: concurrency group 하나. 진행 중인 배포는 끝까지 가고, 그 사이 들어온 push 는 가장 최신 것 하나만 대기한다 (중간 것은 GitHub 가 취소 — 최신 커밋에 다 포함되므로 문제 없음). 4.4 처럼 손으로 보낸 SSM 명령과는 막지 않으니 겹치지 않게 한다
 - **실패 조건**: 저장소 변수 없음, SSM 에이전트 Offline, `deploy.sh` 종료 코드 ≠ 0 (SSM `Failed` · `TimedOut` · `Cancelled`), `/health` 가 5분 안에 200 아님. Job 제한 40분 (SSM 실행 제한 30분, 명령 전달 제한 10분)
 - **로그**: Actions 에는 마지막 100줄. 전체는 호스트 `/var/log/camellia-deploy/gha-<run_id>-<attempt>.log`
+- **배포 기록**: `deploy.sh` 가 시작 · 성공 · 실패를 플랫폼 DB `platform_deploys` 에 남긴다(커밋 · 걸린 시간 · 디스크 정리 전후 · Actions 실행 링크). 콘솔 "운영" 화면에서 본다. 기록은 Postgres 컨테이너 안의 psql 로 하고 실패해도 배포는 계속한다. 실행 ID · 링크는 워크플로가 `DEPLOY_RUN_ID` · `DEPLOY_RUN_URL` 로 넘기고 손으로 실행하면 비어 있다 (D-69)
 - **하지 않는 것**: SSM 값 변경. (Terraform apply 는 같은 워크플로의 `infra` 잡이 한다 — 8절) Actions 에서 실행을 취소해도 호스트의 `deploy.sh` 는 끝까지 돈다 (역할에 `CancelCommand` 권한을 주지 않음)
 
 #### 권한 (`infra/platform/terraform/github-cd.tf`)

@@ -94,6 +94,9 @@ services:
       context: ../..
       dockerfile: apps/worker/Dockerfile
       platforms: [linux/amd64]
+      args:
+        # 운영 화면의 워커 커밋 (#310). deploy.sh 가 체크아웃한 커밋을 넘긴다
+        GIT_COMMIT: ${CAMELLIA_COMMIT:-}
     restart: unless-stopped
     # tini 가 SIGTERM 을 node(tsx) 에만 전달한다 → terraform · buildx 자식은 작업이 끝날 때까지 계속 돈다
     init: true

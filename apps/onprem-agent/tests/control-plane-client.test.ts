@@ -173,6 +173,48 @@ describe("Agent Control Plane HTTP Client", () => {
     }])).resolves.toEqual({ jobCancelled: true, desiredDeploymentIds: ["73"] });
   });
 
+  it("cleanup Job claim과 결과 보고를 별도 API로 처리한다", async () => {
+    const requests: CapturedRequest[] = [];
+    const cleanupJob = {
+      jobId: "cleanup-73",
+      attempt: 1,
+      deploymentId: 73,
+      environmentId: "12",
+      reason: "project_deleted",
+    };
+    const baseUrl = await listen(async (request) => {
+      const body = await readBody(request);
+      requests.push({
+        method: request.method,
+        url: request.url,
+        ...(body === undefined ? {} : { body }),
+      });
+      if (request.url === "/api/v1/agents/cleanup-jobs/claim") {
+        return { status: 200, body: { job: cleanupJob } };
+      }
+      return { status: 204 };
+    });
+    const client = new AgentControlPlaneHttpClient(credential(baseUrl));
+    const result = {
+      ...cleanupJob,
+      status: "succeeded" as const,
+      startedAt: "2026-10-02T00:00:00.000Z",
+      finishedAt: "2026-10-02T00:00:01.000Z",
+    };
+
+    await expect(client.claimCleanupJob()).resolves.toEqual(cleanupJob);
+    await client.reportCleanupResult(cleanupJob.jobId, result);
+
+    expect(requests).toEqual([
+      { method: "POST", url: "/api/v1/agents/cleanup-jobs/claim" },
+      {
+        method: "POST",
+        url: "/api/v1/agents/cleanup-jobs/cleanup-73/result",
+        body: result,
+      },
+    ]);
+  });
+
   it("서버 오류에 Agent Key·ECR·Tunnel 응답 본문을 노출하지 않는다", async () => {
     const secret = "server-secret-must-not-leak";
     const baseUrl = await listen(async (request) => {

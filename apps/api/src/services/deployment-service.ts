@@ -4,7 +4,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { Pool } from "@camellia/db";
+import { enqueueOnpremCleanup, type Pool } from "@camellia/db";
 import type PgBoss from "pg-boss";
 import type { Storage } from "@camellia/storage";
 import type {
@@ -262,6 +262,13 @@ export class DeploymentService {
            AND status IN ('pending', 'claimed', 'running', 'ready_for_verify')`,
         [id],
       );
+
+      // 이미 실행을 시작한 Agent가 있을 수 있으므로 취소 상태 변경과 같은 트랜잭션에서
+      // 멱등 cleanup Job도 예약한다. On-Prem 배포가 아니면 INSERT ... SELECT가 no-op이다.
+      await enqueueOnpremCleanup(client, {
+        deploymentId: id,
+        reason: "deployment_cancelled",
+      });
 
       await client.query(
         "DELETE FROM env_locks WHERE deployment_id = $1",

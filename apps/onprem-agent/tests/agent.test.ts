@@ -138,4 +138,32 @@ describe("Agent 작업 수신과 상태 보고", () => {
     expect(heartbeatCalls).toBe(2);
     expect(claimCalls).toBe(0);
   });
+
+  it("배포 Job보다 cleanup Job을 먼저 실행하고 성공 결과를 보고한다", async () => {
+    const client = new FakeControlPlaneClient([createJob()]);
+    client.enqueueCleanup({
+      jobId: "cleanup-41",
+      attempt: 1,
+      deploymentId: 41,
+      environmentId: "env-onprem-1",
+      reason: "deployment_failed",
+    });
+    const cleaned: number[] = [];
+    const executor: OnpremJobExecutor = {
+      async execute() { throw new Error("deploy must wait"); },
+      async cleanup(deploymentId) { cleaned.push(deploymentId); },
+    };
+    const service = new AgentService(client, executor);
+
+    await expect(service.pollOnce()).resolves.toBe(true);
+
+    expect(cleaned).toEqual([41]);
+    expect(client.reportedCleanupResults).toHaveLength(1);
+    expect(client.reportedCleanupResults[0]).toMatchObject({
+      jobId: "cleanup-41",
+      deploymentId: 41,
+      status: "succeeded",
+    });
+    expect(client.reportedResults).toEqual([]);
+  });
 });

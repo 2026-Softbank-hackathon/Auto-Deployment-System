@@ -1,6 +1,7 @@
 import type {
   EcrCredential,
   OnpremAgentJob,
+  OnpremCleanupJob,
 } from "./contracts.js";
 import { AgentError } from "./errors.js";
 
@@ -186,6 +187,25 @@ export function parseOnpremAgentJob(value: unknown): OnpremAgentJob {
   }
 
   return value as OnpremAgentJob;
+}
+
+const CLEANUP_REASONS = new Set([
+  "superseded",
+  "deployment_failed",
+  "deployment_cancelled",
+  "project_deleted",
+]);
+
+export function parseOnpremCleanupJob(value: unknown): OnpremCleanupJob {
+  if (!isRecord(value)) invalid("cleanup job이 객체가 아닙니다.");
+  requireString(value.jobId, "jobId", /^cleanup-[1-9]\d*$/);
+  requirePositiveInteger(value.attempt, "attempt");
+  requirePositiveInteger(value.deploymentId, "deploymentId");
+  requireString(value.environmentId, "environmentId", IDENTIFIER_PATTERN);
+  if (typeof value.reason !== "string" || !CLEANUP_REASONS.has(value.reason)) {
+    invalid("cleanup reason이 올바르지 않습니다.");
+  }
+  return value as OnpremCleanupJob;
 }
 
 export function validateEcrCredential(

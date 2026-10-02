@@ -61,6 +61,7 @@ import {
 } from "./services/agent-job-service.js";
 import agentJobsRoutes, { type AgentIdentity } from "./routes/agent-jobs.js";
 import agentEcrCredentialRoutes from "./routes/agent-ecr-credentials.js";
+import { AgentCleanupJobService } from "./services/agent-cleanup-job-service.js";
 
 export interface BuildServerOptions {
   pool: Pool;
@@ -144,6 +145,7 @@ export async function buildServer(opts: BuildServerOptions) {
     platformDomain: opts.platformDomain,
     boss: opts.boss,
   });
+  const agentCleanupJobService = new AgentCleanupJobService(opts.pool);
   const agentEcrCredentialService = new AgentEcrCredentialService(
     opts.pool,
     secretService,
@@ -297,6 +299,7 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(agentJobsRoutes, {
       prefix: "/agents",
       agentJobService,
+      agentCleanupJobService,
       authenticate: authenticateAgent,
       pollTimeoutMs: opts.agentJobPollTimeoutMs,
       pollIntervalMs: opts.agentJobPollIntervalMs,

@@ -21,3 +21,4 @@ export function createPgBoss(databaseUrl: string): PgBoss {
 }
 
 export * from "./schema.js";
+export * from "./onprem-agent-cleanup.js";

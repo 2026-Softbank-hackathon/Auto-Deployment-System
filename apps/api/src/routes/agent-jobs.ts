@@ -5,6 +5,10 @@ import type {
   AgentJobService,
   ClaimedOnpremJob,
 } from "../services/agent-job-service.js";
+import type {
+  AgentCleanupJobService,
+  ClaimedCleanupJob,
+} from "../services/agent-cleanup-job-service.js";
 
 export type AgentIdentity = {
   agentId: number;
@@ -15,6 +19,10 @@ export type AgentJobsRouteOptions = {
   agentJobService: Pick<
     AgentJobService,
     "claimNext" | "prepareTunnel" | "reportResult"
+  >;
+  agentCleanupJobService: Pick<
+    AgentCleanupJobService,
+    "claimNext" | "reportResult"
   >;
   authenticate: (token: string) => Promise<AgentIdentity | null>;
   pollTimeoutMs?: number;
@@ -67,10 +75,79 @@ const ExecutionResultSchema = z.discriminatedUnion("status", [
   }).strict(),
 ]);
 
+const CleanupReasonSchema = z.enum([
+  "superseded",
+  "deployment_failed",
+  "deployment_cancelled",
+  "project_deleted",
+]);
+
+const CleanupResultBaseSchema = z.object({
+  jobId: z.string().regex(/^cleanup-[1-9]\d*$/),
+  attempt: z.number().int().positive(),
+  deploymentId: z.number().int().positive(),
+  environmentId: z.string().min(1).max(100),
+  reason: CleanupReasonSchema,
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime(),
+});
+
+const CleanupExecutionResultSchema = z.discriminatedUnion("status", [
+  CleanupResultBaseSchema.extend({ status: z.literal("succeeded") }).strict(),
+  CleanupResultBaseSchema.extend({
+    status: z.literal("failed"),
+    errorCode: z.enum(["cleanup_failed", "internal_error"]),
+    errorMessage: z.string().min(1).max(500),
+  }).strict(),
+]);
+
 const agentJobsRoutes: FastifyPluginAsync<AgentJobsRouteOptions> = async (
   fastify,
   options,
 ) => {
+  fastify.post(
+    "/cleanup-jobs/claim",
+    {
+      schema: {
+        tags: ["agents"],
+        summary: "Agent가 예약된 런타임 cleanup Job을 비차단 claim",
+      },
+    },
+    async (request) => {
+      const agent = await authenticateRequest(request.headers["authorization"]);
+      const job = await options.agentCleanupJobService.claimNext(
+        agent.agentId,
+        agent.environmentId,
+        MAX_LEASE_SECONDS,
+      );
+      return { job: job ? normalizeClaimedCleanupJob(job) : null };
+    },
+  );
+
+  fastify.post<{ Params: { jobId: string } }>(
+    "/cleanup-jobs/:jobId/result",
+    {
+      schema: {
+        tags: ["agents"],
+        summary: "Agent 런타임 cleanup 결과 저장",
+      },
+    },
+    async (request, reply) => {
+      const agent = await authenticateRequest(request.headers["authorization"]);
+      const parsed = CleanupExecutionResultSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ApiError(400, "VALIDATION_ERROR", "Agent cleanup 결과가 올바르지 않습니다.");
+      }
+      await options.agentCleanupJobService.reportResult(
+        agent.agentId,
+        agent.environmentId,
+        request.params.jobId,
+        parsed.data,
+      );
+      return reply.status(204).send();
+    },
+  );
+
   fastify.post(
     "/jobs/claim",
     {
@@ -199,6 +276,20 @@ function normalizeClaimedJob(job: ClaimedOnpremJob): ClaimedOnpremJob {
     !job.environmentId
   ) {
     throw new ApiError(500, "AGENT_JOB_PAYLOAD_INVALID", "저장된 Agent Job 계약이 올바르지 않습니다.");
+  }
+  return job;
+}
+
+function normalizeClaimedCleanupJob(job: ClaimedCleanupJob): ClaimedCleanupJob {
+  if (
+    !/^cleanup-[1-9]\d*$/.test(job.jobId) ||
+    !Number.isSafeInteger(job.attempt) ||
+    job.attempt < 1 ||
+    !Number.isSafeInteger(job.deploymentId) ||
+    job.deploymentId < 1 ||
+    !job.environmentId
+  ) {
+    throw new ApiError(500, "AGENT_CLEANUP_JOB_PAYLOAD_INVALID", "저장된 cleanup Job 계약이 올바르지 않습니다.");
   }
   return job;
 }

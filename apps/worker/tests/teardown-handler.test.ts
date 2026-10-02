@@ -58,6 +58,7 @@ function harness(options: {
   inProgress?: boolean;
   envs?: EnvRow[];
   onpremDeploymentIds?: string[];
+  cleanupStatuses?: Record<string, string>;
   deploymentIds?: string[];
   stateExists?: boolean;
   destroyFailure?: Error;
@@ -78,6 +79,14 @@ function harness(options: {
       return { rows: options.inProgress ? [{ id: "7", status: "building" }] : [] };
     }
     if (text.includes("JOIN build_artifacts")) return { rows: options.envs ?? [awsEnv()] };
+    if (text.includes("FROM onprem_agent_cleanup_jobs")) {
+      return {
+        rows: (options.onpremDeploymentIds ?? []).map((id) => ({
+          deployment_id: id,
+          status: options.cleanupStatuses?.[id] ?? "succeeded",
+        })),
+      };
+    }
     if (text.includes("JOIN onprem_agent_jobs")) {
       return { rows: (options.onpremDeploymentIds ?? []).map((id) => ({ id })) };
     }
@@ -284,11 +293,10 @@ describe("handleTeardown", () => {
     expect(missing.auditLog()?.metadata.cloudflareFailures).toEqual(["ORIGIN_CONFIGURATION_MISSING"]);
   });
 
-  it("온프레미스에서 돈 앱 — 검증용 주소까지 정리하고, 컨테이너는 직접 지워야 한다는 경고를 남긴다", async () => {
+  it("온프레미스에서 돈 앱 — Agent cleanup 성공을 확인한 뒤 검증용 주소와 DB를 정리한다", async () => {
     const h = harness({
       envs: [],
       onpremDeploymentIds: ["42"],
-      project: { deletion_status: "deleting", deletion_warnings: ["ONPREM_MANUAL_CLEANUP"] },
     });
 
     await handleTeardown({ data: { project_id: 24 } }, h.deps);
@@ -296,10 +304,28 @@ describe("handleTeardown", () => {
     expect(h.removeProjectOrigins).toHaveBeenCalledWith({ projectId: 24, onpremDeploymentIds: [42] });
     expect(h.destroy).not.toHaveBeenCalled();
     expect(h.sqls().some((s) => s.startsWith("DELETE FROM projects"))).toBe(true);
-    expect(h.auditLog()?.metadata.warnings).toEqual(["ONPREM_MANUAL_CLEANUP"]);
-    expect(h.log.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ project_id: 24 }),
-      expect.stringContaining("온프레미스"),
-    );
+    expect(h.auditLog()?.metadata.warnings).toEqual([]);
+    const cleanupCheck = h.queries.find((q) => q.sql.includes("FROM onprem_agent_cleanup_jobs"));
+    expect(cleanupCheck?.params).toEqual([[42]]);
+  });
+
+  it("Agent cleanup이 끝나지 않으면 프로젝트 row를 지우지 않고 재시도 가능한 failed로 남긴다", async () => {
+    const h = harness({
+      envs: [],
+      onpremDeploymentIds: ["42"],
+      cleanupStatuses: { "42": "pending" },
+    });
+    h.deps.onpremCleanupWait = {
+      timeoutMs: 0,
+      pollIntervalMs: 1,
+      sleep: vi.fn(async () => undefined),
+    };
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
+    expect(h.removeProjectOrigins).not.toHaveBeenCalled();
+    expect(h.sqls().some((s) => s.startsWith("DELETE FROM projects"))).toBe(false);
+    const failed = h.queries.find((q) => q.sql.includes("SET deletion_status = 'failed'"))!;
+    expect(failed.params[1]).toBe("ONPREM_CLEANUP_TIMEOUT");
   });
 });

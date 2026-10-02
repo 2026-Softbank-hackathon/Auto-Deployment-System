@@ -3,6 +3,8 @@ import type {
   AgentRuntimeReport,
   EcrCredential,
   OnpremAgentJob,
+  OnpremCleanupJob,
+  OnpremCleanupResult,
   OnpremExecutionResult,
   TunnelProvider,
   TunnelResult,
@@ -12,11 +14,13 @@ import type {
 
 export class FakeControlPlaneClient implements AgentControlPlaneClient {
   readonly reportedResults: OnpremExecutionResult[] = [];
+  readonly reportedCleanupResults: OnpremCleanupResult[] = [];
   readonly heartbeats: Array<{
     currentJobId?: string;
     runtimes: AgentRuntimeReport[];
   }> = [];
   private readonly jobs: OnpremAgentJob[];
+  private readonly cleanupJobs: OnpremCleanupJob[] = [];
   private readonly credentials = new Map<string, EcrCredential>();
   private readonly tunnelSessions = new Map<string, TunnelSession>();
   private readonly cancellations = new Set<string>();
@@ -27,6 +31,14 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
 
   enqueue(job: OnpremAgentJob): void {
     this.jobs.push(job);
+  }
+
+  enqueueCleanup(job: OnpremCleanupJob): void {
+    this.cleanupJobs.push(job);
+  }
+
+  async claimCleanupJob(): Promise<OnpremCleanupJob | null> {
+    return this.cleanupJobs.shift() ?? null;
   }
 
   setEcrCredential(jobId: string, credential: EcrCredential): void {
@@ -62,6 +74,13 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
     result: OnpremExecutionResult,
   ): Promise<void> {
     this.reportedResults.push(result);
+  }
+
+  async reportCleanupResult(
+    _jobId: string,
+    result: OnpremCleanupResult,
+  ): Promise<void> {
+    this.reportedCleanupResults.push(result);
   }
 
   async sendHeartbeat(

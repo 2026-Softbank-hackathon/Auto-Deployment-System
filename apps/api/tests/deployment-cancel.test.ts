@@ -163,7 +163,7 @@ describe("DeploymentService.cancel", () => {
     return { svc, queries, client, pool };
   }
 
-  it("provisioning 상태 cancel — 트랜잭션 안에 UPDATE deployments + UPDATE onprem_agent_jobs + DELETE env_locks + pg_notify", async () => {
+  it("provisioning 상태 cancel — 트랜잭션 안에 상태 변경 + Agent cleanup + lock 해제 + 알림", async () => {
     const { svc, queries } = makeHarness("provisioning");
 
     const result = await svc.cancel(42, "manual cancel for demo");
@@ -178,6 +178,7 @@ describe("DeploymentService.cancel", () => {
     expect(sqls).toContain("BEGIN");
     expect(sqls.some((s) => s.includes("UPDATE deployments"))).toBe(true);
     expect(sqls.some((s) => s.includes("UPDATE onprem_agent_jobs"))).toBe(true);
+    expect(sqls.some((s) => s.includes("INSERT INTO onprem_agent_cleanup_jobs"))).toBe(true);
     expect(sqls.some((s) => s.includes("DELETE FROM env_locks"))).toBe(true);
     expect(sqls.some((s) => s.includes("pg_notify"))).toBe(true);
     expect(sqls).toContain("COMMIT");
@@ -185,6 +186,8 @@ describe("DeploymentService.cancel", () => {
     // UPDATE deployments 가 cancelled 상태로 + reason 포함
     const updateDep = queries.find((q) => q.sql.includes("UPDATE deployments"));
     expect(updateDep?.params[1]).toBe("manual cancel for demo");
+    const cleanup = queries.find((q) => q.sql.includes("INSERT INTO onprem_agent_cleanup_jobs"));
+    expect(cleanup?.params.slice(0, 2)).toEqual([42, "deployment_cancelled"]);
 
     // pg_notify payload 가 cancelled 상태 포함
     const notify = queries.find((q) => q.sql.includes("pg_notify"));

@@ -4,12 +4,14 @@ import type {
   AgentRuntimeReport,
   EcrCredential,
   OnpremAgentJob,
+  OnpremCleanupJob,
+  OnpremCleanupResult,
   OnpremExecutionResult,
   TunnelSession,
   TunnelStartInput,
 } from "./contracts.js";
 import type { AgentCredential } from "./credential-store.js";
-import { parseOnpremAgentJob } from "./validation.js";
+import { parseOnpremAgentJob, parseOnpremCleanupJob } from "./validation.js";
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -63,6 +65,15 @@ export class AgentControlPlaneHttpClient implements AgentControlPlaneClient {
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
   }
 
+  async claimCleanupJob(): Promise<OnpremCleanupJob | null> {
+    const body = await this.requestJson("/api/v1/agents/cleanup-jobs/claim", {});
+    if (!isRecord(body) || !("job" in body)) {
+      throw new Error("Cleanup Job claim 응답 형식이 올바르지 않습니다.");
+    }
+    if (body.job === null) return null;
+    return parseOnpremCleanupJob(body.job);
+  }
+
   async claimJob(): Promise<OnpremAgentJob | null> {
     const body = await this.requestJson("/api/v1/agents/jobs/claim", {});
     if (!isRecord(body) || !("job" in body)) {
@@ -113,6 +124,16 @@ export class AgentControlPlaneHttpClient implements AgentControlPlaneClient {
   ): Promise<void> {
     await this.request(
       `/api/v1/agents/jobs/${encodeURIComponent(jobId)}/result`,
+      { body: result },
+    );
+  }
+
+  async reportCleanupResult(
+    jobId: string,
+    result: OnpremCleanupResult,
+  ): Promise<void> {
+    await this.request(
+      `/api/v1/agents/cleanup-jobs/${encodeURIComponent(jobId)}/result`,
       { body: result },
     );
   }

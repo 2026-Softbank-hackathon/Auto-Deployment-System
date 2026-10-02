@@ -59,6 +59,30 @@ export class AgentService {
   }
 
   async pollOnce(): Promise<boolean> {
+    const cleanupJob = await this.client.claimCleanupJob();
+    if (cleanupJob) {
+      const startedAt = new Date().toISOString();
+      try {
+        await this.executor.cleanup?.(cleanupJob.deploymentId);
+        await this.client.reportCleanupResult(cleanupJob.jobId, {
+          ...cleanupJob,
+          status: "succeeded",
+          startedAt,
+          finishedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        await this.client.reportCleanupResult(cleanupJob.jobId, {
+          ...cleanupJob,
+          status: "failed",
+          errorCode: "cleanup_failed",
+          errorMessage: error instanceof Error ? error.message.slice(0, 500) : "cleanup failed",
+          startedAt,
+          finishedAt: new Date().toISOString(),
+        });
+      }
+      return true;
+    }
+
     const job = await this.client.claimJob();
     if (!job) return false;
 

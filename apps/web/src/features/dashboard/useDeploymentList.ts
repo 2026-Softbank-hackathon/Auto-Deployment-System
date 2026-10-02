@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listProjectDeployments, listProjects, type ProjectDeploymentSummary, type ProjectSummary } from '../../api/deployment-api';
 import { deploymentStatusView } from '../deployment-status/status-view';
+import { readCache, writeCache } from '../../lib/page-cache';
 import { isStalled } from './format';
 
 /**
@@ -14,6 +15,9 @@ const DEPLOYMENTS_PER_PROJECT = 20;
 const ACTIVE_REFRESH_MS = 10_000;
 
 export interface DeploymentListItem extends ProjectDeploymentSummary { projectName: string }
+
+const LIST_CACHE_KEY = 'deployment-list';
+interface CachedList { items: DeploymentListItem[]; partialFailures: number; loadedAt: number }
 
 type ListState =
   | { phase: 'loading' }
@@ -48,11 +52,17 @@ export async function loadDeployments(): Promise<{ items: DeploymentListItem[]; 
     throw reason;
   }
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])).sort(byNewest);
+  // 전역 알림도 이 함수로 목록을 읽으므로, 여기서 캐시해 두면 배포 현황에 들어올 때 최신에 가까운 값이 이미 있다.
+  writeCache<CachedList>(LIST_CACHE_KEY, { items, partialFailures: failures.length, loadedAt: Date.now() });
   return { items, partialFailures: failures.length };
 }
 
 export function useDeploymentList() {
-  const [state, setState] = useState<ListState>({ phase: 'loading' });
+  // 직전에 받은 목록이 있으면 먼저 보여 주고, 바로 다시 읽어 바꿔 끼운다 (화면을 옮길 때마다 "불러오는 중"이 뜨지 않게).
+  const [state, setState] = useState<ListState>(() => {
+    const cached = readCache<CachedList>(LIST_CACHE_KEY);
+    return cached ? { phase: 'ready', ...cached } : { phase: 'loading' };
+  });
 
   const refresh = useCallback(async () => {
     try {

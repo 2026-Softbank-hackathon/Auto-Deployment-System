@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { DeploymentApiError } from '../api/deployment-api';
 import { ja } from './ja';
@@ -29,6 +29,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(readPreference);
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language);
   const requested = useRef<Language>(language);
+
+  // 글꼴은 글자 범위별 조각으로 나뉘어 있어서, 처음 보는 글자가 나오는 화면으로 옮기면 그때 조각을 받느라 글자가 한 번 바뀐다.
+  // 첫 화면이 뜬 뒤 한가할 때 현재 언어의 화면 문구에 쓰이는 조각을 미리 받아 두어, 화면을 옮길 때 깜빡이지 않게 한다.
+  useEffect(() => {
+    const warm = () => { void preloadLanguageFonts(requested.current, dictionaries[requested.current]); };
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(warm, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(warm, 1200);
+    return () => clearTimeout(timer);
+  }, []);
 
   /** 글꼴을 먼저 받아 두고, 화면 전체를 교차 전환하면서 언어를 바꾼다. */
   const setLanguage = useCallback((next: Language) => {

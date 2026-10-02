@@ -7,6 +7,7 @@ import { displayProjectName, relativeTime } from '../features/dashboard/format';
 import { awsKeysMissing, useDeployProject, type DeployProject } from '../features/deployment-start/useDeployProject';
 import { deploymentStatusView } from '../features/deployment-status/status-view';
 import { ProjectNameForm } from '../features/projects/ProjectNameForm';
+import { readCache, writeCache } from '../lib/page-cache';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
 /** 프로젝트 한 개의 연결 상태. 부가 정보(환경변수 · 최근 배포)는 읽지 못해도 줄은 보여 준다(null). */
@@ -32,13 +33,14 @@ async function loadStatus(projectId: string): Promise<ProjectStatus> {
 function ProjectCard({ project, selected, onOpen, onNavigate }: { project: DeployProject; selected: boolean; onOpen: (path: string) => void; onNavigate: Navigate }) {
   const { t } = useI18n();
   const copy = t.projects;
-  const [status, setStatus] = useState<ProjectStatus | null>(null);
+  const cacheKey = `project-status:${project.id}`;
+  const [status, setStatus] = useState<ProjectStatus | null>(() => readCache<ProjectStatus>(cacheKey) ?? null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    loadStatus(project.id).then((next) => { if (active) setStatus(next); }, () => { if (active) setFailed(true); });
+    loadStatus(project.id).then((next) => { writeCache(cacheKey, next); if (active) setStatus(next); }, () => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [project.id]);
+  }, [project.id, cacheKey]);
 
   const awsReady = status !== null && status.aws !== null && !status.keysMissing;
   const latestView = status?.latest ? deploymentStatusView(status.latest.status) : null;
@@ -47,7 +49,7 @@ function ProjectCard({ project, selected, onOpen, onNavigate }: { project: Deplo
       <h2><a href={`/projects/${encodeURIComponent(project.id)}`} onClick={(event) => followAppLink(event, onNavigate)}>{displayProjectName(project.name)}</a></h2>
       {selected && <StatusTape tone="running">{copy.selected}</StatusTape>}
     </div>
-    {failed && <p className="project-card__error" role="alert">{copy.statusError}</p>}
+    {failed && status === null && <p className="project-card__error" role="alert">{copy.statusError}</p>}
     {!failed && status === null && <p role="status">{copy.statusLoading}</p>}
     {status !== null && <dl className="project-card__facts">
       <div><dt>{copy.aws}</dt><dd className={awsReady ? 'is-ok' : 'is-missing'}>{status.keysMissing ? copy.keysMissing : status.aws ? `✓ ${status.aws.region ?? status.aws.name}` : copy.notConnected}</dd></div>

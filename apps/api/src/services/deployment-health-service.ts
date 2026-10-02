@@ -24,6 +24,8 @@ type HealthCheckAttemptRow = {
   error_message: string | null;
 };
 
+type VerificationPhase = "target" | "origin_switching" | "public_url";
+
 export type DeploymentHealthResponse = DeploymentHealth;
 
 export class DeploymentHealthService {
@@ -62,13 +64,16 @@ export class DeploymentHealthService {
       );
     }
 
+    const phase = readPhase(step.message);
+    const attemptPhase = phase === "public_url" ? "public_url" : "target";
+
     const attemptsResult = await this.pool.query<HealthCheckAttemptRow>(
       `SELECT attempt, checked_at, status_code, latency_ms, passed,
               error_code, error_message
        FROM health_check_attempts
-       WHERE deployment_step_id = $1
+       WHERE deployment_step_id = $1 AND phase = $2
        ORDER BY attempt ASC`,
-      [step.id],
+      [step.id, attemptPhase],
     );
 
     const checks = attemptsResult.rows.map((row) => {
@@ -86,6 +91,7 @@ export class DeploymentHealthService {
     return {
       deploymentId: String(deploymentId),
       status: mapStepStatus(step.status),
+      phase,
       checks,
       consecutivePassed: countConsecutivePasses(attemptsResult.rows),
       requiredPasses: 3,
@@ -94,6 +100,25 @@ export class DeploymentHealthService {
         buildDefaultHealthUrl(deployment.public_url),
     };
   }
+}
+
+function readPhase(message: string | null | undefined): VerificationPhase {
+  if (!message) return "target";
+  try {
+    const parsed: unknown = JSON.parse(message);
+    if (parsed === null || typeof parsed !== "object") return "target";
+    const phase = Reflect.get(parsed, "phase");
+    if (
+      phase === "target" ||
+      phase === "origin_switching" ||
+      phase === "public_url"
+    ) {
+      return phase;
+    }
+  } catch {
+    // 과거의 일반 문자열 message는 target 검증 기록으로 취급한다.
+  }
+  return "target";
 }
 
 function mapStepStatus(

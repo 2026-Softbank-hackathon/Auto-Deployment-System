@@ -56,6 +56,7 @@ export interface DeploymentIrResponse {
 export interface DeploymentHealthCheck { attempt: number; passed: boolean; statusCode?: number; latencyMs?: number }
 export interface DeploymentHealthResponse {
   status: 'checking' | 'passed' | 'failed';
+  phase?: 'target' | 'origin_switching' | 'public_url';
   checks: DeploymentHealthCheck[];
   consecutivePassed: number;
   requiredPasses: number;
@@ -400,6 +401,7 @@ export async function getDeploymentHealth(deploymentId: string): Promise<Deploym
   if (response.status === 404) return null;
   const body = asRecord(await readJson(response), '헬스체크');
   const status = body.status === 'passed' || body.status === 'failed' ? body.status : 'checking';
+  const phase = body.phase === 'target' || body.phase === 'origin_switching' || body.phase === 'public_url' ? body.phase : undefined;
   const checks = (Array.isArray(body.checks) ? body.checks : []).flatMap((item): DeploymentHealthCheck[] => {
     if (!item || typeof item !== 'object') return [];
     const check = item as Record<string, unknown>;
@@ -408,6 +410,7 @@ export async function getDeploymentHealth(deploymentId: string): Promise<Deploym
   });
   return {
     status,
+    ...(phase ? { phase } : {}),
     checks,
     consecutivePassed: typeof body.consecutivePassed === 'number' ? body.consecutivePassed : 0,
     requiredPasses: typeof body.requiredPasses === 'number' ? body.requiredPasses : 3,

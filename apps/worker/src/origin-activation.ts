@@ -1,9 +1,14 @@
 import type { CloudflareClient } from "@camellia/cloudflare";
 import type { Pool } from "@camellia/db";
-import type { VerifyJobPayload } from "./handlers/verify.js";
+import {
+  buildHealthUrl,
+  type VerifyJobPayload,
+  VerifyResultSchema,
+} from "./handlers/verify.js";
 
 type CloudflareOperations = Pick<CloudflareClient,
-  "ensureNamedTunnel" | "ensureCname" | "setTunnelOrigin" | "switchServiceOrigin">;
+  "deleteCname" | "ensureNamedTunnel" | "ensureCname" | "getCname" |
+  "removeTunnelOrigin" | "setTunnelOrigin" | "switchServiceOrigin">;
 
 export type OriginActivationOptions = {
   cloudflare?: CloudflareOperations;
@@ -18,6 +23,7 @@ type OriginContext = {
   status: string;
   public_url: string | null;
   verify_status: string | null;
+  verify_message: string | null;
   agent_status: string | null;
   agent_result: unknown;
 };
@@ -28,6 +34,21 @@ export class OriginActivationError extends Error {
     this.name = "OriginActivationError";
   }
 }
+
+export type OriginActivationReceipt = {
+  serviceHostname: string;
+  activatedOrigin: string;
+  previousOrigin: {
+    hostname: string;
+    proxied: boolean;
+  } | null;
+  tunnelIngress: {
+    tunnelId: string;
+    hostname: string;
+    activatedServiceUrl: string;
+    previousServiceUrl: string | null;
+  } | null;
+};
 
 export class DeploymentOriginActivator {
   constructor(
@@ -57,18 +78,19 @@ export class DeploymentOriginActivator {
     }));
   }
 
-  async activate(payload: VerifyJobPayload): Promise<void> {
+  async activate(payload: VerifyJobPayload): Promise<OriginActivationReceipt | null> {
     const result = await this.pool.query<OriginContext>(
       `SELECT deployment.project_id, deployment.target_environment_id,
               environment.type AS environment_type, deployment.status,
               deployment.public_url, latest_verify.status AS verify_status,
+              latest_verify.message AS verify_message,
               job.status AS agent_status, job.result AS agent_result
        FROM deployments AS deployment
        JOIN environments AS environment ON environment.id = deployment.target_environment_id
        LEFT JOIN onprem_agent_jobs AS job
          ON job.deployment_id = deployment.id AND job.environment_id = environment.id
        LEFT JOIN LATERAL (
-         SELECT step.status FROM deployment_steps AS step
+         SELECT step.status, step.message FROM deployment_steps AS step
          WHERE step.deployment_id = deployment.id AND step.step_name = 'verify'
            AND step.job_id = $2
          ORDER BY step.id DESC LIMIT 1
@@ -77,13 +99,17 @@ export class DeploymentOriginActivator {
       [payload.deploymentId, payload.jobId],
     );
     const row = result.rows[0];
-    if (!row || row.verify_status !== "succeeded" ||
+    const targetVerified = row && (
+      row.verify_status === "succeeded" ||
+      isTargetVerified(row.verify_message, payload)
+    );
+    if (!row || !targetVerified ||
         String(row.target_environment_id) !== payload.environmentId ||
         row.environment_type !== payload.environmentType ||
         row.public_url !== payload.targetUrl) {
       throw new OriginActivationError("ORIGIN_VERIFICATION_MISMATCH");
     }
-    if (row.status === "succeeded") return;
+    if (row.status === "succeeded") return null;
     if (row.status !== "verifying") {
       throw new OriginActivationError("ORIGIN_DEPLOYMENT_NOT_VERIFYING");
     }
@@ -115,11 +141,83 @@ export class DeploymentOriginActivator {
     }
 
     await this.assertStillVerifying(payload.deploymentId);
-    if (tunnelIngress) {
-      await safeCloudflare(() => cloudflare.setTunnelOrigin(tunnelIngress!));
+    const previousRecord = await safeCloudflare(() => cloudflare.getCname({
+      zoneId,
+      hostname: serviceHostname,
+    }));
+    let tunnelChange: OriginActivationReceipt["tunnelIngress"] = null;
+    const ingress = tunnelIngress;
+    if (ingress) {
+      const change = await safeCloudflare(() => cloudflare.setTunnelOrigin(ingress));
+      tunnelChange = {
+        tunnelId: ingress.tunnelId,
+        hostname: ingress.hostname,
+        activatedServiceUrl: ingress.serviceUrl,
+        previousServiceUrl: change?.previousServiceUrl ?? null,
+      };
     }
-    await safeCloudflare(() => cloudflare.switchServiceOrigin({
-      zoneId: zoneId.trim(), serviceHostname, originHostname,
+    try {
+      const activated = await safeCloudflare(() => cloudflare.switchServiceOrigin({
+        zoneId: zoneId.trim(), serviceHostname, originHostname,
+      }));
+      if (activated.content !== originHostname) {
+        throw new OriginActivationError("ORIGIN_CLOUDFLARE_MISMATCH");
+      }
+    } catch (error) {
+      if (tunnelChange) {
+        await this.restoreTunnelIngress(cloudflare, tunnelChange).catch(() => undefined);
+      }
+      throw error;
+    }
+    return {
+      serviceHostname,
+      activatedOrigin: originHostname,
+      previousOrigin: previousRecord
+        ? { hostname: previousRecord.content, proxied: previousRecord.proxied }
+        : null,
+      tunnelIngress: tunnelChange,
+    };
+  }
+
+  async rollback(receipt: OriginActivationReceipt): Promise<void> {
+    const { cloudflare, zoneId } = this.cloudflareConfiguration();
+    if (receipt.tunnelIngress) {
+      await this.restoreTunnelIngress(cloudflare, receipt.tunnelIngress);
+    }
+    const previousOrigin = receipt.previousOrigin;
+    if (previousOrigin) {
+      await safeCloudflare(() => cloudflare.ensureCname({
+        zoneId,
+        hostname: receipt.serviceHostname,
+        target: previousOrigin.hostname,
+        proxied: previousOrigin.proxied,
+      }));
+      return;
+    }
+    await safeCloudflare(() => cloudflare.deleteCname({
+      zoneId,
+      hostname: receipt.serviceHostname,
+      expectedTarget: receipt.activatedOrigin,
+    }));
+  }
+
+  private async restoreTunnelIngress(
+    cloudflare: CloudflareOperations,
+    change: NonNullable<OriginActivationReceipt["tunnelIngress"]>,
+  ): Promise<void> {
+    const previousServiceUrl = change.previousServiceUrl;
+    if (previousServiceUrl) {
+      await safeCloudflare(() => cloudflare.setTunnelOrigin({
+        tunnelId: change.tunnelId,
+        hostname: change.hostname,
+        serviceUrl: previousServiceUrl,
+      }));
+      return;
+    }
+    await safeCloudflare(() => cloudflare.removeTunnelOrigin({
+      tunnelId: change.tunnelId,
+      hostname: change.hostname,
+      expectedServiceUrl: change.activatedServiceUrl,
     }));
   }
 
@@ -147,6 +245,25 @@ export class DeploymentOriginActivator {
       throw new OriginActivationError("ORIGIN_DOMAIN_INVALID");
     }
     return { cloudflare, zoneId: normalizedZoneId, domain };
+  }
+}
+
+function isTargetVerified(
+  message: string | null,
+  payload: VerifyJobPayload,
+): boolean {
+  if (!message) return false;
+  try {
+    const parsed: unknown = JSON.parse(message);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+    const result = VerifyResultSchema.safeParse(Reflect.get(parsed, "targetResult"));
+    return result.success &&
+      result.data.status === "passed" &&
+      result.data.deploymentId === payload.deploymentId &&
+      result.data.environmentId === payload.environmentId &&
+      result.data.targetUrl === buildHealthUrl(payload.targetUrl, payload.health.path);
+  } catch {
+    return false;
   }
 }
 

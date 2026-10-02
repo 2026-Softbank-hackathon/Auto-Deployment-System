@@ -17,5 +17,6 @@ export const MIGRATION_FILES = [
   "010_audit_logs.sql",
   "011_agent_ecr_credentials.sql",
   "012_shared_connections.sql",
+  "013_health_check_attempt_phase.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

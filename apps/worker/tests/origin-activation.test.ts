@@ -16,6 +16,32 @@ const awsPayload: VerifyJobPayload = {
 const onpremPayload: VerifyJobPayload = {
   ...awsPayload, environmentType: "onprem", targetUrl: "https://verify-d42.example.com",
 };
+const activationReceipt = {
+  serviceHostname: "service-4.example.com",
+  activatedOrigin: "demo.ap-northeast-2.elb.amazonaws.com",
+  previousOrigin: null,
+  tunnelIngress: null,
+};
+
+function publicResult(status: "passed" | "failed" = "passed"): VerifyResult {
+  return {
+    deploymentId: 42,
+    environmentId: "12",
+    status,
+    targetUrl: "https://service-4.example.com/health",
+    checks: [],
+    consecutivePassed: status === "passed" ? 3 : 0,
+    requiredPasses: 3,
+    startedAt: "2026-10-01T10:00:00.000Z",
+    finishedAt: "2026-10-01T10:00:10.000Z",
+    durationMs: 10_000,
+    ...(status === "failed" ? { failureReason: "timeout" } : {}),
+  };
+}
+
+function queryPool(query: ReturnType<typeof vi.fn>): Pool {
+  return { query } as unknown as Pool;
+}
 
 function context(payload = awsPayload) {
   return {
@@ -34,8 +60,21 @@ function cloudflare() {
   return {
     ensureNamedTunnel: vi.fn(async () => ({ id: "tunnel-4", name: "camellia-service-4", endpoint: "tunnel-4.cfargotunnel.com" })),
     ensureCname: vi.fn(async () => ({ id: "verify-dns-42" })),
-    setTunnelOrigin: vi.fn(async () => undefined),
-    switchServiceOrigin: vi.fn(async () => ({ id: "dns-4", name: "service-4.example.com", content: "origin.example.com", proxied: true })),
+    getCname: vi.fn(async () => ({
+      id: "dns-old",
+      name: "service-4.example.com",
+      content: "old-origin.example.com",
+      proxied: true,
+    })),
+    setTunnelOrigin: vi.fn(async () => ({ previousServiceUrl: "http://127.0.0.1:3000" })),
+    removeTunnelOrigin: vi.fn(async () => undefined),
+    deleteCname: vi.fn(async () => undefined),
+    switchServiceOrigin: vi.fn(async (input: { serviceHostname: string; originHostname: string }) => ({
+      id: "dns-4",
+      name: input.serviceHostname,
+      content: input.originHostname,
+      proxied: true,
+    })),
   };
 }
 
@@ -65,7 +104,7 @@ describe("DeploymentOriginActivator", () => {
     const query = vi.fn().mockResolvedValueOnce({ rows: [context()] })
       .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });
     const cf = cloudflare();
-    await new DeploymentOriginActivator({ query } as unknown as Pool, {
+    const receipt = await new DeploymentOriginActivator({ query } as unknown as Pool, {
       cloudflare: cf, zoneId: "zone-1", platformDomain: "example.com",
     }).activate(awsPayload);
 
@@ -74,6 +113,56 @@ describe("DeploymentOriginActivator", () => {
       originHostname: "demo.ap-northeast-2.elb.amazonaws.com",
     });
     expect(cf.ensureNamedTunnel).not.toHaveBeenCalled();
+    expect(receipt).toMatchObject({
+      serviceHostname: "service-4.example.com",
+      activatedOrigin: "demo.ap-northeast-2.elb.amazonaws.com",
+      previousOrigin: {
+        hostname: "old-origin.example.com",
+        proxied: true,
+      },
+    });
+  });
+
+  it("최종 URL 실패 시 직전 CNAME target으로 복구한다", async () => {
+    const query = vi.fn().mockResolvedValueOnce({ rows: [context()] })
+      .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });
+    const cf = cloudflare();
+    const activator = new DeploymentOriginActivator(queryPool(query), {
+      cloudflare: cf,
+      zoneId: "zone-1",
+      platformDomain: "example.com",
+    });
+    const receipt = await activator.activate(awsPayload);
+
+    await activator.rollback(receipt);
+
+    expect(cf.ensureCname).toHaveBeenLastCalledWith({
+      zoneId: "zone-1",
+      hostname: "service-4.example.com",
+      target: "old-origin.example.com",
+      proxied: true,
+    });
+  });
+
+  it("직전 CNAME이 없는 최초 배포는 새 레코드를 삭제한다", async () => {
+    const query = vi.fn().mockResolvedValueOnce({ rows: [context()] })
+      .mockResolvedValueOnce({ rows: [{ status: "verifying" }] });
+    const cf = cloudflare();
+    cf.getCname.mockResolvedValueOnce(null);
+    const activator = new DeploymentOriginActivator(queryPool(query), {
+      cloudflare: cf,
+      zoneId: "zone-1",
+      platformDomain: "example.com",
+    });
+    const receipt = await activator.activate(awsPayload);
+
+    await activator.rollback(receipt);
+
+    expect(cf.deleteCname).toHaveBeenCalledWith({
+      zoneId: "zone-1",
+      hostname: "service-4.example.com",
+      expectedTarget: "demo.ap-northeast-2.elb.amazonaws.com",
+    });
   });
 
   it("저장된 On-Prem 결과의 동적 loopback 포트를 stable ingress에 연결한다", async () => {
@@ -167,14 +256,22 @@ describe("Verify → Origin 활성화 연결", () => {
     const query = vi.fn(async (sql: string, params: unknown[] = []) => {
       if (sql.includes("INSERT INTO deployment_steps")) return { rows: [{ id: 10 }] };
       if (sql === "SELECT status FROM deployments WHERE id = $1") return { rows: [{ status: "verifying" }] };
-      if (sql.includes("UPDATE deployment_steps")) persisted = params[0] === "succeeded";
+      if (sql.includes("UPDATE deployment_steps") && typeof params[0] === "string") {
+        persisted = JSON.parse(params[0]).targetResult?.status === "passed";
+      }
       return { rows: [] };
     });
     const activate = vi.fn(async () => {
       expect(persisted).toBe(true);
       throw new Error("ORIGIN_CLOUDFLARE_FAILED");
     });
-    const deps = { pool: { query }, boss: {}, storage: {}, originActivator: { activate } } as unknown as WorkerDeps;
+    const deps = {
+      pool: { query },
+      boss: {},
+      storage: {},
+      originActivator: { activate, rollback: vi.fn() },
+      finalUrlVerifier: { verify: vi.fn(async () => publicResult()) },
+    } as unknown as WorkerDeps;
     await expect(runVerifyJob({ data: awsPayload }, deps, { sleep: async () => undefined })).rejects.toThrow("ORIGIN_CLOUDFLARE_FAILED");
     expect(activate).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledTimes(3);
@@ -193,8 +290,16 @@ describe("Verify → Origin 활성화 연결", () => {
         ...stored, jobId: awsPayload.jobId, requestFingerprint: createVerifyRequestFingerprint(awsPayload),
       }) }],
     });
-    const activate = vi.fn().mockRejectedValueOnce(new Error("ORIGIN_CLOUDFLARE_FAILED")).mockResolvedValueOnce(undefined);
-    const deps = { pool: { query }, boss: {}, storage: {}, originActivator: { activate } } as unknown as WorkerDeps;
+    const activate = vi.fn()
+      .mockRejectedValueOnce(new Error("ORIGIN_CLOUDFLARE_FAILED"))
+      .mockResolvedValueOnce(activationReceipt);
+    const deps = {
+      pool: { query },
+      boss: {},
+      storage: {},
+      originActivator: { activate, rollback: vi.fn() },
+      finalUrlVerifier: { verify: vi.fn(async () => publicResult()) },
+    } as unknown as WorkerDeps;
     await expect(runVerifyJob({ data: awsPayload }, deps)).rejects.toThrow("ORIGIN_CLOUDFLARE_FAILED");
     await expect(runVerifyJob({ data: awsPayload }, deps)).resolves.toMatchObject({ status: "passed" });
     expect(activate).toHaveBeenCalledTimes(2);

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { WorkerDeps } from "../deps.js";
 
-const REQUIRED_PASSES = 3 as const;
-const MAX_ATTEMPTS = 8;
-const RETRY_INTERVAL_MS = 5_000;
-const SUCCESS_INTERVAL_MS = 1_000;
+export const REQUIRED_PASSES = 3 as const;
+export const MAX_ATTEMPTS = 8;
+export const RETRY_INTERVAL_MS = 5_000;
+export const SUCCESS_INTERVAL_MS = 1_000;
 
 export const VerifyJobPayloadSchema = z.object({
   jobId: z.string().min(1).max(200),
@@ -208,7 +208,7 @@ export async function handleVerify(
   );
 }
 
-async function executeHealthCheck(
+export async function executeHealthCheck(
   targetUrl: string,
   expectedStatus: number,
   timeoutMs: number,

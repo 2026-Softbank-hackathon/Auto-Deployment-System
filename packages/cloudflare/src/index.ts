@@ -3,6 +3,7 @@ export type {
   CloudflareClientOptions,
   CloudflareDnsRecord,
   CloudflareTunnel,
+  CloudflareTunnelOriginChange,
   CloudflareZone,
 } from "./client.js";
 export { CloudflareApiError } from "./errors.js";

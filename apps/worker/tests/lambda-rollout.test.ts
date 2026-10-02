@@ -1,6 +1,7 @@
 import { GetFunctionCommand } from "@aws-sdk/client-lambda";
 import { describe, expect, it } from "vitest";
 import { LambdaRolloutError, LambdaRolloutWaiter } from "../src/lambda-rollout.js";
+import { renderLogText } from "../src/log-messages.js";
 
 const DIGEST = `sha256:${"b".repeat(64)}`;
 const OLD_DIGEST = `sha256:${"a".repeat(64)}`;
@@ -58,7 +59,7 @@ function harness(snapshots: Array<Snapshot | Error>, options: { timeoutMs?: numb
     functionName: "cam-0123456789abcdef",
     alias: "live",
     expectedDigest: DIGEST,
-    log: async (line) => { lines.push(line); },
+    log: async (line) => { lines.push(renderLogText(line)); },
   });
   return { wait, requests, lines };
 }

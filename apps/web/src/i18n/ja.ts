@@ -1,3 +1,4 @@
+import { logLinesJa } from './log-lines';
 import type { Messages } from './ko';
 
 /** 画面文言 — 日本語 (ko.ts の構造に合わせる)。ネイティブチェック未了。 */
@@ -685,4 +686,6 @@ export const ja: Messages = {
     factFinished: '完了時刻',
     targets: { aws: 'AWS', onprem: 'オンプレミス' },
   },
+  /** サーバーのステップログの固定文言 (#147) — キーで選ぶ */
+  logLines: logLinesJa,
 };

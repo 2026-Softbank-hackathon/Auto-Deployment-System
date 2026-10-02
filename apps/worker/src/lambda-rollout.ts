@@ -10,6 +10,7 @@
 
 import { GetFunctionCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type { TerraformAwsCredentials } from "./terraform-cli.js";
+import { formatLogText, logMessage, type LogText } from "./log-messages.js";
 
 export type LambdaRolloutErrorCode =
   | "LAMBDA_UPDATE_FAILED"
@@ -35,7 +36,7 @@ export type LambdaRolloutInput = {
   alias: string;
   /** 이번 배포 이미지 digest (sha256:...) */
   expectedDigest: string;
-  log: (line: string) => Promise<void>;
+  log: (line: LogText) => Promise<void>;
 };
 
 type SendClient = { send(command: unknown): Promise<unknown> };
@@ -101,7 +102,11 @@ export class LambdaRolloutWaiter {
     const elapsed = () => Math.round((this.now() - startedAt) / 1000);
 
     await input.log(
-      `Lambda 갱신 확인 시작 (함수 ${input.functionName}:${input.alias}, ${this.pollIntervalMs / 1000}초 간격)`,
+      logMessage("lambda.start", {
+        function: input.functionName,
+        alias: input.alias,
+        interval: this.pollIntervalMs / 1000,
+      }),
     );
 
     for (;;) {
@@ -131,16 +136,21 @@ export class LambdaRolloutWaiter {
           );
         }
         await input.log(
-          `Lambda 갱신 완료 (${elapsed()}초) — 버전 ${configuration.Version ?? "?"}, 이미지 ${shortDigest(input.expectedDigest)}`,
+          logMessage("lambda.done", {
+            seconds: elapsed(),
+            version: configuration.Version ?? "?",
+            digest: shortDigest(input.expectedDigest),
+          }),
         );
         return;
       }
 
       const line = state === "Pending"
-        ? `함수 준비 중 (State Pending) — Lambda 가 이미지를 가져와 준비합니다`
-        : `갱신 진행 중 (State ${state}, LastUpdateStatus ${update})`;
-      if (line !== lastLine) {
-        lastLine = line;
+        ? logMessage("lambda.pending")
+        : logMessage("lambda.updating", { state, update });
+      const text = formatLogText(line);
+      if (text !== lastLine) {
+        lastLine = text;
         lastWriteAt = this.now();
         await input.log(line);
       }
@@ -153,7 +163,7 @@ export class LambdaRolloutWaiter {
       }
       if (this.now() - lastWriteAt >= HEARTBEAT_MS) {
         lastWriteAt = this.now();
-        await input.log(`Lambda 갱신 대기 중 (${elapsed()}초 경과)`);
+        await input.log(logMessage("lambda.waiting", { seconds: elapsed() }));
       }
       await this.sleep(this.pollIntervalMs);
     }

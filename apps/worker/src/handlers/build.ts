@@ -11,6 +11,7 @@ import { IrSchema, type Ir } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { syncTargetProfile } from "../profile-sync.js";
 import { createStepLogger } from "../step-log.js";
+import { logMessage } from "../log-messages.js";
 import { transitionTo, type Status } from "../state-machine.js";
 
 export type BuildJobPayload = {
@@ -70,7 +71,7 @@ export async function handleBuild(
       const reusedDigest = await reuseSourceArtifact(deps, deploymentId, redeployedFrom);
       if (reusedDigest !== null) {
         await stepLog.line(
-          `빌드 생략 — 배포 #${redeployedFrom}의 이미지 재사용: ${reusedDigest}`,
+          logMessage("build.reuseImage", { deployment: redeployedFrom, digest: reusedDigest }),
         );
         await completeBuildStage(deps, deploymentId);
         return;
@@ -103,7 +104,7 @@ export async function handleBuild(
       throw new Error("AWS_REGISTRY_CREDENTIALS_INVALID");
     }
 
-    await stepLog.line("빌드 준비");
+    await stepLog.line(logMessage("build.ready"));
     // 시크릿은 레지스트리 연결의 소유 범위에서 읽는다 (공용 연결이면 공용 시크릿, #215)
     const secretOwnerId =
       context.registry_environment_project_id === null
@@ -125,11 +126,7 @@ export async function handleBuild(
       required.registrySession.withAuthorization(
         authorization,
         async (commandEnvironment) => {
-          await stepLog.line(
-            plan.build.staticSite
-              ? "정적 사이트 이미지(nginx + 빌드 결과) 빌드 및 Registry push"
-              : "컨테이너 이미지 빌드 및 Registry push",
-          );
+          await stepLog.line(logMessage(plan.build.staticSite ? "build.staticImage" : "build.image"));
           return required.buildHandler.build({
             workspacePath,
             plan: plan.build,
@@ -147,12 +144,12 @@ export async function handleBuild(
     );
 
     await saveBuildArtifact(deps, deploymentId, result);
-    await stepLog.line(`이미지 digest 확정: ${result.image.digest}`);
+    await stepLog.line(logMessage("build.digest", { digest: result.image.digest }));
     await completeBuildStage(deps, deploymentId);
   } catch (error) {
     const errorCode = normalizeBuildFailure(error);
     deps.log?.error({ deployment_id: deploymentId, error_code: errorCode }, "build job failed");
-    await stepLog.line(`빌드 실패: ${errorCode}`);
+    await stepLog.line(logMessage("build.failed", { code: errorCode }));
 
     if (activeStatus === "building" || activeStatus === "planning") {
       await transitionTo(deps.pool, deploymentId, "failed", {
@@ -230,7 +227,7 @@ async function ensureProfileMatchesIr(
     `INSERT INTO ir_versions (deployment_id, ir_json, source) VALUES ($1, $2, 'profile_sync')`,
     [deploymentId, JSON.stringify(synced)],
   );
-  await stepLog.line(`IR 에 맞춰 배포 프로필을 ${profileId} 로 정했습니다.`);
+  await stepLog.line(logMessage("build.profileSet", { profile: profileId }));
   return { ir: synced, profileId };
 }
 

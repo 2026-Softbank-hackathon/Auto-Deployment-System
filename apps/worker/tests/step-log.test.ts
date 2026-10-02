@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LocalStorage, type Storage } from "@camellia/storage";
 import { createStepLogger, stepLogKey } from "../src/step-log.js";
 import type { Notifier } from "../src/notifier.js";
+import { logMessage } from "../src/log-messages.js";
 
 let rootDir: string;
 let storage: Storage;
@@ -61,6 +62,17 @@ describe("createStepLogger", () => {
         payload: { step: "analyze", line: "[2026-09-30T12:00:00.000Z] 스택 감지 완료" },
       },
     ]);
+  });
+
+  it("키로 쓴 문구는 파일 · SSE 모두 한국어 문구 뒤에 키 · 값을 붙인다 (#147)", async () => {
+    const logger = createStepLogger({ storage, notifier }, 7, "build", { now });
+
+    await logger.line(logMessage("build.failed", { code: "BUILD_FAILED" }));
+
+    const line =
+      '[2026-09-30T12:00:00.000Z] 빌드 실패: BUILD_FAILED #i18n{"k":"build.failed","p":{"code":"BUILD_FAILED"}}';
+    expect(await readLog(7, "build")).toBe(`${line}\n`);
+    expect(events[0]?.payload).toEqual({ step: "build", line });
   });
 
   it("재시도로 로거를 새로 만들어도 기존 로그 뒤에 이어 씀", async () => {

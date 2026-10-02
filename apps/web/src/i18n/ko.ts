@@ -1,3 +1,5 @@
+import { logLinesKo } from './log-lines';
+
 /** 화면 문구 — 한국어 (기준 사전). ja.ts는 이 모양을 그대로 따라야 한다. */
 export const ko = {
   locale: 'ko-KR',
@@ -693,6 +695,8 @@ export const ko = {
     factFinished: '완료 시각',
     targets: { aws: 'AWS', onprem: '온프레미스' },
   },
+  /** 서버 단계 로그의 고정 문구 (#147) — 키로 고른다 */
+  logLines: logLinesKo,
 };
 
 export type Messages = typeof ko;

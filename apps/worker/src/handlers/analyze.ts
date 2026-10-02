@@ -40,6 +40,7 @@ import type {
 import type { WorkerDeps } from "../deps.js";
 import { transitionTo } from "../state-machine.js";
 import { createStepLogger } from "../step-log.js";
+import { logMessage } from "../log-messages.js";
 import { syncTargetProfile, withDeployProfile } from "../profile-sync.js";
 
 export type AnalyzeJobPayload = {
@@ -77,13 +78,11 @@ async function settleTargetProfile(
   const { profile, changed } = await syncTargetProfile(pool, deploymentId, current, ir);
   if (!changed || !profile) return profile;
   if (profile === awsStaticBasic.id) {
-    await stepLog.line("정적 사이트라 AWS 에서는 서버 없이 S3 웹사이트로 배포합니다 (aws-static-basic).");
+    await stepLog.line(logMessage("analyze.staticProfile"));
   } else if (current === awsLambdaBasic.id) {
-    await stepLog.line(
-      "이 앱은 서버리스(Lambda)로 실행할 수 없어 컨테이너로 배포합니다 — 공개 HTTP 서비스 하나이고 DB 같은 추가 리소스가 없어야 합니다."
-    );
+    await stepLog.line(logMessage("analyze.lambdaFallback"));
   } else {
-    await stepLog.line(`분석 결과에 맞춰 배포 프로필을 ${profile} 로 정했습니다.`);
+    await stepLog.line(logMessage("analyze.profileSet", { profile }));
   }
   return profile;
 }
@@ -166,7 +165,7 @@ export async function handleAnalyze(
     );
     return;
   }
-  await stepLog.line("분석 시작");
+  await stepLog.line(logMessage("analyze.start"));
 
   // 2. ANL-08 캐시 조회: 같은 sha256 을 가진 기존 배포의 분석 결과 재사용
   const cached = await lookupAnalysisCache(pool, sha256, deployment_id);
@@ -175,7 +174,7 @@ export async function handleAnalyze(
       { deployment_id, cached_source_version: cached.source_version_id },
       "analyze cache hit — skipping analyzer + AI"
     );
-    await stepLog.line(`이전 분석 결과 재사용 (source_version ${cached.source_version_id})`);
+    await stepLog.line(logMessage("analyze.cacheReuse", { sourceVersionId: cached.source_version_id }));
     await notifier?.notify(deployment_id, "analysis.progress", {
       step: "cache_hit",
       cached_source_version_id: cached.source_version_id,
@@ -219,7 +218,7 @@ export async function handleAnalyze(
       status: "awaiting_target_confirmation",
     });
     await notifier?.notify(deployment_id, "approval_requested", { gate: "target" });
-    await stepLog.line("대상 확인 대기");
+    await stepLog.line(logMessage("analyze.awaitTarget"));
 
     log?.info({ deployment_id }, "analyze job succeeded (cache hit)");
     return;
@@ -234,7 +233,7 @@ export async function handleAnalyze(
   // 4. stage(unzip) → 소스 폴더 경로
   const staged = await stage(tmpZip, { mode: "unzip" });
   try {
-    await stepLog.line("소스 압축 해제 완료");
+    await stepLog.line(logMessage("analyze.unzipped"));
     await notifier?.notify(deployment_id, "analysis.progress", {
       step: "detecting",
     });
@@ -265,7 +264,10 @@ export async function handleAnalyze(
     );
     const irValid = analysis.ai?.ir_valid_after ?? analysis.ir_valid;
     await stepLog.line(
-      `분석 완료 — 서비스 ${analysis.services.length}개, 경고 ${analysis.warnings.length}개, IR ${irValid ? "유효" : "검증 실패"}`
+      logMessage(irValid ? "analyze.doneValid" : "analyze.doneInvalid", {
+        services: analysis.services.length,
+        warnings: analysis.warnings.length,
+      })
     );
 
     // PAT-02 (#277): SQLite 앱이면 PostgreSQL 겸용 수정안을 만든다. 못 만들면 DB 전환 없이 SQLite 그대로 배포
@@ -328,7 +330,7 @@ export async function handleAnalyze(
       });
       await notifier?.notify(deployment_id, "state_changed", { status: "awaiting_patch_approval" });
       await notifier?.notify(deployment_id, "approval_requested", { gate: "patch" });
-      await stepLog.line("코드 수정안 승인 대기 — AWS 는 PostgreSQL, 온프레미스는 SQLite 로 실행됩니다");
+      await stepLog.line(logMessage("analyze.awaitPatch"));
       log?.info({ deployment_id }, "analyze job succeeded (awaiting patch approval)");
       return;
     }
@@ -345,11 +347,11 @@ export async function handleAnalyze(
     await notifier?.notify(deployment_id, "approval_requested", {
       gate: "target",
     });
-    await stepLog.line("대상 확인 대기");
+    await stepLog.line(logMessage("analyze.awaitTarget"));
 
     log?.info({ deployment_id }, "analyze job succeeded");
   } catch (err) {
-    await stepLog.line(`분석 실패: ${err instanceof Error ? err.message : String(err)}`);
+    await stepLog.line(logMessage("analyze.failed", { error: err instanceof Error ? err.message : String(err) }));
     throw err;
   } finally {
     await staged.cleanup?.();
@@ -381,11 +383,12 @@ async function prepareSqlitePatch(
     return { status: "skipped", reason: "MULTI_SERVICE: 서비스가 여러 개인 앱은 아직 자동 수정안을 만들지 않습니다" };
   }
 
-  await stepLog.line("SQLite 사용 감지 — PostgreSQL 도 쓰는 코드 수정안을 만드는 중 (AI)");
+  await stepLog.line(logMessage("analyze.patchStart"));
   const serviceDir = path.resolve(sourceRoot, service.path);
   const patch = await createSqlitePatch(serviceDir, resource, { onUsage: async (usage) => { await onUsage(usage); } });
   if (patch.status === "skipped") {
-    await stepLog.line(`수정안을 만들지 못함 — ${patch.reason}`);
+    const [code = "", ...detail] = patch.reason.split(": ");
+    await stepLog.line(logMessage("analyze.patchSkipped", { code, detail: detail.join(": ") }));
     return patch;
   }
 
@@ -394,7 +397,12 @@ async function prepareSqlitePatch(
   const sha256 = createHash("sha256").update(zip).digest("hex");
   const storageKey = `sources/${sha256}.zip`;
   await deps.storage.put(storageKey, zip);
-  await stepLog.line(`수정안 준비 완료 — 파일 ${patch.files.length}개 (${patch.files.map((file) => file.path).join(", ")})`);
+  await stepLog.line(
+    logMessage("analyze.patchReady", {
+      count: patch.files.length,
+      files: patch.files.map((file) => file.path).join(", "),
+    }),
+  );
   return { ...patch, storageKey, sha256, sizeBytes: zip.length };
 }
 
@@ -417,17 +425,19 @@ async function saveSourcePatch(
   await pool.query(
     `INSERT INTO source_patches
        (deployment_id, kind, status, summary, notes, diff, files, generator, model,
-        patched_storage_key, patched_sha256, patched_size_bytes)
-     VALUES ($1, 'sqlite_to_postgres', 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        patched_storage_key, patched_sha256, patched_size_bytes, summary_i18n, notes_i18n)
+     VALUES ($1, 'sqlite_to_postgres', 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (deployment_id) DO UPDATE SET
        status = 'pending', summary = EXCLUDED.summary, notes = EXCLUDED.notes, diff = EXCLUDED.diff,
+       summary_i18n = EXCLUDED.summary_i18n, notes_i18n = EXCLUDED.notes_i18n,
        files = EXCLUDED.files, generator = EXCLUDED.generator, model = EXCLUDED.model,
        patched_storage_key = EXCLUDED.patched_storage_key, patched_sha256 = EXCLUDED.patched_sha256,
        patched_size_bytes = EXCLUDED.patched_size_bytes, created_at = NOW(), decided_at = NULL`,
     [
       deploymentId,
-      patch.summary,
-      JSON.stringify(patch.notes),
+      // summary · notes 는 한국어 (예전 화면 호환), 두 언어 값은 *_i18n (#147)
+      patch.summary.ko,
+      JSON.stringify(patch.notes.map((note) => note.ko)),
       patch.diff,
       JSON.stringify(files),
       patch.generator,
@@ -435,6 +445,8 @@ async function saveSourcePatch(
       patch.storageKey,
       patch.sha256,
       patch.sizeBytes,
+      JSON.stringify(patch.summary),
+      JSON.stringify(patch.notes),
     ],
   );
 }

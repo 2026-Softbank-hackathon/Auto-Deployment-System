@@ -42,7 +42,13 @@ export const AnalysisProgressDataSchema = z.discriminatedUnion("step", [
 /** 사용자 승인 대기 시작 (워커 — gate=patch(코드 수정안) · target) */
 export const ApprovalRequestedDataSchema = z.object({ gate: ApprovalGateSchema }).strict();
 
-/** 단계 로그 한 줄 (워커). line = "[ISO 시각] 내용" */
+/**
+ * 단계 로그 한 줄 (워커). line = "[ISO 시각] 내용".
+ * 워커의 고정 문구는 한국어 문구 뒤에 키 · 값이 붙는다 (#147) — 화면이 키로 현재 언어 문구를 고른다:
+ *   "[ISO 시각] 빌드 실패: BUILD_FAILED #i18n{"k":"build.failed","p":{"code":"BUILD_FAILED"}}"
+ * 키 목록: apps/worker/src/log-messages.ts. 키가 없는 줄(도구 출력 · 오류 상세)은 원문 그대로 보여 준다.
+ * GET /deployments/:id/logs 의 줄도 같은 형식이다.
+ */
 export const LogLineDataSchema = z.object({ step: z.string(), line: z.string() }).strict();
 
 /** IR 수동 편집 완료 (API) */

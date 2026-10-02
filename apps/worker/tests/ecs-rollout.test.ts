@@ -6,6 +6,7 @@ import {
 import { DescribeTargetHealthCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { describe, expect, it, vi } from "vitest";
 import { EcsRolloutError, EcsRolloutWaiter } from "../src/ecs-rollout.js";
+import { renderLogText, type LogText } from "../src/log-messages.js";
 
 const NEW_TD = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/cam-x:8";
 const OLD_TD = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/cam-x:7";
@@ -176,8 +177,8 @@ function makeWaiter(
     clusterName: "cam-x",
     serviceName: "cam-x",
     expectedTaskDefinition: NEW_TD,
-    log: vi.fn(async (line: string) => {
-      lines.push(line);
+    log: vi.fn(async (line: LogText) => {
+      lines.push(renderLogText(line));
     }),
   };
   return { waiter, aws, sleep, createClients, input, lines };

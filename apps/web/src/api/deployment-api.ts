@@ -409,10 +409,31 @@ export function deploymentEventsUrl(deploymentId: string): string {
   return endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/events`);
 }
 
+/** 지금 프로젝트 주소로 서비스 중인 배포 (가장 최근에 성공한 배포). environmentType은 환경 없이 만든 옛 배포면 null */
+export interface ProjectLiveDeployment {
+  deploymentId: string;
+  environmentType: 'aws' | 'onprem' | null;
+  environmentName: string | null;
+  publicUrl: string | null;
+  succeededAt: string | null;
+}
+
+/** 상태와 상관없이 가장 최근에 만든 배포 */
+export interface ProjectLatestDeployment {
+  deploymentId: string;
+  status: string;
+  environmentType: 'aws' | 'onprem' | null;
+  createdAt: string;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
   createdAt: string;
+  /** 서비스 중인 배포가 없으면 null */
+  live: ProjectLiveDeployment | null;
+  /** 배포가 하나도 없으면 null */
+  latest: ProjectLatestDeployment | null;
 }
 
 export interface ProjectDeploymentSummary {
@@ -430,6 +451,39 @@ export interface Page<T> { items: T[]; nextCursor: string | null; }
 
 function optionalString(value: unknown): string | null { return typeof value === 'string' ? value : null; }
 
+function environmentTypeOf(value: unknown): 'aws' | 'onprem' | null { return value === 'aws' || value === 'onprem' ? value : null; }
+
+/** GET /projects · /projects/:id 의 항목 한 개. id · name · createdAt이 없으면 null */
+function parseProject(value: unknown): ProjectSummary | null {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const id = optionalString(record.id);
+  const name = optionalString(record.name);
+  const createdAt = optionalString(record.createdAt);
+  if (!id || !name || !createdAt) return null;
+  const live = record.live && typeof record.live === 'object' ? record.live as Record<string, unknown> : null;
+  const latest = record.latest && typeof record.latest === 'object' ? record.latest as Record<string, unknown> : null;
+  const liveId = optionalString(live?.deploymentId);
+  const latestId = optionalString(latest?.deploymentId);
+  const latestStatus = optionalString(latest?.status);
+  const latestCreatedAt = optionalString(latest?.createdAt);
+  return {
+    id, name, createdAt,
+    live: live && liveId ? {
+      deploymentId: liveId,
+      environmentType: environmentTypeOf(live.environmentType),
+      environmentName: optionalString(live.environmentName),
+      publicUrl: optionalString(live.publicUrl),
+      succeededAt: optionalString(live.succeededAt),
+    } : null,
+    latest: latest && latestId && latestStatus && latestCreatedAt ? {
+      deploymentId: latestId,
+      status: latestStatus,
+      environmentType: environmentTypeOf(latest.environmentType),
+      createdAt: latestCreatedAt,
+    } : null,
+  };
+}
+
 /** GET /projects — project list, id ascending with cursor pagination. */
 export async function listProjects(options: { limit?: number; cursor?: string } = {}): Promise<Page<ProjectSummary>> {
   const query = new URLSearchParams({ limit: String(options.limit ?? 100) });
@@ -439,11 +493,8 @@ export async function listProjects(options: { limit?: number; cursor?: string } 
   const items = Array.isArray(body.items) ? body.items : [];
   return {
     items: items.flatMap((item) => {
-      const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-      const id = optionalString(record.id);
-      const name = optionalString(record.name);
-      const createdAt = optionalString(record.createdAt);
-      return id && name && createdAt ? [{ id, name, createdAt }] : [];
+      const project = parseProject(item);
+      return project ? [project] : [];
     }),
     nextCursor: optionalString(body.nextCursor),
   };
@@ -479,10 +530,7 @@ export async function listProjectDeployments(projectId: string, options: { limit
 /** GET /projects/:id — used only to show the project name on the progress screen. */
 export async function getProject(projectId: string): Promise<ProjectSummary> {
   const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { credentials: 'include' });
-  const body = asRecord(await readJson(response), '프로젝트');
-  const id = optionalString(body.id);
-  const name = optionalString(body.name);
-  const createdAt = optionalString(body.createdAt);
-  if (!id || !name || !createdAt) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
-  return { id, name, createdAt };
+  const project = parseProject(asRecord(await readJson(response), '프로젝트'));
+  if (!project) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
+  return project;
 }

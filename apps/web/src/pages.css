@@ -414,22 +414,32 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .result-url__link { font-size: 18px; }
 }
 
-/* 내 프로젝트 */
-.project-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
-.project-card { display: grid; gap: 14px; align-content: start; padding: 20px; background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
-.project-card.is-selected { border-color: var(--koro); }
-.project-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.project-card__head h2 { margin: 0; font-family: var(--font-mono); font-size: 18px; overflow-wrap: anywhere; }
-.project-card p { margin: 0; color: var(--ink-soft); }
-.project-card .project-card__error { color: var(--brick-text); font-weight: 700; }
-.project-card__facts { display: grid; gap: 8px; margin: 0; }
-.project-card__facts > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; font-size: 14px; }
-.project-card__facts dt { color: var(--ink-soft); }
-.project-card__facts dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
-.project-card__facts dd.is-ok { color: var(--moss-text); font-weight: 700; }
-.project-card__facts dd.is-missing { color: var(--brick-text); font-weight: 700; }
-.project-card__facts a { color: var(--koro-text); font-weight: 700; }
-.project-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 대시보드 — 앱 카드 (#219) */
+.page-head .page-head__actions { flex-direction: row; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dashboard-empty__form { width: 100%; max-width: 520px; text-align: left; }
+.app-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.app-card { display: grid; gap: 14px; align-content: start; min-width: 0; padding: 20px; background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
+.app-card.is-active { border: 2px solid var(--koro); box-shadow: 0 3px 0 var(--koro-tint); }
+.app-card__head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.app-card__head h2 { margin: 0; min-width: 0; font-family: var(--font-mono); font-size: 18px; overflow-wrap: anywhere; }
+.app-card .app-card__head h2 a { color: inherit; text-decoration: none; }
+.app-card .app-card__head h2 a:hover { color: var(--koro-text); text-decoration: underline; }
+.app-card p { margin: 0; }
+.app-card__muted { font-size: 13px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.app-card a:not(.keycap) { color: var(--koro-text); font-weight: 700; }
+.app-card a:not(.keycap):hover { color: var(--koro-text-hover); }
+.app-card__live { display: grid; gap: 4px; }
+.app-card__url { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; min-width: 0; }
+.app-card__url > a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--font-mono); font-size: 15px; overflow-wrap: anywhere; }
+.app-card__latest { display: grid; gap: 8px; padding-top: 12px; border-top: var(--border); }
+.app-card__latest-line { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; font-size: 14px; }
+.app-card__stage { font-weight: 700; color: var(--ink-soft); }
+.app-card__stage.is-active { color: var(--koro-text); }
+.app-card__stage.is-success { color: var(--moss-text); }
+.app-card__stage.is-failed { color: var(--brick-text); }
+.app-card__time { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
+.app-card__latest-line a { margin-left: auto; }
+.app-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* 배포 완료 · 실패 전역 알림 */
 .toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
@@ -457,8 +467,6 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 /* 프로젝트 상세 (#150) */
 .project-detail__back { justify-self: start; color: var(--koro-text); font-weight: 700; }
 .project-detail__back:hover { color: var(--koro-text-hover); }
-.project-card__head h2 a { color: inherit; text-decoration: none; }
-.project-card__head h2 a:hover { color: var(--koro-text); text-decoration: underline; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: var(--border); }
 .tabs__tab { padding: 10px 16px; margin-bottom: -1px; font-weight: 700; color: var(--ink-soft); text-decoration: none; border-bottom: 3px solid transparent; }
 .tabs__tab:hover { color: var(--ink); }
@@ -593,15 +601,15 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .stage-chip.is-current { animation: chip-breathe 1800ms ease-in-out infinite; }
 
   /* 3) 목록과 카드: 처음 나타날 때 위에서부터 차례로 떠오른다 */
-  .deployment-list > *, .project-list > *, .picker-list > * { animation: rise-in 320ms var(--ease-roll) both; }
-  .deployment-list > *:nth-child(2), .project-list > *:nth-child(2), .picker-list > *:nth-child(2) { animation-delay: 35ms; }
-  .deployment-list > *:nth-child(3), .project-list > *:nth-child(3), .picker-list > *:nth-child(3) { animation-delay: 70ms; }
-  .deployment-list > *:nth-child(4), .project-list > *:nth-child(4), .picker-list > *:nth-child(4) { animation-delay: 105ms; }
-  .deployment-list > *:nth-child(5), .project-list > *:nth-child(5), .picker-list > *:nth-child(5) { animation-delay: 140ms; }
-  .deployment-list > *:nth-child(6), .project-list > *:nth-child(6) { animation-delay: 175ms; }
-  .deployment-list > *:nth-child(7), .project-list > *:nth-child(7) { animation-delay: 210ms; }
-  .deployment-list > *:nth-child(8), .project-list > *:nth-child(8) { animation-delay: 245ms; }
-  .deployment-list > *:nth-child(n+9), .project-list > *:nth-child(n+9) { animation-delay: 280ms; }
+  .deployment-list > *, .app-list > *, .picker-list > * { animation: rise-in 320ms var(--ease-roll) both; }
+  .deployment-list > *:nth-child(2), .app-list > *:nth-child(2), .picker-list > *:nth-child(2) { animation-delay: 35ms; }
+  .deployment-list > *:nth-child(3), .app-list > *:nth-child(3), .picker-list > *:nth-child(3) { animation-delay: 70ms; }
+  .deployment-list > *:nth-child(4), .app-list > *:nth-child(4), .picker-list > *:nth-child(4) { animation-delay: 105ms; }
+  .deployment-list > *:nth-child(5), .app-list > *:nth-child(5), .picker-list > *:nth-child(5) { animation-delay: 140ms; }
+  .deployment-list > *:nth-child(6), .app-list > *:nth-child(6) { animation-delay: 175ms; }
+  .deployment-list > *:nth-child(7), .app-list > *:nth-child(7) { animation-delay: 210ms; }
+  .deployment-list > *:nth-child(8), .app-list > *:nth-child(8) { animation-delay: 245ms; }
+  .deployment-list > *:nth-child(n+9), .app-list > *:nth-child(n+9) { animation-delay: 280ms; }
 
   /* 4) 모달과 메뉴: 살짝 커지며 나타나고, 배경은 서서히 어두워진다 */
   .picker-dialog[open] { animation: dialog-in 200ms var(--ease-roll); }

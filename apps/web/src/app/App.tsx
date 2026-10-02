@@ -5,7 +5,6 @@ import { DeploymentProgress } from '../features/deployment-progress/DeploymentPr
 import { DeploymentResult } from '../features/deployment-progress/DeploymentResult';
 import { DashboardPage } from '../pages/DashboardPage';
 import { ProjectDetailPage } from '../pages/ProjectDetailPage';
-import { ProjectsPage } from '../pages/ProjectsPage';
 import { SimpleDeployPage } from '../pages/SimpleDeployPage';
 import { DeploymentNotifier } from '../features/notifications/DeploymentNotifier';
 import { DeployProjectProvider } from '../features/deployment-start/useDeployProject';
@@ -39,10 +38,9 @@ export function App() {
     <div className="app-body"><AppHeader page={route.page} />
       <main className="content">
         {route.page === 'dashboard' && <DashboardPage onNavigate={navigate} />}
-        {route.page === 'projects' && <ProjectsPage onNavigate={navigate} />}
         {route.page === 'project' && <ProjectDetailPage projectId={route.projectId} tab={route.tab} onNavigate={navigate} />}
         {route.page === 'deploy' && <SimpleDeployPage onNavigate={navigate} onRedirect={redirect} onStarted={(deploymentId) => navigate(`/deployments/${encodeURIComponent(deploymentId)}`)} />}
-        {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} tab={route.tab} onNavigate={navigate} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={(projectId) => navigate(projectId ? `/projects/${encodeURIComponent(projectId)}/settings` : '/projects')} />}
+        {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} tab={route.tab} onNavigate={navigate} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={(projectId) => navigate(projectId ? `/projects/${encodeURIComponent(projectId)}/settings` : '/')} />}
         {route.page === 'result' && <DeploymentResult deploymentId={route.deploymentId} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onBack={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}`)} onNewDeployment={() => navigate('/deploy')} />}
       </main>
     </div>

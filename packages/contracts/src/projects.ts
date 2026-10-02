@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import {
+  DeployModeSchema,
   DeploymentStatusSchema,
   IdStringSchema,
   IsoDateTimeSchema,
@@ -51,6 +52,8 @@ export const ProjectLiveDeploymentSchema = z
     environmentId: IdStringSchema.nullable(),
     environmentType: DeploymentEnvironmentTypeSchema,
     environmentName: z.string().nullable(),
+    /** 이 배포의 프로필 (aws-ecs-basic · aws-lambda-basic · onprem-docker-basic) */
+    targetProfile: z.string().nullable(),
     /** 프로젝트 공유 주소. 서버에 플랫폼 도메인 설정이 없으면 null */
     publicUrl: z.string().nullable(),
     succeededAt: IsoDateTimeSchema.nullable(),
@@ -101,6 +104,8 @@ export const ProjectSchema = z
     description: z.string().optional(),
     createdAt: IsoDateTimeSchema,
     updatedAt: IsoDateTimeSchema,
+    /** 이 앱의 배포 형태 — 다음 배포 · 재배포 · 롤백이 따른다 (기본 container) */
+    deployMode: DeployModeSchema,
     /** 지금 서비스 중인 배포 (POST /projects 응답은 항상 null) */
     live: ProjectLiveDeploymentSchema.nullable(),
     /** 가장 최근 배포 (POST /projects 응답은 항상 null) */

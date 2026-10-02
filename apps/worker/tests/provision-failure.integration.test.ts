@@ -15,7 +15,7 @@ describe.skipIf(!databaseUrl)("Provision failure: isolated PostgreSQL", () => {
     admin = new Pool({ connectionString: databaseUrl });
     await admin.query(`CREATE SCHEMA ${schema}`);
     pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}` });
-    for (const file of ["001_initial.sql", "004_secrets_environments.sql", "006_deployment_environments.sql", "007_build_artifacts.sql"]) {
+    for (const file of ["001_initial.sql", "004_secrets_environments.sql", "006_deployment_environments.sql", "007_build_artifacts.sql", "019_deploy_mode.sql"]) {
       await pool.query(await readFile(new URL(`../../../packages/db/migrations/${file}`, import.meta.url), "utf8"));
     }
   });

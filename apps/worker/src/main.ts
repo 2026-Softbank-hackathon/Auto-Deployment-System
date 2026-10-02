@@ -29,6 +29,7 @@ import { PublicDnsActivationChecker } from "./public-dns-activation.js";
 import { FinalUrlVerifier } from "./final-url-verifier.js";
 import { S3TerraformStateStore } from "./terraform-state-store.js";
 import { EcsRolloutWaiter } from "./ecs-rollout.js";
+import { LambdaRolloutWaiter } from "./lambda-rollout.js";
 
 const log = pino({ name: "worker" });
 
@@ -92,6 +93,7 @@ async function main(): Promise<void> {
     terraformModuleRoot: path.join(repositoryRoot, "infra/terraform/profiles"),
     terraformStateStore: new S3TerraformStateStore(),
     ecsRolloutWaiter: new EcsRolloutWaiter(),
+    lambdaRolloutWaiter: new LambdaRolloutWaiter(),
   };
 
   boss.on("error", (err: unknown) => {

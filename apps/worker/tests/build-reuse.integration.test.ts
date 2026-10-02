@@ -17,7 +17,7 @@ describe.skipIf(!databaseUrl)("재배포 이미지 재사용: isolated PostgreSQ
     admin = new Pool({ connectionString: databaseUrl });
     await admin.query(`CREATE SCHEMA ${schema}`);
     pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}` });
-    for (const file of ["001_initial.sql", "002_diagnosis.sql", "004_secrets_environments.sql", "006_deployment_environments.sql", "007_build_artifacts.sql"]) {
+    for (const file of ["001_initial.sql", "002_diagnosis.sql", "004_secrets_environments.sql", "006_deployment_environments.sql", "007_build_artifacts.sql", "019_deploy_mode.sql"]) {
       await pool.query(await readFile(new URL(`../../../packages/db/migrations/${file}`, import.meta.url), "utf8"));
     }
   });
@@ -30,7 +30,7 @@ describe.skipIf(!databaseUrl)("재배포 이미지 재사용: isolated PostgreSQ
     }
   });
 
-  async function fixture() {
+  async function fixture(sourceAdapter: string | null = null) {
     const project = await pool.query<{ id: string }>("INSERT INTO projects(name) VALUES($1) RETURNING id", [randomUUID()]);
     const projectId = project.rows[0]!.id;
     const env = async (type: string) => {
@@ -51,16 +51,16 @@ describe.skipIf(!databaseUrl)("재배포 이미지 재사용: isolated PostgreSQ
     );
     const sourceId = Number(source.rows[0]!.id);
     await pool.query(
-      `INSERT INTO build_artifacts(deployment_id, repository_uri, image_tag, image_digest, immutable_ref, platform, strategy)
-       VALUES($1, 'repo', 'v1-d1', $2, $3, 'linux/amd64', 'dockerfile')`,
-      [sourceId, OLD_DIGEST, `repo@${OLD_DIGEST}`],
+      `INSERT INTO build_artifacts(deployment_id, repository_uri, image_tag, image_digest, immutable_ref, platform, strategy, lambda_web_adapter)
+       VALUES($1, 'repo', 'v1-d1', $2, $3, 'linux/amd64', 'dockerfile', $4)`,
+      [sourceId, OLD_DIGEST, `repo@${OLD_DIGEST}`, sourceAdapter],
     );
 
-    const redeploy = async (targetEnvironmentId: string, registryEnvironmentId: string) => {
+    const redeploy = async (targetEnvironmentId: string, registryEnvironmentId: string, profile = "onprem-docker-basic") => {
       const result = await pool.query<{ id: string }>(
         `INSERT INTO deployments(project_id, status, target_profile, target_environment_id, registry_environment_id)
-         VALUES($1, 'queued', 'onprem-docker-basic', $2, $3) RETURNING id`,
-        [projectId, targetEnvironmentId, registryEnvironmentId],
+         VALUES($1, 'queued', $4, $2, $3) RETURNING id`,
+        [projectId, targetEnvironmentId, registryEnvironmentId, profile],
       );
       const id = Number(result.rows[0]!.id);
       await pool.query("INSERT INTO source_versions(deployment_id, sha256, storage_key, size_bytes) VALUES($1, 'x', 'sources/x.zip', 1)", [id]);
@@ -77,7 +77,7 @@ describe.skipIf(!databaseUrl)("재배포 이미지 재사용: isolated PostgreSQ
 
   async function row(deploymentId: number) {
     const result = await pool.query(
-      `SELECT d.status, d.error, a.image_digest, a.immutable_ref
+      `SELECT d.status, d.error, a.image_digest, a.immutable_ref, a.lambda_web_adapter
        FROM deployments d LEFT JOIN build_artifacts a ON a.deployment_id = d.id
        WHERE d.id = $1`,
       [deploymentId],
@@ -113,5 +113,23 @@ describe.skipIf(!databaseUrl)("재배포 이미지 재사용: isolated PostgreSQ
       error: "BUILD_DEPENDENCY_MISSING",
       image_digest: null,
     });
+  });
+
+  it("서버리스 배포는 Lambda Web Adapter 가 없는 예전 이미지를 재사용하지 않고 다시 빌드한다 (#282)", async () => {
+    const f = await fixture(null);
+    const id = await f.redeploy(f.registryA, f.registryA, "aws-lambda-basic");
+
+    await handleBuild({ data: { deployment_id: id, redeployed_from: f.sourceId } }, f.deps);
+
+    expect(await row(id)).toMatchObject({ status: "failed", error: "BUILD_DEPENDENCY_MISSING", image_digest: null });
+  });
+
+  it("서버리스 배포도 Lambda Web Adapter 가 든 이미지는 그대로 재사용한다 (#282)", async () => {
+    const f = await fixture("1.1.0");
+    const id = await f.redeploy(f.registryA, f.registryA, "aws-lambda-basic");
+
+    await handleBuild({ data: { deployment_id: id, redeployed_from: f.sourceId } }, f.deps);
+
+    expect(await row(id)).toMatchObject({ status: "provisioning", image_digest: OLD_DIGEST, lambda_web_adapter: "1.1.0" });
   });
 });

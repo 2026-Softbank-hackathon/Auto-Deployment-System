@@ -244,8 +244,8 @@ async function saveBuildArtifact(
   await deps.pool.query(
     `INSERT INTO build_artifacts
        (deployment_id, repository_uri, image_tag, image_digest,
-        immutable_ref, platform, strategy)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+        immutable_ref, platform, strategy, lambda_web_adapter)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (deployment_id)
      DO UPDATE SET
        repository_uri = EXCLUDED.repository_uri,
@@ -254,6 +254,7 @@ async function saveBuildArtifact(
        immutable_ref = EXCLUDED.immutable_ref,
        platform = EXCLUDED.platform,
        strategy = EXCLUDED.strategy,
+       lambda_web_adapter = EXCLUDED.lambda_web_adapter,
        updated_at = NOW()`,
     [
       deploymentId,
@@ -263,6 +264,7 @@ async function saveBuildArtifact(
       result.image.immutableRef,
       result.platform,
       result.strategy,
+      result.lambdaWebAdapter,
     ],
   );
 }
@@ -271,6 +273,8 @@ async function saveBuildArtifact(
  * 재배포 원본의 build artifact 를 새 배포로 복사한다 (같은 이미지 · 같은 digest).
  * 같은 프로젝트 · 같은 Registry 환경일 때만 복사하고, 복사한 digest 를 돌려준다.
  * 원본에 artifact 가 없거나 Registry 가 다르면 null → 평소처럼 빌드한다.
+ * 서버리스(aws-lambda-basic) 배포는 Lambda Web Adapter 가 든 이미지(#280 이후 빌드)만 재사용하고,
+ * 예전 이미지면 소스로 다시 빌드한다 (#282).
  */
 async function reuseSourceArtifact(
   deps: WorkerDeps,
@@ -280,16 +284,17 @@ async function reuseSourceArtifact(
   const result = await deps.pool.query<{ image_digest: string }>(
     `INSERT INTO build_artifacts
        (deployment_id, repository_uri, image_tag, image_digest,
-        immutable_ref, platform, strategy)
+        immutable_ref, platform, strategy, lambda_web_adapter)
      SELECT target.id, artifact.repository_uri, artifact.image_tag,
             artifact.image_digest, artifact.immutable_ref, artifact.platform,
-            artifact.strategy
+            artifact.strategy, artifact.lambda_web_adapter
      FROM deployments target
      JOIN deployments source ON source.id = $2
      JOIN build_artifacts artifact ON artifact.deployment_id = source.id
      WHERE target.id = $1
        AND source.project_id = target.project_id
        AND source.registry_environment_id = target.registry_environment_id
+       AND (target.target_profile <> 'aws-lambda-basic' OR artifact.lambda_web_adapter IS NOT NULL)
      ON CONFLICT (deployment_id) DO NOTHING
      RETURNING image_digest`,
     [deploymentId, sourceDeploymentId],

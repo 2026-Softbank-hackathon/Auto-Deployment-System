@@ -156,6 +156,7 @@ function makeHarness(overrides: Partial<{
       : vi.fn(async (request) => ({
           strategy: "dockerfile" as const,
           platform: "linux/amd64" as const,
+          lambdaWebAdapter: "1.1.0",
           image: {
             repository: request.image.repository,
             tag: request.image.tag,
@@ -243,6 +244,8 @@ describe("handleBuild", () => {
       query.sql.includes("INSERT INTO build_artifacts"),
     );
     expect(artifact?.params[3]).toBe(DIGEST);
+    // 서버리스 배포에 쓸 수 있는 이미지인지 (#282)
+    expect(artifact?.params[7]).toBe("1.1.0");
     expect(harness.getStatus()).toBe("provisioning");
     expect(harness.boss.send).toHaveBeenCalledWith("provision", {
       deployment_id: 42,
@@ -413,6 +416,24 @@ describe("handleBuild", () => {
       );
       expect(saved?.params[3]).toBe(DIGEST);
       expect(harness.getStatus()).toBe("provisioning");
+    });
+
+    it("서버리스 배포는 Lambda Web Adapter 가 들어 있는 이미지만 재사용하고 그 표시도 복사한다 (#282)", async () => {
+      const harness = makeHarness({ reusableDigest: OLD_DIGEST });
+
+      await handleBuild(
+        { data: { deployment_id: 42, redeployed_from: 7 } },
+        harness.deps,
+      );
+
+      const copy = harness.queries.find(
+        (query) =>
+          query.sql.includes("INSERT INTO build_artifacts") &&
+          query.sql.includes("SELECT"),
+      )!;
+      const sql = copy.sql.replace(/\s+/g, " ");
+      expect(sql).toContain("lambda_web_adapter");
+      expect(sql).toContain("target.target_profile <> 'aws-lambda-basic' OR artifact.lambda_web_adapter IS NOT NULL");
     });
 
     it("재배포가 아니면 재사용 조회를 하지 않는다", async () => {

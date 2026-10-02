@@ -13,6 +13,7 @@ import { transitionTo, type Status } from "../state-machine.js";
 import { TerraformCliError, type TerraformOutputs, type TerraformVariable } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
 import { EcsRolloutError } from "../ecs-rollout.js";
+import { LambdaRolloutError } from "../lambda-rollout.js";
 
 export type ProvisionJobPayload = {
   deployment_id: number | string;
@@ -32,6 +33,8 @@ type ProvisionContext = {
   immutable_ref: string | null;
   image_digest: string | null;
   image_platform: string | null;
+  /** 이미지에 넣은 Lambda Web Adapter 버전 (#280). 예전 이미지는 null */
+  lambda_web_adapter: string | null;
   origin_url: string | null;
 };
 
@@ -144,14 +147,20 @@ export async function handleProvision(
     if (plan.target !== "aws" || context.target_environment_type !== "aws") {
       throw new Error("PROVISION_TARGET_UNSUPPORTED");
     }
+    // 배포 형태 (#282): aws-lambda-basic 이면 같은 이미지를 Lambda 로, 아니면 ECS
+    const serverless = plan.runtime.type === "lambda";
     if (
       !deps.secretReader ||
       !deps.terraformCli ||
       !deps.terraformBackend ||
       !deps.terraformModuleRoot ||
-      !deps.ecsRolloutWaiter
+      (serverless ? !deps.lambdaRolloutWaiter : !deps.ecsRolloutWaiter)
     ) {
       throw new Error("TERRAFORM_DEPENDENCY_MISSING");
+    }
+    if (serverless && !context.lambda_web_adapter) {
+      // 재배포 빌드가 이 경우 소스로 다시 빌드하므로 보통은 오지 않는다 (#280 이전 이미지)
+      throw new Error("IMAGE_LAMBDA_ADAPTER_MISSING");
     }
     const awsConfig = AwsConfigSchema.parse(context.aws_config);
     if (
@@ -188,12 +197,19 @@ export async function handleProvision(
     if (databaseEnabled) {
       await stepLog.line("PostgreSQL(RDS) 추가 모듈 사용 — 처음 만들 때는 DB 생성에 5~10분 걸립니다.");
     } else if (await databaseProvisionedBefore(deps, projectId, environmentId, deploymentId)) {
+      if (serverless) {
+        // 서버리스 프로필은 같은 state 에 DB 모듈이 없어 apply 하면 RDS 와 데이터가 지워진다
+        await stepLog.line(
+          "이 환경에는 컨테이너 배포 때 만든 PostgreSQL(RDS)이 있어 서버리스로 바꾸면 DB 가 지워집니다. 컨테이너로 배포하세요.",
+        );
+        throw new Error("SERVERLESS_DATABASE_PRESENT");
+      }
       databaseEnabled = true;
       await stepLog.line("이 환경에 만든 PostgreSQL(RDS)을 유지합니다 (이번 버전은 DB 를 쓰지 않음).");
     }
     const terraformVariables = {
       ...plan.provisioning.variables,
-      database_enabled: databaseEnabled,
+      ...(serverless ? {} : { database_enabled: databaseEnabled }),
       app_name: safeContainerName(plan.application.name),
       region: awsConfig.region,
       resource_name: resourceName,
@@ -246,26 +262,42 @@ export async function handleProvision(
       });
     }
 
-    const expectedTaskDefinition = stringOutput(applied.outputs, "task_definition_arn");
-    if (!expectedTaskDefinition) throw new Error("TERRAFORM_OUTPUT_MISSING");
+    if (serverless) {
+      // Terraform 이 이미지 갱신 · 버전 발행 · alias 이동까지 한다. alias 가 이번 digest 로 Active 가 될 때까지 확인한다 (#282).
+      await deps.lambdaRolloutWaiter!.wait({
+        region: awsConfig.region,
+        credentials: { accessKeyId, secretAccessKey },
+        functionName: stringOutput(applied.outputs, "function_name") ?? resourceName,
+        alias: stringOutput(applied.outputs, "function_alias") ?? "live",
+        expectedDigest: context.image_digest,
+        log: (line) => stepLog.line(line),
+      });
+    } else {
+      const expectedTaskDefinition = stringOutput(applied.outputs, "task_definition_arn");
+      if (!expectedTaskDefinition) throw new Error("TERRAFORM_OUTPUT_MISSING");
 
-    // Terraform 은 서비스 갱신만 하고 돌아온다 (wait_for_steady_state = false, #253).
-    // 롤아웃 완료를 여기서 기다린 뒤 최종 검증으로 넘긴다. 재시도로 apply 를 건너뛴 경우에도 다시 확인한다.
-    await deps.ecsRolloutWaiter.wait({
-      region: awsConfig.region,
-      credentials: { accessKeyId, secretAccessKey },
-      clusterName: stringOutput(applied.outputs, "cluster_name") ?? resourceName,
-      serviceName: stringOutput(applied.outputs, "service_name") ?? resourceName,
-      expectedTaskDefinition,
-      log: (line) => stepLog.line(line),
-    });
+      // Terraform 은 서비스 갱신만 하고 돌아온다 (wait_for_steady_state = false, #253).
+      // 롤아웃 완료를 여기서 기다린 뒤 최종 검증으로 넘긴다. 재시도로 apply 를 건너뛴 경우에도 다시 확인한다.
+      await deps.ecsRolloutWaiter!.wait({
+        region: awsConfig.region,
+        credentials: { accessKeyId, secretAccessKey },
+        clusterName: stringOutput(applied.outputs, "cluster_name") ?? resourceName,
+        serviceName: stringOutput(applied.outputs, "service_name") ?? resourceName,
+        expectedTaskDefinition,
+        log: (line) => stepLog.line(line),
+      });
+    }
 
     await transitionTo(deps.pool, deploymentId, "verifying");
     activeStatus = "verifying";
     await deps.notifier?.notify(deploymentId, "state_changed", {
       status: "verifying",
     });
-    await stepLog.line("ECS 롤아웃 완료, 헬스체크 검증을 시작합니다.");
+    await stepLog.line(
+      serverless
+        ? "Lambda 배포 완료, 헬스체크 검증을 시작합니다."
+        : "ECS 롤아웃 완료, 헬스체크 검증을 시작합니다.",
+    );
     await deps.boss.send("verify", {
       jobId: `verify-deployment-${deploymentId}`,
       attempt: 1,
@@ -284,7 +316,9 @@ export async function handleProvision(
   } catch (error) {
     const errorCode = normalizeProvisionFailure(error);
     const errorDetail =
-      (error instanceof TerraformCliError || error instanceof EcsRolloutError) && error.detail
+      (error instanceof TerraformCliError ||
+        error instanceof EcsRolloutError ||
+        error instanceof LambdaRolloutError) && error.detail
         ? error.detail.slice(0, 2048)
         : undefined;
     deps.log?.error(
@@ -496,6 +530,7 @@ async function loadProvisionContext(
             artifact.immutable_ref,
             artifact.image_digest,
             artifact.platform AS image_platform,
+            artifact.lambda_web_adapter,
             d.public_url AS origin_url
      FROM deployments d
      LEFT JOIN environments target_environment
@@ -711,6 +746,7 @@ function normalizeProvisionFailure(error: unknown): string {
   if (error instanceof AdapterError) return error.code;
   if (error instanceof OriginActivationError) return error.code;
   if (error instanceof EcsRolloutError) return error.code;
+  if (error instanceof LambdaRolloutError) return error.code;
   if (error instanceof Error) {
     const allowed = new Set([
       "PROVISION_CONTEXT_NOT_FOUND",
@@ -736,6 +772,8 @@ function normalizeProvisionFailure(error: unknown): string {
       "AGENT_JOB_NOT_RETRYABLE",
       "ECR_REPOSITORY_INVALID",
       "IMAGE_PLATFORM_UNSUPPORTED",
+      "IMAGE_LAMBDA_ADAPTER_MISSING",
+      "SERVERLESS_DATABASE_PRESENT",
     ]);
     if (allowed.has(error.message)) return error.message;
   }

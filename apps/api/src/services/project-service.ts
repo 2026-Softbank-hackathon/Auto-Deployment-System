@@ -7,6 +7,7 @@ import { enqueueOnpremCleanup, type Pool } from "@camellia/db";
 import type PgBoss from "pg-boss";
 import type {
   DeleteProjectResponse,
+  DeployMode,
   DeploymentStatus,
   Project,
   ProjectDeletion,
@@ -25,6 +26,8 @@ export interface ProjectRow {
   description: string | null;
   created_at: Date;
   updated_at: Date;
+  /** 배포 형태 (#282). 읽지 않았으면 기본 container */
+  deploy_mode?: DeployMode | null;
   /** 삭제 요청 상태 (#247). POST /projects 의 RETURNING 처럼 읽지 않으면 undefined */
   deletion_status?: ProjectDeletionStatus | null;
   deletion_error?: string | null;
@@ -38,6 +41,7 @@ export interface ProjectSummaryRow extends ProjectRow {
   live_environment_id: number | string | null;
   live_environment_type: TargetVendor | null;
   live_environment_name: string | null;
+  live_target_profile: string | null;
   live_succeeded_at: Date | null;
   latest_deployment_id: number | string | null;
   latest_status: DeploymentStatus | null;
@@ -81,6 +85,7 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
     description: row.description ?? undefined,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
+    deployMode: row.deploy_mode === "serverless" ? "serverless" : "container",
     live:
       summary?.live_deployment_id != null
         ? {
@@ -88,6 +93,7 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
             environmentId: idOrNull(summary.live_environment_id),
             environmentType: summary.live_environment_type,
             environmentName: summary.live_environment_name,
+            targetProfile: summary.live_target_profile ?? null,
             publicUrl: servicePublicUrl(row.id, platformDomain),
             succeededAt: summary.live_succeeded_at?.toISOString() ?? null,
           }
@@ -119,12 +125,13 @@ function liveDeploymentIdSql(p: string): string {
 
 /** 프로젝트 + live · latest 요약 — 프로젝트마다 쿼리를 따로 날리지 않도록 LATERAL 로 한 번에 읽는다 */
 const PROJECT_SUMMARY_SELECT = `
-  SELECT p.id, p.name, p.description, p.created_at, p.updated_at,
+  SELECT p.id, p.name, p.description, p.created_at, p.updated_at, p.deploy_mode,
          p.deletion_status, p.deletion_error, p.deletion_requested_at, p.deletion_warnings,
          live.id AS live_deployment_id,
          live.target_environment_id AS live_environment_id,
          live_env.type AS live_environment_type,
          live_env.name AS live_environment_name,
+         live.target_profile AS live_target_profile,
          live.succeeded_at AS live_succeeded_at,
          latest.id AS latest_deployment_id,
          latest.status AS latest_status,
@@ -132,7 +139,7 @@ const PROJECT_SUMMARY_SELECT = `
          latest.created_at AS latest_created_at
   FROM projects p
   LEFT JOIN LATERAL (
-    SELECT d.id, d.target_environment_id, d.succeeded_at FROM deployments d
+    SELECT d.id, d.target_environment_id, d.target_profile, d.succeeded_at FROM deployments d
     WHERE d.id = (${liveDeploymentIdSql("p.id")})
   ) live ON true
   LEFT JOIN environments live_env ON live_env.id = live.target_environment_id
@@ -271,7 +278,7 @@ export class ProjectService {
       const res = await this.pool.query<ProjectRow>(
         `INSERT INTO projects (name, description)
          VALUES ($1, $2)
-         RETURNING id, name, description, created_at, updated_at`,
+         RETURNING id, name, description, created_at, updated_at, deploy_mode`,
         [name, description ?? null]
       );
       const row = res.rows[0];

@@ -12,6 +12,7 @@ import type {
   AwsConfig,
   CancelDeploymentResponse,
   CreateDeploymentResponse,
+  DeployMode,
   Deployment,
   DeploymentStatus,
   RedeployResponse,
@@ -98,8 +99,13 @@ export interface CreateDeploymentInput {
   targetVendor?: TargetVendor;
   /** 배포할 연결을 직접 고름 (공용 연결 또는 이 프로젝트 연결, #215) */
   environmentId?: number;
+  /** 배포 형태 (#282). 주면 앱의 형태도 바꾸고, 없으면 앱에 저장된 형태를 따른다 */
+  mode?: DeployMode;
   fileBuffer: Buffer;
 }
+
+/** 배포 형태로 서로 바뀌는 AWS 프로필 — 같은 state key 를 쓴다 */
+const AWS_COMPUTE_PROFILES = new Set(["aws-ecs-basic", "aws-lambda-basic"]);
 
 export class DeploymentService {
   constructor(
@@ -115,8 +121,9 @@ export class DeploymentService {
 
     const { targetVendor, targetEnvironmentId, registryEnvironmentId } =
       await this.resolveEnvironments(projectId, input.targetVendor, input.environmentId);
-    // vendor → profile ID 매핑 (연결을 직접 고르면 연결 type 이 vendor)
-    const targetProfile = resolveProfile(targetVendor);
+    // vendor · 배포 형태 → profile ID 매핑 (연결을 직접 고르면 연결 type 이 vendor)
+    const mode = input.mode ?? (await this.projectDeployMode(projectId));
+    const targetProfile = resolveProfile(targetVendor, undefined, { mode });
 
     // 1. sha256 계산
     const sha256 = createHash("sha256").update(fileBuffer).digest("hex");
@@ -131,6 +138,10 @@ export class DeploymentService {
     let sourceVersionId: number;
     try {
       await client.query("BEGIN");
+
+      if (input.mode !== undefined) {
+        await client.query(`UPDATE projects SET deploy_mode = $1 WHERE id = $2`, [input.mode, projectId]);
+      }
 
       const depRes = await client.query<{ id: number }>(
         `INSERT INTO deployments
@@ -335,7 +346,7 @@ export class DeploymentService {
    */
   async redeploy(
     fromDeploymentId: number,
-    options?: { targetEnvironmentId?: number },
+    options?: { targetEnvironmentId?: number; mode?: DeployMode },
   ): Promise<RedeployResponse> {
     // 1. 소스 deployment 조회
     const srcRes = await this.pool.query<{
@@ -417,14 +428,20 @@ export class DeploymentService {
 
     // 대상 환경을 바꾸면 그 환경 종류에 맞는 프로필과 Registry 환경을 다시 고른다.
     // 같은 환경이면 원본 배포의 값을 그대로 쓴다 (롤백 = 이전 배포를 같은 환경에 재배포).
+    // 배포 형태는 앱에 저장된 값(또는 이번에 고른 값)을 따른다 (#282) — 같은 AWS 환경이어도
+    // 원본과 형태가 다르면 컨테이너 ↔ 서버리스 프로필을 바꾼다.
+    const mode = options?.mode ?? (await this.projectDeployMode(src.project_id));
     let targetEnvironmentId = src.target_environment_id;
     let targetProfile = src.target_profile;
     let registryEnvironmentId = src.registry_environment_id;
+    if (targetProfile !== null && AWS_COMPUTE_PROFILES.has(targetProfile)) {
+      targetProfile = resolveProfile("aws", ir.ir_json, { mode });
+    }
     const overrideId = options?.targetEnvironmentId;
     if (overrideId != null && String(overrideId) !== String(src.target_environment_id)) {
       const target = await this.findRedeployTarget(overrideId, src.project_id);
       targetEnvironmentId = target.id;
-      targetProfile = resolveProfile(target.type);
+      targetProfile = resolveProfile(target.type, ir.ir_json, { mode });
       registryEnvironmentId =
         target.type === "aws"
           ? target.id
@@ -484,6 +501,10 @@ export class DeploymentService {
     try {
       await client.query("BEGIN");
 
+      if (options?.mode !== undefined) {
+        await client.query(`UPDATE projects SET deploy_mode = $1 WHERE id = $2`, [options.mode, src.project_id]);
+      }
+
       const depRes = await client.query<{ id: number }>(
         `INSERT INTO deployments
            (project_id, status, target_profile, target_environment_id, registry_environment_id)
@@ -529,6 +550,15 @@ export class DeploymentService {
       status: "queued" as const,
       eventsUrl: `/api/v1/deployments/${newDeploymentId}/events`,
     };
+  }
+
+  /** 앱에 저장된 배포 형태 (#282). 프로젝트를 못 찾으면 기본 컨테이너 */
+  private async projectDeployMode(projectId: number | string): Promise<DeployMode> {
+    const result = await this.pool.query<{ deploy_mode: DeployMode | null }>(
+      `SELECT deploy_mode FROM projects WHERE id = $1`,
+      [projectId],
+    );
+    return result.rows[0]?.deploy_mode === "serverless" ? "serverless" : "container";
   }
 
   /** 삭제 중이거나 삭제에 실패한 앱에는 새 배포를 만들지 않는다 (#247) */

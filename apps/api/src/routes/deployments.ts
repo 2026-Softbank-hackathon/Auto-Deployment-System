@@ -6,6 +6,8 @@
 import { type FastifyPluginAsync } from "fastify";
 import { ApiError } from "../plugins/error-handler.js";
 import {
+  DEPLOY_MODES,
+  DeployModeSchema,
   TARGET_VENDORS,
   type TargetVendor,
   CancelDeploymentBodySchema,
@@ -44,6 +46,11 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
             minimum: 1,
             description: "배포할 연결 (공용 연결 또는 이 프로젝트 연결). 연결 type 이 target 을 정함 (#215)",
           },
+          mode: {
+            type: "string",
+            enum: [...DEPLOY_MODES],
+            description: "배포 형태 (고급 설정). 주면 앱의 형태도 바꾸고, 없으면 앱에 저장된 형태(기본 container). AWS + serverless 면 Lambda (#282)",
+          },
         },
       },
     },
@@ -52,6 +59,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
     let rawProjectId: string | undefined;
     let rawTarget: string | undefined;
     let rawEnvironmentId: string | undefined;
+    let rawMode: string | undefined;
     for await (const part of request.parts()) {
       if (part.type === "file") {
         const chunks: Buffer[] = [];
@@ -64,6 +72,8 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       } else if (part.fieldname === "environment_id") {
         rawEnvironmentId =
           rawEnvironmentId === undefined && typeof part.value === "string" ? part.value : "";
+      } else if (part.fieldname === "mode") {
+        rawMode = rawMode === undefined && typeof part.value === "string" ? part.value : "";
       }
     }
     if (!fileBuffer) {
@@ -98,6 +108,12 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       }
     }
 
+    // mode: optional (#282) — 고급 설정의 배포 형태
+    const mode = rawMode === undefined ? undefined : DeployModeSchema.safeParse(rawMode);
+    if (mode && !mode.success) {
+      throw new ApiError(400, "VALIDATION_ERROR", "mode 는 container 또는 serverless 여야 합니다.");
+    }
+
     // project_id: required
     const projectIdNum = rawProjectId ? Number(rawProjectId) : null;
     if (projectIdNum !== null && (!Number.isFinite(projectIdNum) || projectIdNum <= 0)) {
@@ -112,6 +128,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       projectId: projectIdNum,
       ...(rawTarget !== undefined ? { targetVendor: rawTarget as TargetVendor } : {}),
       ...(environmentId !== undefined ? { environmentId } : {}),
+      ...(mode?.success ? { mode: mode.data } : {}),
       fileBuffer,
     });
 
@@ -139,6 +156,7 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
         type: "object",
         properties: {
           targetEnvironmentId: { type: "string", pattern: "^\\d+$", description: "환경 override (없으면 소스 배포 환경 그대로). 다른 종류 환경이면 프로필 · Registry 재선정" },
+          mode: { type: "string", enum: [...DEPLOY_MODES], description: "배포 형태를 바꿀 때만 (#282). 없으면 앱에 저장된 형태" },
         },
       },
     },
@@ -157,7 +175,10 @@ const deploymentsRoutes: FastifyPluginAsync<{ deploymentService: DeploymentServi
       ? Number(parsed.data.targetEnvironmentId)
       : undefined;
 
-    const result = await svc.redeploy(id, { targetEnvironmentId });
+    const result = await svc.redeploy(id, {
+      targetEnvironmentId,
+      ...(parsed.data.mode ? { mode: parsed.data.mode } : {}),
+    });
     return reply.status(202).send(result);
   });
 

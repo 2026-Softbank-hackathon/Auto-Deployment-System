@@ -19,6 +19,7 @@
 import { z } from "zod";
 import {
   ApprovalGateSchema,
+  DeployModeSchema,
   DeploymentStatusSchema,
   IdStringSchema,
   IsoDateTimeSchema,
@@ -260,6 +261,8 @@ export type Diagnosis = z.infer<typeof DiagnosisSchema>;
 export const RedeployBodySchema = z.object({
   /** 재배포할 환경 ID override. 없으면 소스 deployment 의 환경 그대로. */
   targetEnvironmentId: IdStringSchema.optional(),
+  /** 배포 형태를 바꿀 때만. 없으면 앱에 저장된 형태 그대로 (주면 앱의 형태도 바꾼다) */
+  mode: DeployModeSchema.optional(),
 });
 export type RedeployBody = z.input<typeof RedeployBodySchema>;
 

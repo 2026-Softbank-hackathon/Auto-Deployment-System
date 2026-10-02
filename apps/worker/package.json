@@ -14,6 +14,7 @@
   "dependencies": {
     "@aws-sdk/client-ecs": "^3.1145.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.1145.0",
+    "@aws-sdk/client-lambda": "3.1145.0",
     "@aws-sdk/client-s3": "^3.0.0",
     "@camellia/adapters": "workspace:*",
     "@camellia/analyzer": "workspace:*",
@@ -23,6 +24,7 @@
     "@camellia/contracts": "workspace:*",
     "@camellia/db": "workspace:*",
     "@camellia/ir-schema": "workspace:*",
+    "@camellia/profiles": "workspace:^",
     "@camellia/storage": "workspace:*",
     "pg-boss": "^10.1.0",
     "pino": "^9.0.0",

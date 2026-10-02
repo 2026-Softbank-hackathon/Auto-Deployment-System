@@ -38,7 +38,8 @@ export function koroLine(stage: number, stepSeconds: number, facts: AnalysisFact
   const talk = t.run.talk;
   const lines = storyLines(stage, story, talk, target).concat(stageLines(stage, facts, target, talk, story?.reused === true));
   if (!lines.length) return null;
-  return lines[Math.floor(Math.max(0, stepSeconds) / LINE_SECONDS) % lines.length];
+  // 전에 만든 이미지를 다시 쓰는 배포(롤백 · 재배포 · 환경 전환)는 "새 버전"이 아니다 (#322).
+  return lines[Math.floor(Math.max(0, stepSeconds) / LINE_SECONDS) % lines.length].replaceAll('{v}', story?.reused ? talk.versionSame : talk.versionNew);
 }
 
 /** 재배포 · 롤백 · 환경 전환일 때 먼저 하는 말 */

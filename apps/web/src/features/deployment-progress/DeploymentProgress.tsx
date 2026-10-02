@@ -23,6 +23,7 @@ import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { CancelDeployment } from './CancelDeployment';
 import { HealthProgress } from './HealthProgress';
+import { PatchApproval } from '../approvals/PatchApproval';
 
 type ErrorState = { cause: unknown; fallback: 'statusFailed' | 'logsFailed' } | null;
 type StepLog = { step: DeploymentLogStep; text: string };
@@ -204,6 +205,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     });
   }, [pendingGate, approveGate, deploymentId]);
   const waitingForEnv = review !== null && pendingGate === 'target';
+  // SQLite → PostgreSQL 코드 수정안 (#277): 자동 승인하지 않고 사용자가 diff 를 보고 고른다
+  const waitingForPatch = currentStatus === 'awaiting_patch_approval';
 
   const statusView = deploymentStatusView(currentStatus ?? 'received');
   // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
@@ -320,7 +323,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     { tab: 'analysis', label: t.run.tabs.analysis },
   ];
   // 진행 탭에 사용자가 해야 할 일이 있는데 다른 탭을 보고 있으면 탭에 점으로 알린다.
-  const needsAttention = waitingForEnv || approvalError !== null;
+  const needsAttention = waitingForEnv || waitingForPatch || approvalError !== null;
 
   return <>
     <section className={`run-stage is-${view.outcome}`} aria-labelledby="run-title">
@@ -352,6 +355,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
       </nav>
 
       {shownTab === 'progress' && <>
+        {waitingForPatch && <PatchApproval deploymentId={deploymentId} onDecided={() => void refresh()} />}
+
         {waitingForEnv && projectId && review && <PreDeployPanel deploymentId={deploymentId} projectId={projectId} review={review}
           onDone={() => { setReview(null); clearReview(deploymentId); void approveGate('target'); }} />}
 

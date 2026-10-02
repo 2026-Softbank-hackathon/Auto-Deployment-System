@@ -890,3 +890,30 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @keyframes live-bob { from { translate: 0 0; } to { translate: 0 -4px; } }
 @keyframes window-check { 0%, 100% { fill: var(--line); } 50% { fill: var(--brass); } }
 @keyframes cloud-drift { from { transform: translateX(-10px); } to { transform: translateX(26px); } }
+
+/* 코드 수정안 승인 (#277) — SQLite → PostgreSQL diff */
+.patch-approval { display: grid; gap: 12px; text-align: left; }
+.patch-approval p { margin: 0; }
+.patch-approval__title { font-size: 17px; }
+.patch-approval__summary { font-weight: 500; }
+.patch-approval__targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.patch-approval__targets div { display: grid; gap: 4px; padding: 10px 12px; background: var(--surface); border: var(--border); border-radius: var(--radius-input); }
+.patch-approval__targets small, .patch-approval__files small, .patch-approval__notes small { color: var(--ink-soft); font-weight: 500; }
+.patch-approval__files ul, .patch-approval__notes ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.patch-approval__files li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.patch-approval__files code, .diff-file summary code { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }
+.patch-approval__counts { font-family: var(--font-mono); font-size: 12px; }
+.patch-approval__counts .is-add { color: var(--moss-text); }
+.patch-approval__counts .is-del { color: var(--brick-text); }
+.patch-approval__actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.diff-file { margin-top: 10px; }
+.diff-file summary { cursor: pointer; }
+.technical-details pre.diff-view { max-height: 420px; padding: 8px 0; white-space: pre; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+.diff-line { display: block; padding: 0 12px; min-width: max-content; }
+.diff-line.is-add { background: color-mix(in srgb, var(--moss) 14%, transparent); color: var(--moss-text); }
+.diff-line.is-del { background: color-mix(in srgb, var(--brick) 12%, transparent); color: var(--brick-text); }
+.diff-line.is-hunk { color: var(--koro-text); }
+
+/* 분석 결과: SQLite 에서 옮기는 DB (#279) */
+.analysis-database { display: grid; gap: 2px; margin: 6px 0 2px; padding: 8px 12px; border-left: 3px solid var(--koro); background: var(--paper-sunken); border-radius: var(--radius-tape); font-size: 13px; }
+.analysis-database small { color: var(--ink-soft); font-weight: 500; }

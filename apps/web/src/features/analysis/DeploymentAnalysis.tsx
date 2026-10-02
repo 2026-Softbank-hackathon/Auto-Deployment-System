@@ -34,12 +34,15 @@ function servicesOf(value: unknown): AnalysisService[] {
     }];
   });
 }
-/** 분석이 찾은 의존 리소스 (DB · 캐시 등). */
-function resourcesOf(value: unknown): Array<{ name: string; type: string }> {
+/** 분석이 찾은 의존 리소스 (DB · 캐시 등). fromSqlite = SQLite 에서 옮기는 DB (#276) — 옮길 데이터 파일 목록 */
+interface AnalysisResource { name: string; type: string; fromSqlite: boolean; dataFiles: string[] }
+function resourcesOf(value: unknown): AnalysisResource[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
+  return value.flatMap((item): AnalysisResource[] => {
     const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-    return typeof record.name === 'string' && typeof record.type === 'string' ? [{ name: record.name, type: record.type }] : [];
+    if (typeof record.name !== 'string' || typeof record.type !== 'string') return [];
+    const sqlite = record.sqlite && typeof record.sqlite === 'object' ? record.sqlite as Record<string, unknown> : {};
+    return [{ name: record.name, type: record.type, fromSqlite: record.local_fallback === 'sqlite', dataFiles: strings(sqlite.files) }];
   });
 }
 /** 사람이 읽을 수 있는 한 줄로. 모양이 정해지지 않은 항목(IR 검증 오류 · 미결 항목)에 쓴다. */
@@ -92,6 +95,8 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
   const warnings = warningsOf(report?.warnings);
   const services = servicesOf(report?.services);
   const resources = resourcesOf(report?.resources);
+  const irResources = ir?.ir && typeof ir.ir === 'object' ? (ir.ir as { resources?: unknown }).resources : null;
+  const irResourceNames = new Set(irResources && typeof irResources === 'object' ? Object.keys(irResources) : []);
   const irErrors = Array.isArray(report?.irErrors) ? report.irErrors.map(lineOf) : [];
   const unresolved = Array.isArray(report?.unresolved) ? report.unresolved.map(lineOf) : [];
   // 같은 소스를 다시 올리면 서버가 이전 분석을 재사용한다 (IR source = analyzer_cache).
@@ -112,7 +117,19 @@ export function DeploymentAnalysis({ deploymentId, deploymentStatus }: { deploym
         {service.path && <div><dt>{t.analysis.path}</dt><dd><code>{service.path}</code></dd></div>}
         {service.envNames.length > 0 && <div><dt>{t.analysis.envNames}</dt><dd><code>{service.envNames.join(', ')}</code></dd></div>}
       </dl>)}</div>}
-      {resources.length > 0 && <div className="analysis-detail"><h3>{t.analysis.resourceList}</h3><ul className="analysis-lines">{resources.map((resource) => <li key={resource.name}><code>{resource.type}</code> {resource.name}</li>)}</ul></div>}
+      {resources.length > 0 && <div className="analysis-detail"><h3>{t.analysis.resourceList}</h3><ul className="analysis-lines">{resources.map((resource) => <li key={resource.name}>
+        <code>{resource.type}</code> {resource.name}
+        {/* SQLite 에서 옮기는 DB 는 환경마다 다르게 실행된다 — AWS 는 RDS, 온프레미스는 SQLite 그대로 */}
+        {resource.fromSqlite && <div className="analysis-database">
+          <small>{t.analysis.databaseMove}</small>
+          {/* 수정안을 거절했거나 만들지 못했으면 IR 에서 DB 가 빠진다 → SQLite 그대로 */}
+          {irResourceNames.has(resource.name) ? <>
+            <span>{t.analysis.databaseAws}</span>
+            <span>{t.analysis.databaseOnprem}</span>
+            {resource.dataFiles.length > 0 && <span>{t.analysis.databaseFiles(resource.dataFiles.join(', '))}</span>}
+          </> : <span>{t.analysis.databaseKept}</span>}
+        </div>}
+      </li>)}</ul></div>}
       {warnings.length > 0 && <div className="notice analysis-warnings"><strong>{t.analysis.riskTitle}</strong><ul>{warnings.map((warning, index) => <li key={`${warning.code}-${warning.path ?? index}`}><span className="analysis-warnings__label">{t.analysis.warningLabels[warning.code] ?? warning.code}</span><span>{warning.message}</span>{warning.path && <code>{warning.path}</code>}</li>)}</ul></div>}{unresolved.length > 0 && <><p className="muted-copy">{t.analysis.unresolved(unresolved.length)}</p><details className="technical-details"><summary>{t.analysis.unresolvedList}</summary><ul className="analysis-lines">{unresolved.map((line, index) => <li key={index}>{line}</li>)}</ul></details></>}</>}
     {aiUsage && aiUsage.totalTokenIn + aiUsage.totalTokenOut > 0 && <p className="muted-copy analysis-ai-usage">{t.analysis.aiUsage(aiUsage.totalTokenIn.toLocaleString(t.locale), aiUsage.totalTokenOut.toLocaleString(t.locale), aiUsage.totalCostUsd.toFixed(4))}</p>}
     <details className="technical-details"><summary>{t.analysis.irToggle}</summary>{ir ? <pre>{printable(ir.ir)}</pre> : <p>{finished ? t.analysis.irNone : t.analysis.irPending}</p>}</details>

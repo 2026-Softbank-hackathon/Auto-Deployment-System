@@ -95,7 +95,8 @@
 .deployment-row__sub { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.deployment-row__sub { color: var(--koro-text); text-decoration: none; }
 a.deployment-row__sub:hover { text-decoration: underline; }
-.deployment-row__tape { justify-self: start; }
+.deployment-row__status { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.deployment-row__env { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 13px; font-weight: 700; color: var(--ink-soft); white-space: nowrap; }
 .deployment-row__stage { display: flex; flex-direction: column; gap: 4px; }
 .deployment-row__stage-label { font-size: 14px; font-weight: 700; line-height: 1.4; }
 .deployment-row__stage-label.is-active { color: var(--koro-text); }
@@ -467,6 +468,13 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 /* 프로젝트 상세 (#150) */
 .project-detail__back { justify-self: start; color: var(--koro-text); font-weight: 700; }
 .project-detail__back:hover { color: var(--koro-text-hover); }
+/* 프로젝트 상세 머리: 지금 서비스 중인 곳과 주소 (#220) */
+.page-head p.project-live { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; font-size: 14px; }
+.project-live strong { color: var(--moss-text); }
+.project-live svg { color: var(--moss-text); }
+.project-live a { font-family: var(--font-mono); font-size: 13px; color: var(--koro-text); overflow-wrap: anywhere; }
+.project-live a:hover { color: var(--koro-text-hover); }
+.project-live__no { font-family: var(--font-mono); font-size: 12px; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: var(--border); }
 .tabs__tab { padding: 10px 16px; margin-bottom: -1px; font-weight: 700; color: var(--ink-soft); text-decoration: none; border-bottom: 3px solid transparent; }
 .tabs__tab:hover { color: var(--ink); }
@@ -487,6 +495,10 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .picker-list__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; width: 100%; padding: 12px 14px; text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: var(--border); border-radius: var(--radius-input); cursor: pointer; }
 .picker-list__item:hover, .picker-list__item[aria-current='true'] { border-color: var(--koro); }
 .picker-list__item:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
+.picker-list__item:disabled { cursor: progress; opacity: .6; }
+.picker-list__item:disabled:hover { border-color: var(--line); }
+.picker-list__env { display: inline-flex; align-items: center; gap: 6px; }
+.picker-list__item .picker-list__reason { color: var(--brick-text); }
 .picker-list__item strong { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .picker-list__item span { grid-column: 1; font-size: 13px; color: var(--ink-soft); }
 .picker-list__item .picker-list__current { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 700; color: var(--koro-text); }
@@ -524,7 +536,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .row-menu__trigger { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; color: var(--ink-soft); background: transparent; border: 0; border-radius: var(--radius-input); cursor: pointer; }
 .row-menu__trigger:hover, .row-menu__trigger[aria-expanded='true'] { color: var(--ink); background: var(--paper-sunken); }
 .row-menu__trigger:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }
-.row-menu__list { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; display: grid; min-width: 200px; padding: 6px; background: var(--surface); border: var(--border); border-radius: var(--radius-input); box-shadow: var(--shadow-rest); }
+/* body에 붙여 화면 기준으로 띄운다 (위치는 RowMenu가 계산). 카드의 쌓임 맥락 밖이라 다음 카드에 가려지지 않는다 */
+.row-menu__list { position: fixed; z-index: 40; display: grid; min-width: 200px; max-width: min(320px, calc(100vw - 16px)); padding: 6px; background: var(--surface); border: var(--border); border-radius: var(--radius-input); box-shadow: var(--shadow-rest); }
 .row-menu__item { display: grid; gap: 2px; width: 100%; padding: 10px 12px; text-align: left; font: inherit; font-weight: 700; color: var(--ink); text-decoration: none; background: transparent; border: 0; border-radius: var(--radius-tape); cursor: pointer; }
 .row-menu__item:hover, .row-menu__item:focus-visible { background: var(--paper-sunken); outline: none; }
 .row-menu__item.is-disabled { color: var(--ink-soft); cursor: not-allowed; }
@@ -615,6 +628,7 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .picker-dialog[open] { animation: dialog-in 200ms var(--ease-roll); }
   .picker-dialog[open]::backdrop { animation: fade-in 200ms ease-out; }
   .row-menu__list { transform-origin: top right; animation: menu-in 140ms var(--ease-roll); }
+  .row-menu__list.is-above { transform-origin: bottom right; }
 
   @keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

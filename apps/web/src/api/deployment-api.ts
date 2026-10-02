@@ -186,11 +186,14 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
 
 /**
  * 재배포 (#138) — 끝난 배포의 소스 · IR · 대상 환경을 그대로 써서 새 배포를 만든다. 분석과 대상 승인을 건너뛰고 빌드부터 시작한다.
- * 소스 배포가 진행 중이거나 환경이 사용 중이면 409, 분석 결과가 없으면 400.
+ * targetEnvironmentId를 주면 그 환경으로 배포한다(다른 환경으로 배포, #220). 이전 배포를 그대로 재배포하면 롤백이 된다.
+ * 소스 배포가 진행 중이거나 환경이 사용 중이면 409, 분석 결과가 없거나 다른 프로젝트의 환경이면 400.
  */
-export async function redeployDeployment(deploymentId: string): Promise<{ deploymentId: string }> {
+export async function redeployDeployment(deploymentId: string, targetEnvironmentId?: string): Promise<{ deploymentId: string }> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/redeploy`), {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    // 서버 계약은 숫자 문자열 ID (RedeployBodySchema)
+    body: JSON.stringify(targetEnvironmentId ? { targetEnvironmentId } : {}),
   });
   const body = asRecord(await readJson(response), '재배포');
   const id = typeof body.deploymentId === 'string' || typeof body.deploymentId === 'number' ? String(body.deploymentId) : '';
@@ -232,12 +235,28 @@ export interface EnvironmentSummary {
   secretNames: string[];
   /** 온프레미스 Agent가 마지막으로 연결을 알린 시각. 서버가 아직 채우지 않으면 null (모르는 상태). */
   lastSeenAt: string | null;
+  /** 프로젝트 없이 등록한 공용 연결 (#215) */
+  shared?: boolean;
+  /** 온프레미스 Agent가 최근(90초 안)에 연락했는지. 서버가 주지 않으면 undefined (모르는 상태) */
+  agentOnline?: boolean;
 }
 
 /** API-24 — 프로젝트에 등록된 배포 환경 목록. */
 export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
   const response = await fetch(endpoint(`/api/v1/environments?projectId=${encodeURIComponent(projectId)}`), { credentials: 'include' });
-  const body = await readJson(response);
+  return toEnvironmentSummaries(await readJson(response));
+}
+
+/**
+ * 공용 연결 목록 (#215) — projectId 없이 GET /environments. 프로젝트 전용 연결은 들어 있지 않다.
+ * 이 기능이 없는 서버는 projectId 없이 부르면 400을 주므로, 부르는 쪽에서 실패를 빈 목록으로 다룬다.
+ */
+export async function listSharedEnvironments(): Promise<EnvironmentSummary[]> {
+  const response = await fetch(endpoint('/api/v1/environments'), { credentials: 'include' });
+  return toEnvironmentSummaries(await readJson(response)).map((environment) => ({ ...environment, shared: true }));
+}
+
+function toEnvironmentSummaries(body: unknown): EnvironmentSummary[] {
   return (Array.isArray(body) ? body : []).flatMap((item): EnvironmentSummary[] => {
     if (!item || typeof item !== 'object') return [];
     const record = item as Record<string, unknown>;
@@ -249,6 +268,8 @@ export async function listEnvironments(projectId: string): Promise<EnvironmentSu
       region: typeof aws.region === 'string' ? aws.region : null, hostname: typeof onprem.hostname === 'string' ? onprem.hostname : null,
       secretNames: [aws.accessKeyIdSecretName, aws.secretAccessKeySecretName].filter((name): name is string => typeof name === 'string'),
       lastSeenAt: typeof record.lastSeenAt === 'string' ? record.lastSeenAt : null,
+      shared: record.shared === true,
+      ...(typeof record.agentOnline === 'boolean' ? { agentOnline: record.agentOnline } : {}),
     }];
   });
 }
@@ -436,6 +457,8 @@ export interface ProjectSummary {
   latest: ProjectLatestDeployment | null;
 }
 
+export type EnvironmentType = 'aws' | 'onprem';
+
 export interface ProjectDeploymentSummary {
   id: string;
   status: string;
@@ -445,6 +468,12 @@ export interface ProjectDeploymentSummary {
   createdAt: string;
   succeededAt: string | null;
   failedAt: string | null;
+  /** 배포한 환경. 환경 기록이 없으면 null */
+  environmentId: string | null;
+  environmentType: EnvironmentType | null;
+  environmentName: string | null;
+  /** 지금 프로젝트 주소로 서비스 중인 배포(가장 최근에 성공한 배포)인지 */
+  isLive: boolean;
 }
 
 export interface Page<T> { items: T[]; nextCursor: string | null; }
@@ -521,13 +550,17 @@ export async function listProjectDeployments(projectId: string, options: { limit
         sourceSha256: optionalString(sourceVersion?.sha256),
         succeededAt: optionalString(record.succeededAt),
         failedAt: optionalString(record.failedAt),
+        environmentId: optionalString(record.environmentId),
+        environmentType: environmentTypeOf(record.environmentType),
+        environmentName: optionalString(record.environmentName),
+        isLive: record.isLive === true,
       }];
     }),
     nextCursor: optionalString(body.nextCursor),
   };
 }
 
-/** GET /projects/:id — used only to show the project name on the progress screen. */
+/** GET /projects/:id — the project name (progress screen) and where it is served now (project detail). */
 export async function getProject(projectId: string): Promise<ProjectSummary> {
   const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { credentials: 'include' });
   const project = parseProject(asRecord(await readJson(response), '프로젝트'));

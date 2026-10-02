@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { listProjectDeployments, type ProjectDeploymentSummary } from '../api/deployment-api';
+import { getProject, listProjectDeployments, type ProjectDeploymentSummary, type ProjectLiveDeployment } from '../api/deployment-api';
 import { followAppLink, type Navigate } from '../app/navigation';
 import type { ProjectTab } from '../app/routes';
 import { DeployKeycap } from '../components/ui/DeployKeycap';
 import { Keycap } from '../components/ui/Keycap';
 import { DeploymentBrowser } from '../features/dashboard/DeploymentBrowser';
-import { displayProjectName } from '../features/dashboard/format';
+import { EnvironmentIcon } from '../features/dashboard/DeploymentRow';
+import { displayProjectName, hostOf, safeHttpUrl } from '../features/dashboard/format';
 import { setupStatus, useDeployProject } from '../features/deployment-start/useDeployProject';
 import { ConnectionCards } from '../features/setup/ConnectionCards';
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
@@ -39,7 +40,29 @@ function Deployments({ projectId, projectName, onNavigate }: { projectId: string
   if ('error' in state) return <div className="notice error" role="alert"><strong>{t.dashboard.loadError}</strong><br />{errorMessage(state.error, t, t.dashboard.loadError)}</div>;
   if (state.items.length === 0) return <p className="dashboard-status">{t.projects.neverDeployed}</p>;
   return <DeploymentBrowser items={state.items.map((deployment) => ({ ...deployment, projectName }))} now={state.loadedAt} onNavigate={onNavigate}
-    searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} />;
+    searchPlaceholder={t.projects.searchPlaceholder} onChanged={() => setReloadKey((key) => key + 1)} projectId={projectId} />;
+}
+
+/** 지금 이 앱이 어디서(AWS / 온프레미스) 서비스 중인지와 주소 (#220). 읽지 못하면 아무것도 보여 주지 않는다. */
+function LiveSummary({ projectId }: { projectId: string }) {
+  const { t } = useI18n();
+  const cacheKey = `project-live:${projectId}`;
+  const [live, setLive] = useState<ProjectLiveDeployment | null | undefined>(() => readCache<ProjectLiveDeployment | null>(cacheKey));
+  useEffect(() => {
+    let active = true;
+    getProject(projectId).then((project) => { writeCache(cacheKey, project.live); if (active) setLive(project.live); }, () => { /* 없어도 화면은 동작한다 */ });
+    return () => { active = false; };
+  }, [projectId, cacheKey]);
+
+  if (live === undefined) return null;
+  if (live === null) return <p className="project-live">{t.versions.notLive}</p>;
+  const url = safeHttpUrl(live.publicUrl);
+  return <p className="project-live">
+    {live.environmentType && <EnvironmentIcon type={live.environmentType} />}
+    <strong>{t.versions.liveOn(live.environmentType ? t.deploy.targets[live.environmentType] : t.versions.unknownEnvironment)}</strong>
+    {url && <a href={url} target="_blank" rel="noreferrer">{hostOf(url)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
+    <span className="project-live__no">{t.dashboard.deploymentNo(live.deploymentId)}</span>
+  </p>;
 }
 
 /**
@@ -70,7 +93,7 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
   return <>
     {back}
     <div className="page-head">
-      <div><h1>{displayProjectName(known.name)}</h1><p>{copy.detailDescription}</p></div>
+      <div><h1>{displayProjectName(known.name)}</h1><p>{copy.detailDescription}</p><LiveSummary projectId={projectId} /></div>
       {/* AWS 연결은 어느 대상이든 필수라, 등록 전에는 배포로 보내지 않는다. */}
       {deployReady
         ? <DeployKeycap href="/deploy" onClick={(event) => followAppLink(event, onNavigate)}>{copy.deploy}</DeployKeycap>

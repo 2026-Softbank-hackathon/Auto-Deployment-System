@@ -14,6 +14,15 @@ function ExternalIcon() {
   </svg>;
 }
 
+/** 배포한 곳의 작은 그림: AWS는 구름, 온프레미스는 서버 */
+export function EnvironmentIcon({ type }: { type: 'aws' | 'onprem' }) {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {type === 'aws'
+      ? <path d="M7 18 H17.5 A4 4 0 0 0 17.5 10 A6 6 0 0 0 6 11 A3.5 3.5 0 0 0 7 18 Z" />
+      : <><rect x="4" y="4" width="16" height="7" rx="1.5" /><rect x="4" y="13" width="16" height="7" rx="1.5" /><path d="M8 7.5 H8.01 M8 16.5 H8.01" /></>}
+  </svg>;
+}
+
 export function DeploymentRow({ deployment, now, onNavigate, menu }: { deployment: DeploymentListItem; now: number; onNavigate: Navigate; /** 기본 동작 옆의 "⋯" 메뉴 */ menu?: ReactNode }) {
   const { t } = useI18n();
   const view = deploymentStatusView(deployment.status);
@@ -25,7 +34,10 @@ export function DeploymentRow({ deployment, now, onNavigate, menu }: { deploymen
   const timing = view.outcome === 'active'
     ? `${relativeTime(deployment.createdAt, now, t)} · ${elapsed(deployment.createdAt, now)}`
     : finishedAt ? `${relativeTime(deployment.createdAt, now, t)} · ${elapsed(deployment.createdAt, Date.parse(finishedAt))}` : relativeTime(deployment.createdAt, now, t);
-  const liveUrl = view.outcome === 'success' ? safeHttpUrl(deployment.publicUrl) : null;
+  // 프로젝트 주소는 하나라서, 지금 서비스 중인 배포만 LIVE이고 주소로 연다. 나머지 성공 배포는 이전 버전이다.
+  const previous = view.outcome === 'success' && !deployment.isLive;
+  const liveUrl = view.outcome === 'success' && deployment.isLive ? safeHttpUrl(deployment.publicUrl) : null;
+  const environment = deployment.environmentType;
   const context = <span className="visually-hidden"> {name}</span>;
 
   const action = view.outcome === 'active'
@@ -43,7 +55,12 @@ export function DeploymentRow({ deployment, now, onNavigate, menu }: { deploymen
         ? <a className="deployment-row__sub" href={liveUrl} target="_blank" rel="noreferrer">{hostOf(liveUrl)}</a>
         : <span className="deployment-row__sub">{t.dashboard.deploymentNo(deployment.id)}{deployment.sourceSha256 ? ` · ${deployment.sourceSha256.slice(0, 12)}` : ''}</span>}
     </div>
-    <StatusTape tone={stalled ? 'waiting' : view.tone} className="deployment-row__tape">{stalled ? 'STALLED' : view.tape}</StatusTape>
+    <div className="deployment-row__status">
+      <StatusTape tone={stalled ? 'waiting' : view.tone} className={previous ? 'status-tape--quiet' : ''}>{stalled ? 'STALLED' : previous ? t.versions.previous : view.tape}</StatusTape>
+      {environment && <span className="deployment-row__env" title={deployment.environmentName ?? undefined}>
+        <EnvironmentIcon type={environment} />{t.deploy.targets[environment]}
+      </span>}
+    </div>
     <MiniRail view={view} />
     <div className="deployment-row__stage">
       <span className={`deployment-row__stage-label is-${stalled ? 'stopped' : view.outcome}`}>{stalled ? t.dashboard.stalled : t.status.stage[view.stageKey]}</span>

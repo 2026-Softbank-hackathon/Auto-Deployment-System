@@ -95,7 +95,11 @@ services:
       dockerfile: apps/worker/Dockerfile
       platforms: [linux/amd64]
     restart: unless-stopped
+    # tini 가 SIGTERM 을 node(tsx) 에만 전달한다 → terraform · buildx 자식은 작업이 끝날 때까지 계속 돈다
     init: true
+    # 교체 · 종료 때 진행 중인 작업(Terraform apply 등)이 끝나기를 기다린다 (#241).
+    # worker 드레인 시간(apps/worker/src/shutdown.ts DRAIN_TIMEOUT_MS = 25분)보다 길어야 한다
+    stop_grace_period: 30m
     # 호스트 docker.sock 의 그룹(GID)을 node 사용자에 붙인다. deploy.sh 가 자동으로 채운다.
     group_add:
       - "${DOCKER_GID:-0}"

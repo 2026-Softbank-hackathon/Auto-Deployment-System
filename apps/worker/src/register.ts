@@ -13,6 +13,7 @@ import { handleProvision, type ProvisionJobPayload } from "./handlers/provision.
 import type { VerifyJobPayload } from "./handlers/verify.js";
 import { runVerifyJob } from "./verify-orchestrator.js";
 import { handleDiagnose, type DiagnoseJobPayload } from "./handlers/diagnose.js";
+import { trackActive } from "./shutdown.js";
 
 export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void> {
   // pg-boss v10 breaking change: send/work 이전에 큐를 명시적으로 생성해야 함.
@@ -27,7 +28,7 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
     }
   }
 
-  await boss.work("analyze", async (jobs) => {
+  await boss.work("analyze", trackActive(async (jobs) => {
     for (const job of jobs) {
       try {
         await handleAnalyze(job as { data: AnalyzeJobPayload }, deps);
@@ -37,9 +38,9 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         throw e;
       }
     }
-  });
+  }));
 
-  await boss.work("build", async (jobs) => {
+  await boss.work("build", trackActive(async (jobs) => {
     for (const job of jobs) {
       try {
         await handleBuild(job as { data: BuildJobPayload }, deps);
@@ -48,9 +49,9 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         throw e;
       }
     }
-  });
+  }));
 
-  await boss.work("provision", async (jobs) => {
+  await boss.work("provision", trackActive(async (jobs) => {
     for (const job of jobs) {
       try {
         await handleProvision(job as { data: ProvisionJobPayload }, deps);
@@ -59,9 +60,9 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         throw e;
       }
     }
-  });
+  }));
 
-  await boss.work("verify", async (jobs) => {
+  await boss.work("verify", trackActive(async (jobs) => {
     for (const job of jobs) {
       try {
         await runVerifyJob(job as { data: VerifyJobPayload }, deps);
@@ -70,10 +71,10 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         throw e;
       }
     }
-  });
+  }));
 
   // API-36 진단 잡: state-machine.transitionTo(..., "failed", { boss }) 가 자동 큐잉.
-  await boss.work("diagnose", async (jobs) => {
+  await boss.work("diagnose", trackActive(async (jobs) => {
     for (const job of jobs) {
       try {
         await handleDiagnose(job as { data: DiagnoseJobPayload }, deps);
@@ -82,5 +83,5 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         throw e;
       }
     }
-  });
+  }));
 }

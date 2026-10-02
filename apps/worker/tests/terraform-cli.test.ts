@@ -155,6 +155,85 @@ describe("TerraformCli", () => {
     expect((error as { message: string }).message).toContain(stderrText);
   });
 
+  function lockError(created: string): TerraformProcessError {
+    return new TerraformProcessError(
+      "terraform exited with code 1",
+      [
+        "Error: Error acquiring the state lock",
+        "",
+        "Error message: operation error S3: PutObject, https response error StatusCode: 412, PreconditionFailed",
+        "Lock Info:",
+        "  ID:        8f0c2a51-6d2e-4f7a-9c1b-2b8d3e4f5a6b",
+        "  Path:      camellia-terraform-state/projects/12/environments/34/terraform.tfstate",
+        "  Operation: OperationTypeApply",
+        "  Who:       node@0a1b2c3d4e5f",
+        "  Version:   1.16.4",
+        `  Created:   ${created}`,
+        "  Info:      ",
+        "",
+        "Terraform acquires a state lock to protect the state from being written",
+        "by multiple users at the same time.",
+      ].join("\n"),
+    );
+  }
+
+  it("plan · apply 는 state 락을 잠시 기다린다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const commands: string[][] = [];
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      commands.push(args);
+      return args[0] === "output" ? "{}" : "";
+    });
+
+    await new TerraformCli({ execute }).apply(makeRequest(moduleDirectory));
+
+    expect(commands.find((args) => args[0] === "plan")).toContain("-lock-timeout=1m");
+    expect(commands.find((args) => args[0] === "apply")).toContain("-lock-timeout=1m");
+  });
+
+  it("워커 프로세스 시작 전에 만들어진 state 락(죽은 이전 워커의 것)은 해제하고 plan 을 다시 한다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const commands: string[][] = [];
+    let plans = 0;
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      commands.push(args);
+      if (args[0] === "plan" && plans++ === 0) {
+        throw lockError("2026-10-02 05:20:11.123456789 +0000 UTC");
+      }
+      return args[0] === "output" ? "{}" : "";
+    });
+    const log = vi.fn(async () => undefined);
+
+    await new TerraformCli({
+      execute,
+      staleLockBefore: new Date("2026-10-02T05:30:00Z"),
+    }).apply({ ...makeRequest(moduleDirectory), log });
+
+    expect(commands.map((args) => args[0])).toEqual([
+      "init", "validate", "plan", "force-unlock", "plan", "apply", "output",
+    ]);
+    expect(commands[3]).toEqual(["force-unlock", "-force", "8f0c2a51-6d2e-4f7a-9c1b-2b8d3e4f5a6b"]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("8f0c2a51-6d2e-4f7a-9c1b-2b8d3e4f5a6b"));
+  });
+
+  it("워커 프로세스 시작 뒤에 만들어진 state 락은 해제하지 않고 plan 실패로 끝낸다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const commands: string[][] = [];
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      commands.push(args);
+      if (args[0] === "plan") throw lockError("2026-10-02 05:31:00.5 +0000 UTC");
+      return "";
+    });
+
+    await expect(
+      new TerraformCli({
+        execute,
+        staleLockBefore: new Date("2026-10-02T05:30:00Z"),
+      }).apply(makeRequest(moduleDirectory)),
+    ).rejects.toMatchObject({ code: "TERRAFORM_PLAN_FAILED" });
+    expect(commands.map((args) => args[0])).not.toContain("force-unlock");
+  });
+
   it("절대 경로 밖 state key를 거부한다", async () => {
     const moduleDirectory = await createModuleDirectory();
     const execute = vi.fn();

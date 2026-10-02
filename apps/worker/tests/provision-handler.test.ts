@@ -375,6 +375,33 @@ describe("handleProvision", () => {
     expect(harness.notifier.notify).toHaveBeenCalledWith(99, "state_changed", { status: "failed" });
   });
 
+  it("워커 재시작으로 재시도된 provisioning 작업은 Terraform 을 다시 적용하고 verifying 으로 넘어간다", async () => {
+    // 이전 시도가 public_url 까지 저장한 뒤 끊긴 경우
+    const harness = makeHarness({ status: "provisioning", originUrl: "http://old-alb.example.test" });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.terraformCli.apply).toHaveBeenCalledTimes(1);
+    expect(harness.terraformCli.apply).toHaveBeenCalledWith(
+      expect.objectContaining({ log: expect.any(Function) }),
+    );
+    expect(harness.getStatus()).toBe("verifying");
+    expect(harness.boss.send).toHaveBeenCalledWith("verify", expect.objectContaining({
+      deploymentId: 99,
+      targetUrl: "http://alb.example.test",
+    }));
+  });
+
+  it("deploying 까지 넘어간 뒤 재시도된 작업은 Terraform 을 건너뛰고 검증을 큐잉한다", async () => {
+    const harness = makeHarness({ status: "deploying", originUrl: "http://alb.example.test" });
+
+    await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+    expect(harness.terraformCli.apply).not.toHaveBeenCalled();
+    expect(harness.getStatus()).toBe("verifying");
+    expect(harness.boss.send).toHaveBeenCalledWith("verify", expect.objectContaining({ deploymentId: 99 }));
+  });
+
   it("이미 verifying 상태인 중복 작업은 Terraform을 다시 실행하지 않는다", async () => {
     const harness = makeHarness({ status: "verifying" });
 

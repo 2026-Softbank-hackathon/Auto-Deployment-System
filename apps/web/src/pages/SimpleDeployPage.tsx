@@ -40,7 +40,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   // 처음 골라져 있는 연결의 종류와 "배포 전 확인" 여부는 환경설정의 기본값을 따른다. 이 화면에서 바꾼 것은 이번 배포에만 쓴다.
   const { preferences } = usePreferences();
   // 켜면 분석 뒤에 멈춰서 감지한 포트를 확인 · 수정한다 (#144). 기본은 꺼짐(원클릭).
-  const [reviewFirst, setReviewFirst] = useState(draft?.reviewFirst ?? preferences.reviewFirst);
+  const [reviewFirst, setReviewFirst] = useState(preferences.reviewFirst);
   const { createDeployProject } = useDeployProject();
 
   // ── 앱 ──
@@ -130,7 +130,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const [connectionId, setConnectionId] = useState<string | null>(draft?.connectionId ?? null);
   // 배포를 시작한 뒤에는 다시 저장하지 않는다 (시작하면서 비운 것을 되살리지 않게).
   const started = useRef(false);
-  useEffect(() => { if (!started.current) saveDeployDraft({ file, choice, appTouched, nameEdited, connectionId, reviewFirst }); }, [file, choice, appTouched, nameEdited, connectionId, reviewFirst]);
+  useEffect(() => { if (!started.current) saveDeployDraft({ file, choice, appTouched, nameEdited, connectionId }); }, [file, choice, appTouched, nameEdited, connectionId]);
   // 직접 고르기 전에는 설정의 기본 배포할 곳과 같은 종류의 첫 연결(기본 연결 먼저)을 골라 둔다.
   // 그 종류의 연결이 있는데 지금 쓸 수 없으면(오프라인 등) 다른 종류로 대신 고르지 않는다. 그 종류가 아예 없을 때만 다른 연결을 고른다.
   // 직접 고른 연결을 쓸 수 없게 되어도 다른 연결로 몰래 바꾸지 않고 다시 고르게 한다.

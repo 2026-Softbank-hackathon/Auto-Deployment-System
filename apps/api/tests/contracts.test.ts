@@ -35,6 +35,7 @@ import {
   ProjectSchema,
   SecretListSchema,
   SecretSchema,
+  SourcePatchSchema,
   SubmitApprovalResponseSchema,
   SubmitMissingResourcesResponseSchema,
 } from "@camellia/contracts";
@@ -434,6 +435,130 @@ describe("deployments 응답 계약", () => {
     expectContract(SubmitApprovalResponseSchema, reject.json());
 
     expectEvents(events, ["state_changed", "state_changed", "state_changed"]);
+  });
+
+  describe("코드 수정안 (#277)", () => {
+    const IR_WITH_DB = {
+      ...IR,
+      resources: { db: { type: "postgres", connection_env: "DATABASE_URL", local_fallback: "sqlite" } },
+    };
+
+    function patchRow(status = "pending") {
+      return {
+        deployment_id: "42",
+        kind: "sqlite_to_postgres",
+        status,
+        summary: "SQLite 접근 코드를 PostgreSQL 겸용으로 바꿉니다.",
+        notes: [],
+        diff: "--- a/src/db.ts\n+++ b/src/db.ts\n@@ -1 +1 @@\n-a\n+b\n",
+        files: [
+          { path: "src/db.ts", change: "modified", additions: 1, deletions: 1, generated: false },
+          { path: "package-lock.json", change: "modified", additions: 0, deletions: 0, generated: true },
+        ],
+        generator: "ai",
+        model: "claude-opus-5-5",
+        created_at: NOW,
+        decided_at: null,
+        patched_storage_key: `sources/${"b".repeat(64)}.zip`,
+        patched_sha256: "b".repeat(64),
+        patched_size_bytes: "1234",
+      };
+    }
+
+    it("GET /deployments/:id/patch — diff · 파일 목록, 없으면 404", async () => {
+      pool.on(/FROM source_patches WHERE deployment_id/, (params) => ({
+        rows: params[0] === 42 ? [patchRow()] : [],
+      }));
+
+      const res = await call("GET", "/api/v1/deployments/42/patch");
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ deploymentId: "42", status: "pending", kind: "sqlite_to_postgres" });
+      expectContract(SourcePatchSchema, res.json());
+
+      const missing = await call("GET", "/api/v1/deployments/43/patch");
+      expect(missing.statusCode).toBe(404);
+    });
+
+    it("POST approvals gate=patch 승인 — 수정된 소스를 새 소스 버전으로 넣고 대상 확인으로", async () => {
+      const events = collectEvents("42");
+      const sqls: Array<{ sql: string; params: unknown[] }> = [];
+      pool.on(/FROM deployments WHERE id/, () => ({
+        rows: [{ id: 42, status: "awaiting_patch_approval", target_environment_id: 10 }],
+      }));
+      pool.on(/FROM source_patches WHERE deployment_id = \$1 FOR UPDATE/, () => ({ rows: [patchRow()] }));
+      pool.on(/INSERT INTO source_versions|UPDATE source_patches|INSERT INTO ir_versions/, (params) => {
+        sqls.push({ sql: String(params.length), params });
+        return { rows: [] };
+      });
+
+      const res = await call("POST", "/api/v1/deployments/42/approvals", { gate: "patch", decision: "approve" });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ gate: "patch", decision: "approve", newStatus: "awaiting_target_confirmation" });
+      expect(res.json()).not.toHaveProperty("lockAcquired");
+      expectContract(SubmitApprovalResponseSchema, res.json());
+      expect(sqls).toContainEqual({ sql: "2", params: [42, "approved"] });
+      expect(sqls).toContainEqual({ sql: "4", params: [42, "b".repeat(64), `sources/${"b".repeat(64)}.zip`, 1234] });
+      expectEvents(events, ["state_changed"]);
+    });
+
+    it("POST approvals gate=patch 거절 — 실패가 아니라 DB 리소스를 뺀 IR 로 SQLite 그대로 이어 간다", async () => {
+      const inserted: unknown[][] = [];
+      pool.on(/FROM deployments WHERE id/, () => ({
+        rows: [{ id: 42, status: "awaiting_patch_approval", target_environment_id: 10 }],
+      }));
+      pool.on(/FROM source_patches WHERE deployment_id = \$1 FOR UPDATE/, () => ({ rows: [patchRow()] }));
+      pool.on(/SELECT ir_json FROM ir_versions/, () => ({ rows: [{ ir_json: IR_WITH_DB }] }));
+      pool.on(/INSERT INTO ir_versions|INSERT INTO source_versions/, (params) => {
+        inserted.push(params);
+        return { rows: [] };
+      });
+
+      const res = await call("POST", "/api/v1/deployments/42/approvals", { gate: "patch", decision: "reject" });
+
+      expect(res.json()).toMatchObject({ newStatus: "awaiting_target_confirmation" });
+      expect(inserted).toHaveLength(1);
+      const ir = JSON.parse(inserted[0]![1] as string);
+      expect(ir.resources).toBeUndefined();
+      expect(ir.services).toEqual(IR.services);
+    });
+
+    it("결정을 기다리는 수정안이 없으면 409", async () => {
+      pool.on(/FROM deployments WHERE id/, () => ({
+        rows: [{ id: 42, status: "awaiting_patch_approval", target_environment_id: 10 }],
+      }));
+      pool.on(/FROM source_patches WHERE deployment_id = \$1 FOR UPDATE/, () => ({ rows: [patchRow("approved")] }));
+
+      const res = await call("POST", "/api/v1/deployments/42/approvals", { gate: "patch", decision: "approve" });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe("PATCH_NOT_PENDING");
+    });
+  });
+
+  it("GET /deployments/:id/analysis-report — 리소스 접속 환경변수는 묻지 않는다 (#278)", async () => {
+    pool.on(/FROM analysis_reports ar/, () => ({
+      rows: [
+        {
+          services_json: [{ name: "api", language: "node" }],
+          resources_json: [{ type: "postgres" }],
+          warnings_json: [],
+          unresolved_json: [],
+          ir_valid: true,
+          ir_errors_json: null,
+          created_at: NOW,
+          project_id: 1,
+        },
+      ],
+    }));
+    pool.on(/FROM ir_versions/, () => ({
+      rows: [{ ir_json: { ...IR, services: { api: { ...IR.services.api, env: ["DATABASE_URL", "API_KEY"] } }, resources: { db: { type: "postgres" } } } }],
+    }));
+    pool.on(/FROM env_vars WHERE project_id/, () => ({ rows: [] }));
+
+    const res = await call("GET", "/api/v1/deployments/42/analysis-report");
+
+    expect(res.json().missingEnvNames).toEqual(["API_KEY"]);
   });
 
   it("GET /deployments/:id/analysis-report — missingEnvNames 포함", async () => {

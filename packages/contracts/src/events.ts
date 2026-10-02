@@ -39,7 +39,7 @@ export const AnalysisProgressDataSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("complete"), ir_valid: z.boolean(), from_cache: z.literal(true).optional() }).strict(),
 ]);
 
-/** 사용자 승인 대기 시작 (워커 — 지금은 gate=target 만) */
+/** 사용자 승인 대기 시작 (워커 — gate=patch(코드 수정안) · target) */
 export const ApprovalRequestedDataSchema = z.object({ gate: ApprovalGateSchema }).strict();
 
 /** 단계 로그 한 줄 (워커). line = "[ISO 시각] 내용" */

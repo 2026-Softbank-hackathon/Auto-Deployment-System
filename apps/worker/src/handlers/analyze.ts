@@ -19,10 +19,24 @@ import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { createHash } from "node:crypto";
 import { stage } from "@camellia/analyzer/stager";
-import { analyzeWithAI } from "@camellia/analyzer";
-import type { FillOptions } from "@camellia/analyzer";
 import { awsLambdaBasic, resolveProfile } from "@camellia/profiles";
+import {
+  analyzeWithAI,
+  applyPatch,
+  countDiffLines,
+  createSqlitePatch,
+  createUnifiedDiff,
+  zipDirectory,
+} from "@camellia/analyzer";
+import type {
+  AnalysisResult,
+  FillOptions,
+  SqlitePatch,
+  SqlitePatchSkipped,
+  TokenUsage,
+} from "@camellia/analyzer";
 import type { WorkerDeps } from "../deps.js";
 import { transitionTo } from "../state-machine.js";
 import { createStepLogger } from "../step-log.js";
@@ -99,6 +113,8 @@ async function lookupAnalysisCache(
        ORDER BY id DESC LIMIT 1
      ) iv ON true
      WHERE sv.sha256 = $1 AND sv.deployment_id <> $2
+       -- SQLite 앱은 수정안(#277)을 다시 만들어 승인받아야 하므로 캐시를 쓰지 않는다
+       AND NOT (ar.resources_json @> '[{"local_fallback": "sqlite"}]'::jsonb)
      ORDER BY ar.id DESC
      LIMIT 1`,
     [sha256, currentDeploymentId]
@@ -250,6 +266,23 @@ export async function handleAnalyze(
       `분석 완료 — 서비스 ${analysis.services.length}개, 경고 ${analysis.warnings.length}개, IR ${irValid ? "유효" : "검증 실패"}`
     );
 
+    // PAT-02 (#277): SQLite 앱이면 PostgreSQL 겸용 수정안을 만든다. 못 만들면 DB 전환 없이 SQLite 그대로 배포
+    const irDraft = (analysis.ai?.ir_after ?? analysis.ir_draft) as Record<string, unknown>;
+    const sqlitePatch = await prepareSqlitePatch(
+      deps,
+      staged.resolvedPath,
+      analysis,
+      (usage) => opts.onUsage?.(usage),
+      stepLog,
+    );
+    if (sqlitePatch?.status === "skipped") {
+      analysis.warnings.push({
+        code: "PAT-02-SKIPPED",
+        message: `DB 전환 수정안을 만들지 못해 SQLite 그대로 배포합니다 (${sqlitePatch.reason})`,
+      });
+      removeSqliteResources(irDraft);
+    }
+
     // 6. analysis_reports INSERT (source_version_id 포함 — ANL-08 캐시 조회가 이 값으로 JOIN 한다)
     await pool.query(
       `INSERT INTO analysis_reports(deployment_id, source_version_id, services_json, resources_json, warnings_json, unresolved_json, ir_valid, ir_errors_json)
@@ -285,7 +318,22 @@ export async function handleAnalyze(
       [deployment_id, JSON.stringify(irJson), source]
     );
 
-    // 8. 상태 전이: analyzing → awaiting_target_confirmation
+    // 8. 수정안이 있으면 사용자 승인(diff)을 기다린다 — 원클릭에서 사용자가 하는 유일한 확인
+    if (sqlitePatch?.status === "ready") {
+      await saveSourcePatch(pool, deployment_id, sqlitePatch);
+      await transitionTo(pool, deployment_id, "awaiting_patch_approval");
+      await notifier?.notify(deployment_id, "analysis.progress", {
+        step: "complete",
+        ir_valid: irValid,
+      });
+      await notifier?.notify(deployment_id, "state_changed", { status: "awaiting_patch_approval" });
+      await notifier?.notify(deployment_id, "approval_requested", { gate: "patch" });
+      await stepLog.line("코드 수정안 승인 대기 — AWS 는 PostgreSQL, 온프레미스는 SQLite 로 실행됩니다");
+      log?.info({ deployment_id }, "analyze job succeeded (awaiting patch approval)");
+      return;
+    }
+
+    // 상태 전이: analyzing → awaiting_target_confirmation
     await transitionTo(pool, deployment_id, "awaiting_target_confirmation");
     await notifier?.notify(deployment_id, "analysis.progress", {
       step: "complete",
@@ -307,4 +355,99 @@ export async function handleAnalyze(
     await staged.cleanup?.();
     await fs.rm(tmpZip, { force: true }).catch(() => {});
   }
+}
+
+// ---------------------------------------------------------------------------
+// SQLite → PostgreSQL 수정안 (PAT-02 · MIG-03, #277)
+// ---------------------------------------------------------------------------
+
+type PreparedPatch = SqlitePatch & { storageKey: string; sha256: string; sizeBytes: number };
+
+/**
+ * 분석 결과에 SQLite 에서 옮길 DB 가 있으면 수정안을 만든다. 없으면 null.
+ * 수정안을 적용한 소스는 바로 zip 으로 저장해 둔다 — 승인하면 이 zip 이 이 배포의 새 소스 버전이 된다.
+ */
+async function prepareSqlitePatch(
+  deps: WorkerDeps,
+  sourceRoot: string,
+  analysis: AnalysisResult,
+  onUsage: (usage: TokenUsage) => unknown,
+  stepLog: ReturnType<typeof createStepLogger>,
+): Promise<PreparedPatch | SqlitePatchSkipped | null> {
+  const resource = analysis.resources.find((candidate) => candidate.local_fallback === "sqlite");
+  if (!resource) return null;
+  const service = analysis.services[0];
+  if (analysis.services.length !== 1 || !service) {
+    return { status: "skipped", reason: "MULTI_SERVICE: 서비스가 여러 개인 앱은 아직 자동 수정안을 만들지 않습니다" };
+  }
+
+  await stepLog.line("SQLite 사용 감지 — PostgreSQL 도 쓰는 코드 수정안을 만드는 중 (AI)");
+  const serviceDir = path.resolve(sourceRoot, service.path);
+  const patch = await createSqlitePatch(serviceDir, resource, { onUsage: async (usage) => { await onUsage(usage); } });
+  if (patch.status === "skipped") {
+    await stepLog.line(`수정안을 만들지 못함 — ${patch.reason}`);
+    return patch;
+  }
+
+  await applyPatch(serviceDir, patch.files);
+  const zip = await zipDirectory(sourceRoot);
+  const sha256 = createHash("sha256").update(zip).digest("hex");
+  const storageKey = `sources/${sha256}.zip`;
+  await deps.storage.put(storageKey, zip);
+  await stepLog.line(`수정안 준비 완료 — 파일 ${patch.files.length}개 (${patch.files.map((file) => file.path).join(", ")})`);
+  return { ...patch, storageKey, sha256, sizeBytes: zip.length };
+}
+
+async function saveSourcePatch(
+  pool: WorkerDeps["pool"],
+  deploymentId: number,
+  patch: PreparedPatch,
+): Promise<void> {
+  const files = patch.files.map((file) => {
+    const counts = file.generated
+      ? { additions: 0, deletions: 0 }
+      : countDiffLines(createUnifiedDiff(file.path, file.before, file.after));
+    return {
+      path: file.path,
+      change: file.before === null ? "added" : "modified",
+      ...counts,
+      generated: file.generated === true,
+    };
+  });
+  await pool.query(
+    `INSERT INTO source_patches
+       (deployment_id, kind, status, summary, notes, diff, files, generator, model,
+        patched_storage_key, patched_sha256, patched_size_bytes)
+     VALUES ($1, 'sqlite_to_postgres', 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (deployment_id) DO UPDATE SET
+       status = 'pending', summary = EXCLUDED.summary, notes = EXCLUDED.notes, diff = EXCLUDED.diff,
+       files = EXCLUDED.files, generator = EXCLUDED.generator, model = EXCLUDED.model,
+       patched_storage_key = EXCLUDED.patched_storage_key, patched_sha256 = EXCLUDED.patched_sha256,
+       patched_size_bytes = EXCLUDED.patched_size_bytes, created_at = NOW(), decided_at = NULL`,
+    [
+      deploymentId,
+      patch.summary,
+      JSON.stringify(patch.notes),
+      patch.diff,
+      JSON.stringify(files),
+      patch.generator,
+      patch.model,
+      patch.storageKey,
+      patch.sha256,
+      patch.sizeBytes,
+    ],
+  );
+}
+
+/** 수정안 없이 배포할 때 — SQLite 에서 옮기려던 리소스를 IR 에서 뺀다 (AWS 에도 DB 를 만들지 않음) */
+function removeSqliteResources(ir: Record<string, unknown>): void {
+  const resources = ir["resources"];
+  if (!resources || typeof resources !== "object") return;
+  const kept = Object.fromEntries(
+    Object.entries(resources as Record<string, { local_fallback?: string }>).filter(
+      ([, resource]) => resource?.local_fallback !== "sqlite",
+    ),
+  );
+  if (Object.keys(kept).length > 0) ir["resources"] = kept;
+  else delete ir["resources"];
 }

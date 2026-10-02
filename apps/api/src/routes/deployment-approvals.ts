@@ -47,9 +47,11 @@ const deploymentApprovalsRoutes: FastifyPluginAsync<{
       data: {
         deploymentId: String(id),
         // from 상태는 gate에서 추론
-        from: body.gate === "target" ? "awaiting_target_confirmation" : "awaiting_plan_approval",
+        from: body.gate === "patch"
+          ? "awaiting_patch_approval"
+          : body.gate === "target" ? "awaiting_target_confirmation" : "awaiting_plan_approval",
         to: result.newStatus,
-        reason: body.decision === "reject" ? (body.note ?? "사용자 거절") : undefined,
+        reason: body.decision === "reject" && body.gate !== "patch" ? (body.note ?? "사용자 거절") : undefined,
       } satisfies DeploymentEventData<"state_changed">,
     });
 

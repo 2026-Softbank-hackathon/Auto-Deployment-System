@@ -94,14 +94,35 @@ export class AnalysisReportService {
       [projectId, envNames],
     );
     const registeredNames = new Set(dbRes.rows.map((r) => r.name));
+    const resourceEnvNames = extractResourceEnvNames(irJson);
 
     return envNames.filter(
       (name) =>
         !registeredNames.has(name) &&
         !(name in envDefaults) &&
-        !PLATFORM_INJECTED_ENV_SET.has(name),
+        !PLATFORM_INJECTED_ENV_SET.has(name) &&
+        !resourceEnvNames.has(name),
     );
   }
+}
+
+/**
+ * IR 리소스의 접속 환경변수 — 리소스를 만드는 환경이 주입하므로(#278) 사용자에게 묻지 않는다.
+ * postgres 는 connection_env 가 없으면 DATABASE_URL.
+ */
+function extractResourceEnvNames(irJson: unknown): Set<string> {
+  const names = new Set<string>();
+  const resources = irJson && typeof irJson === "object"
+    ? (irJson as Record<string, unknown>)["resources"]
+    : null;
+  if (!resources || typeof resources !== "object") return names;
+  for (const resource of Object.values(resources as Record<string, unknown>)) {
+    if (!resource || typeof resource !== "object") continue;
+    const { type, connection_env } = resource as { type?: unknown; connection_env?: unknown };
+    if (typeof connection_env === "string") names.add(connection_env);
+    else if (type === "postgres") names.add("DATABASE_URL");
+  }
+  return names;
 }
 
 function extractDetectedStack(services: unknown[]): string[] {

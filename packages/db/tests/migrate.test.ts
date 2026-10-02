@@ -42,6 +42,7 @@ describe("migration files", () => {
       "017_agent_runtime_inventory.sql",
       "018_onprem_agent_cleanup_jobs.sql",
       "019_deploy_mode.sql",
+      "020_source_patches.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

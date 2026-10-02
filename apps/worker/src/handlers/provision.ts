@@ -14,7 +14,7 @@ import { TerraformCliError } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
 
 export type ProvisionJobPayload = {
-  deployment_id: number;
+  deployment_id: number | string;
 };
 
 type ProvisionContext = {
@@ -43,7 +43,7 @@ export async function handleProvision(
   job: { data: ProvisionJobPayload },
   deps: WorkerDeps,
 ): Promise<void> {
-  const deploymentId = job.data.deployment_id;
+  const deploymentId = parsePositiveId(job.data.deployment_id, "DEPLOYMENT_ID_INVALID");
   const stepLog = createStepLogger(deps, deploymentId, "provision");
   let activeStatus: Status | null = null;
 

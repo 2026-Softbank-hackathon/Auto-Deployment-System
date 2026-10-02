@@ -2,8 +2,6 @@ import { useState } from 'react';
 import type { Route } from '../../app/routes';
 import { SettingsDialog } from '../../features/settings/SettingsDialog';
 import { useI18n } from '../../i18n/I18nProvider';
-import { LanguageToggle } from '../ui/LanguageToggle';
-import { SoundToggle } from '../ui/SoundToggle';
 
 export function AppHeader({ page }: { page: Route['page'] }) {
   const { t } = useI18n();
@@ -11,7 +9,6 @@ export function AppHeader({ page }: { page: Route['page'] }) {
   return <header className="app-header">
     <div className="app-header__title">{t.header.titles[page]}</div>
     <div className="app-header__controls">
-      <SoundToggle /><LanguageToggle />
       <button type="button" className="settings-button" aria-haspopup="dialog" aria-label={t.settings.title} title={t.settings.title} onClick={() => setSettingsOpen(true)}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3" />

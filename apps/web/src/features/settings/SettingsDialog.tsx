@@ -8,7 +8,7 @@ import { usePreferences } from './preferences';
 
 /**
  * 환경설정 창. 바꾸는 즉시 적용되고 이 브라우저에 기억된다 (저장 버튼 없음).
- * 언어 · 사운드는 헤더에도 있는 같은 스위치다.
+ * 언어 · 효과음도 여기에서만 바꾼다(헤더에는 톱니바퀴 버튼만 둔다).
  */
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();

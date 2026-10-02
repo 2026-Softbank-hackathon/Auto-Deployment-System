@@ -56,8 +56,6 @@
   .sidebar__rail .rail__track, .sidebar__rail .rail__fill { display: none; }
   .sidebar__link { min-height: 44px; gap: 8px; font-size: 15px; }
   .app-header { padding: 0 16px; }
-  .app-header__title { display: none; }
-  .app-header__controls { width: 100%; justify-content: flex-end; }
   .content { padding: 24px 16px 48px; gap: 20px; }
 }
 

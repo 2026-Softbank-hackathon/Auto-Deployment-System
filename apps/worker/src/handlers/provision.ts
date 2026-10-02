@@ -10,7 +10,7 @@ import { IrSchema } from "@camellia/ir-schema";
 import type { WorkerDeps } from "../deps.js";
 import { createStepLogger } from "../step-log.js";
 import { transitionTo, type Status } from "../state-machine.js";
-import { TerraformCliError } from "../terraform-cli.js";
+import { TerraformCliError, type TerraformVariable } from "../terraform-cli.js";
 import { OriginActivationError } from "../origin-activation.js";
 
 export type ProvisionJobPayload = {
@@ -180,6 +180,9 @@ export async function handleProvision(
       : await applyTerraform({
           deps,
           stepLog,
+          deploymentId,
+          projectId,
+          environmentId,
           moduleDirectory,
           stateKey,
           resourceName,
@@ -300,6 +303,9 @@ async function failProvisionStage(
 async function applyTerraform(input: {
   deps: WorkerDeps;
   stepLog: ReturnType<typeof createStepLogger>;
+  deploymentId: number;
+  projectId: number;
+  environmentId: number;
   moduleDirectory: string;
   stateKey: string;
   resourceName: string;
@@ -308,6 +314,7 @@ async function applyTerraform(input: {
   region: string;
 }): Promise<string> {
   const { deps } = input;
+  const refresh = await decideStateRefresh(input);
   await input.stepLog.line("Terraform init · validate · plan · apply 시작");
   try {
     const outputs = await deps.terraformCli!.apply({
@@ -320,6 +327,7 @@ async function applyTerraform(input: {
       credentials: input.credentials,
       variables: input.variables,
       log: (line) => input.stepLog.line(line),
+      refresh,
     });
     const originUrl = outputs["origin_url"]?.value;
     if (typeof originUrl !== "string") {
@@ -335,6 +343,65 @@ async function applyTerraform(input: {
     }
     throw new Error("TERRAFORM_APPLY_FAILED");
   }
+}
+
+/**
+ * 이미지만 바뀐 재배포의 상태 재조회 생략 (#252, 팀 합의 2026-10-02).
+ * 이미지를 뺀 Terraform 입력(모듈 파일 · 변수 · region · access key ID)의 지문이 같은 프로젝트 · 환경에서
+ * 직전에 Terraform 을 돌린 배포와 같고 그 배포가 성공했을 때만 plan 을 -refresh=false 로 한다.
+ * 지문은 apply 전에 이번 배포에 기록한다 → apply 나 검증이 실패하면(ECS 롤백 등) 다음 배포는 전체 재조회.
+ */
+async function decideStateRefresh(input: {
+  deps: WorkerDeps;
+  stepLog: ReturnType<typeof createStepLogger>;
+  deploymentId: number;
+  projectId: number;
+  environmentId: number;
+  moduleDirectory: string;
+  variables: Record<string, TerraformVariable>;
+  credentials: { accessKeyId: string; secretAccessKey: string };
+  region: string;
+}): Promise<boolean> {
+  const { deps } = input;
+  const { container_image: _image, ...infraVariables } = input.variables;
+  const inputsHash = await deps.terraformCli!.fingerprint({
+    moduleDirectory: input.moduleDirectory,
+    region: input.region,
+    credentials: input.credentials,
+    variables: infraVariables,
+  });
+  const previous = await deps.pool.query<{
+    id: number | string;
+    status: string;
+    terraform_inputs_hash: string;
+  }>(
+    `SELECT id, status, terraform_inputs_hash
+     FROM deployments
+     WHERE project_id = $1 AND target_environment_id = $2 AND id <> $3
+       AND terraform_inputs_hash IS NOT NULL
+     ORDER BY id DESC
+     LIMIT 1`,
+    [input.projectId, input.environmentId, input.deploymentId],
+  );
+  await deps.pool.query(
+    "UPDATE deployments SET terraform_inputs_hash = $1, updated_at = NOW() WHERE id = $2",
+    [inputsHash, input.deploymentId],
+  );
+
+  const last = previous.rows[0];
+  if (last?.status === "succeeded" && last.terraform_inputs_hash === inputsHash) {
+    await input.stepLog.line(
+      `이미지만 바뀌어 상태 재조회 생략 — 직전 성공 배포 #${last.id} 와 인프라 입력이 같아 plan 을 -refresh=false 로 실행합니다.`,
+    );
+    return false;
+  }
+  const reason = !last
+    ? "이 환경의 첫 Terraform 배포"
+    : last.status !== "succeeded"
+      ? `직전 배포 #${last.id} 가 성공하지 않음`
+      : "인프라 입력 변경";
+  await input.stepLog.line(`전체 상태 재조회로 plan 을 실행합니다 (${reason}).`);
+  return true;
 }
 
 async function loadProvisionContext(

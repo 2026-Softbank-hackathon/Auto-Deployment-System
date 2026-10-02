@@ -36,6 +36,7 @@ function makeHarness(overrides: Partial<{
   cleanupFailure: boolean;
   dnsPreparationFailure: Error;
   targetOwnerProjectId: string | null;
+  previousApply: { status: string; terraform_inputs_hash: string } | null;
 }> = {}) {
   let status = overrides.status ?? "provisioning";
   let transactionStatus = status;
@@ -100,6 +101,9 @@ function makeHarness(overrides: Partial<{
           ],
         };
       }
+      if (sql.includes("terraform_inputs_hash IS NOT NULL")) {
+        return { rows: overrides.previousApply ? [overrides.previousApply] : [] };
+      }
       if (sql.includes("FROM env_vars")) {
         return { rows: overrides.environmentVariables ?? [{ name: "PUBLIC_MODE", value: "demo" }] };
       }
@@ -120,6 +124,7 @@ function makeHarness(overrides: Partial<{
     }),
   };
   const terraformCli = {
+    fingerprint: vi.fn(async () => "inputs-hash-current"),
     apply: overrides.terraformFailure
       ? vi.fn(async () => {
           if (overrides.statusAfterApplyFailure) status = overrides.statusAfterApplyFailure;
@@ -484,6 +489,66 @@ describe("handleProvision", () => {
 
     expect(harness.getStatus()).toBe("failed");
     expect(harness.queries.some(({ sql }) => sql.includes("DELETE FROM env_locks"))).toBe(true);
+  });
+
+  function provisionLogLines(harness: ReturnType<typeof makeHarness>): string[] {
+    return harness.notifier.notify.mock.calls
+      .filter(([, event]) => event === "log.line")
+      .map(([, , payload]) => (payload as { line: string }).line);
+  }
+
+  describe("이미지만 바뀐 재배포의 상태 재조회 생략 (#252)", () => {
+    it("입력 지문은 이미지를 뺀 변수로 만들고, 같은 프로젝트 · 환경의 직전 Terraform 배포를 찾는다", async () => {
+      const harness = makeHarness();
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const [input] = harness.terraformCli.fingerprint.mock.calls[0] as unknown as [{
+        moduleDirectory: string; region: string; credentials: { accessKeyId: string }; variables: Record<string, unknown>;
+      }];
+      expect(input.variables).not.toHaveProperty("container_image");
+      expect(input.variables).toMatchObject({ region: "ap-northeast-2", environment_variables: { PUBLIC_MODE: "demo" } });
+      expect(input.credentials.accessKeyId).toBe("access-key-value");
+      const previous = harness.queries.find(({ sql }) => sql.includes("terraform_inputs_hash IS NOT NULL"))!;
+      expect(previous.sql).toMatch(/ORDER BY id DESC\s+LIMIT 1/);
+      expect(previous.params).toEqual([12, 34, 99]);
+    });
+
+    it("직전 Terraform 배포가 성공했고 입력 지문이 같으면 -refresh=false 로 적용한다", async () => {
+      const harness = makeHarness({
+        previousApply: { status: "succeeded", terraform_inputs_hash: "inputs-hash-current" },
+      });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).toHaveBeenCalledWith(expect.objectContaining({ refresh: false }));
+      expect(provisionLogLines(harness).some((line) => line.includes("이미지만 바뀌어 상태 재조회 생략"))).toBe(true);
+      expect(harness.getStatus()).toBe("verifying");
+    });
+
+    it.each([
+      ["입력이 바뀜", { status: "succeeded", terraform_inputs_hash: "inputs-hash-old" }],
+      ["직전 배포가 실패", { status: "failed", terraform_inputs_hash: "inputs-hash-current" }],
+      ["첫 Terraform 배포", null],
+    ])("%s → 전체 상태 재조회로 적용한다", async (_case, previousApply) => {
+      const harness = makeHarness({ previousApply });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      expect(harness.terraformCli.apply).toHaveBeenCalledWith(expect.objectContaining({ refresh: true }));
+      expect(provisionLogLines(harness).some((line) => line.includes("전체 상태 재조회"))).toBe(true);
+    });
+
+    it("apply 전에 이번 배포의 입력 지문을 기록해, 실패하면 다음 배포가 전체 재조회하게 한다", async () => {
+      const harness = makeHarness({ terraformFailure: new TerraformCliError("TERRAFORM_APPLY_FAILED") });
+
+      await handleProvision({ data: { deployment_id: 99 } }, harness.deps);
+
+      const record = harness.queries.findIndex(({ sql }) => sql.includes("SET terraform_inputs_hash"));
+      expect(record).toBeGreaterThan(-1);
+      expect(harness.queries[record]!.params).toEqual(["inputs-hash-current", 99]);
+      expect(harness.terraformCli.apply).toHaveBeenCalled();
+    });
   });
 
   it("TerraformCliError에 detail이 있으면 DB error 컬럼에 code와 detail을 같이 저장한다", async () => {

@@ -6,6 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  AgentHeartbeatBodySchema,
+  AgentHeartbeatResponseSchema,
   CreateEnvironmentBodySchema,
   CreateSecretBodySchema,
   DeleteProjectResponseSchema,
@@ -149,6 +151,41 @@ describe("응답 스키마", () => {
 });
 
 describe("요청 스키마 (기존 라우트 검증 규칙)", () => {
+  it("Agent heartbeat — 런타임 상태를 검증하고 빈 목록을 기본값으로 사용함", () => {
+    expect(AgentHeartbeatBodySchema.parse({})).toEqual({ runtimes: [] });
+    expect(
+      AgentHeartbeatBodySchema.safeParse({
+        currentJobId: "12",
+        runtimes: [
+          {
+            deploymentId: "42",
+            digest: `sha256:${"a".repeat(64)}`,
+            status: "running",
+            health: "healthy",
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      AgentHeartbeatBodySchema.safeParse({
+        runtimes: [
+          {
+            deploymentId: "42",
+            digest: "latest",
+            status: "running",
+            health: "healthy",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      AgentHeartbeatResponseSchema.safeParse({
+        ok: true,
+        desiredDeploymentIds: ["42"],
+      }).success,
+    ).toBe(true);
+  });
+
   it("배포 이력 쿼리 — limit 기본 20, cursor 는 숫자 문자열 → number", () => {
     expect(ListProjectDeploymentsQuerySchema.parse({})).toEqual({ limit: 20 });
     expect(ListProjectDeploymentsQuerySchema.parse({ cursor: "5", limit: "2" })).toEqual({ cursor: 5, limit: 2 });

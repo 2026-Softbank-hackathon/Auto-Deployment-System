@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimeReport,
   ImageManager,
   OnpremAgentJob,
   OnpremExecutionResult,
@@ -7,6 +8,10 @@ import type {
   RuntimeManager,
   TunnelProvider,
 } from "./contracts.js";
+import type {
+  PersistedRuntime,
+  RuntimeStateStore,
+} from "./runtime-state-store.js";
 import {
   AgentError,
   normalizeAgentError,
@@ -18,6 +23,7 @@ type ExecutorOptions = {
   imageManager: ImageManager;
   runtimeManager: RuntimeManager;
   tunnelProvider?: TunnelProvider;
+  stateStore?: RuntimeStateStore;
   now?: () => Date;
 };
 
@@ -31,6 +37,7 @@ type ActiveDeployment = {
   digest: string;
   result: Extract<OnpremExecutionResult, { status: "ready_for_verify" }>;
   resources: RunningDeployment;
+  persisted: PersistedRuntime;
 };
 
 type DeploymentRun = {
@@ -83,6 +90,7 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
   private readonly imageManager: ImageManager;
   private readonly runtimeManager: RuntimeManager;
   private readonly tunnelProvider?: TunnelProvider;
+  private readonly stateStore?: RuntimeStateStore;
   private readonly now: () => Date;
   private readonly jobs = new Map<string, JobRecord>();
   private readonly activeDeployments = new Map<string, ActiveDeployment>();
@@ -92,6 +100,7 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
     this.imageManager = options.imageManager;
     this.runtimeManager = options.runtimeManager;
     this.tunnelProvider = options.tunnelProvider;
+    this.stateStore = options.stateStore;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -139,6 +148,7 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
       }
       await this.tunnelProvider?.stop(active.deploymentId).catch(() => undefined);
       await active.resources.cleanup().catch(() => undefined);
+      await this.stateStore?.remove(active.deploymentId).catch(() => undefined);
       this.activeDeployments.delete(key);
     }
 
@@ -162,6 +172,7 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
         }
         await this.tunnelProvider?.stop(latest.deploymentId).catch(() => undefined);
         await latest.resources.cleanup().catch(() => undefined);
+        await this.stateStore?.remove(latest.deploymentId).catch(() => undefined);
         this.activeDeployments.delete(key);
       }
       return this.perform(job, options.signal);
@@ -252,14 +263,28 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
         finishedAt: this.now().toISOString(),
       };
 
+      const persisted: PersistedRuntime = {
+        jobId: job.jobId,
+        deploymentId: job.deploymentId,
+        environmentId: job.environmentId,
+        digest: job.image.digest,
+        imageUri: prepared.imageUri,
+        projectName: running.projectName,
+        localUrl: running.localUrl,
+        endpoint: tunnel.endpoint,
+        health: job.plan.health,
+      };
+
       if (previous && previous.resources !== running) {
         await previous.resources.cleanup();
       }
+      await this.stateStore?.save(persisted);
       this.activeDeployments.set(key, {
         deploymentId: job.deploymentId,
         digest: job.image.digest,
         result,
         resources: running,
+        persisted,
       });
       return result;
     } catch (error) {
@@ -275,16 +300,109 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
     }
   }
 
+  async restore(): Promise<void> {
+    if (!this.stateStore || !this.runtimeManager.restore) return;
+    const records = await this.stateStore.load();
+    let firstError: unknown;
+    for (const persisted of records) {
+      const key = `${persisted.deploymentId}:${persisted.environmentId}`;
+      if (this.activeDeployments.has(key)) continue;
+      try {
+        const resources = await this.runtimeManager.restore({
+          projectName: persisted.projectName,
+          localUrl: persisted.localUrl,
+          health: persisted.health,
+        });
+        if (!resources) {
+          await this.stateStore.remove(persisted.deploymentId);
+          continue;
+        }
+        if (!this.tunnelProvider) throw new Error("Tunnel Provider가 설정되지 않았습니다.");
+        const tunnel = await this.tunnelProvider.start({
+          jobId: persisted.jobId,
+          deploymentId: persisted.deploymentId,
+          environmentId: persisted.environmentId,
+          localPort: extractLoopbackPort(persisted.localUrl),
+        });
+        const timestamp = this.now().toISOString();
+        this.activeDeployments.set(key, {
+          deploymentId: persisted.deploymentId,
+          digest: persisted.digest,
+          resources,
+          persisted,
+          result: {
+            deploymentId: persisted.deploymentId,
+            environmentId: persisted.environmentId,
+            jobId: persisted.jobId,
+            status: "ready_for_verify",
+            imageUri: persisted.imageUri,
+            runningDigest: persisted.digest,
+            localUrl: persisted.localUrl,
+            endpoint: tunnel.endpoint,
+            startedAt: timestamp,
+            finishedAt: timestamp,
+          },
+        });
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
+  }
+
+  async inventory(): Promise<AgentRuntimeReport[]> {
+    const reports = await Promise.all(
+      [...this.activeDeployments.values()].map(async (deployment) => {
+        const containerRunning = await deployment.resources.isRunning().catch(() => false);
+        const tunnelRunning = this.tunnelProvider?.isRunning
+          ? await this.tunnelProvider.isRunning(deployment.deploymentId).catch(() => false)
+          : true;
+        const running = containerRunning && tunnelRunning;
+        const healthy = running && deployment.resources.isHealthy
+          ? await deployment.resources.isHealthy().catch(() => false)
+          : undefined;
+        return {
+          deploymentId: String(deployment.deploymentId),
+          digest: deployment.digest,
+          status: running ? "running" as const : "stopped" as const,
+          health: healthy === undefined
+            ? "unknown" as const
+            : healthy
+              ? "healthy" as const
+              : "unhealthy" as const,
+        };
+      }),
+    );
+    return reports.sort(
+      (left, right) => Number(left.deploymentId) - Number(right.deploymentId),
+    );
+  }
+
+  async reconcile(desiredDeploymentIds: string[]): Promise<void> {
+    const desired = new Set(desiredDeploymentIds);
+    const obsolete = [...this.activeDeployments.entries()].filter(
+      ([, deployment]) => !desired.has(String(deployment.deploymentId)),
+    );
+    await Promise.all(
+      obsolete.map(async ([key, deployment]) => {
+        await this.tunnelProvider?.stop(deployment.deploymentId).catch(() => undefined);
+        await deployment.resources.cleanup().catch(() => undefined);
+        await this.stateStore?.remove(deployment.deploymentId).catch(() => undefined);
+        this.activeDeployments.delete(key);
+      }),
+    );
+  }
+
   async shutdown(): Promise<void> {
     const deployments = [...this.activeDeployments.values()];
     this.activeDeployments.clear();
     this.jobs.clear();
     this.deploymentRuns.clear();
     await Promise.allSettled(
-      deployments.flatMap((deployment) => [
-        this.tunnelProvider?.stop(deployment.deploymentId) ?? Promise.resolve(),
-        deployment.resources.cleanup(),
-      ]),
+      deployments.map(
+        (deployment) =>
+          this.tunnelProvider?.stop(deployment.deploymentId) ?? Promise.resolve(),
+      ),
     );
   }
 

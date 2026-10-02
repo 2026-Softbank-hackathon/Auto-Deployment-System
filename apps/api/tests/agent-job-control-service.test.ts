@@ -130,6 +130,37 @@ describe("AgentJobService 실행 경계", () => {
     });
   });
 
+  it("성공한 배포의 ready_for_verify Job으로 재시작 Tunnel을 복구한다", async () => {
+    const restoredJob = {
+      ...ownedJob,
+      status: "ready_for_verify",
+      deployment_status: "succeeded",
+    };
+    const pool = makePool((sql) => ({
+      rows: sql.includes("FROM onprem_agent_jobs AS job") ? [restoredJob] : [],
+    }));
+    const tunnelManager = {
+      ensureNamedTunnel: vi.fn(async () => ({
+        id: "tunnel-4",
+        endpoint: "tunnel-4.cfargotunnel.com",
+      })),
+      setTunnelOrigin: vi.fn(async () => undefined),
+      ensureCname: vi.fn(async () => ({})),
+      getTunnelToken: vi.fn(async () => "temporary-tunnel-token"),
+    };
+    const service = new AgentJobService(pool, {
+      tunnelManager,
+      cloudflareZoneId: "zone-id",
+      platformDomain: "camellia-deploy.app",
+    });
+
+    await expect(service.prepareTunnel(7, 12, "73", {
+      deploymentId: 73,
+      environmentId: "12",
+      localPort: 49_152,
+    })).resolves.toMatchObject({ tunnelId: "tunnel-4" });
+  });
+
   it("ready_for_verify 결과를 저장하고 기존 Verify queue 계약으로 전달한다", async () => {
     const pool = makePool((sql) => {
       if (sql.includes("FROM onprem_agent_jobs AS job")) return { rows: [ownedJob] };

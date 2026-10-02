@@ -29,7 +29,10 @@ describe("Agent 작업 수신과 상태 보고", () => {
     await service.sendHeartbeat();
     await service.pollOnce();
 
-    expect(client.heartbeats).toEqual([undefined, "job-001"]);
+    expect(client.heartbeats).toEqual([
+      { runtimes: [] },
+      { currentJobId: "job-001", runtimes: [] },
+    ]);
     expect(client.reportedResults).toHaveLength(1);
     expect(client.reportedResults[0]?.jobId).toBe("job-001");
   });
@@ -98,5 +101,41 @@ describe("Agent 작업 수신과 상태 보고", () => {
     await service.shutdown();
 
     expect(shutdownCompleted).toBe(true);
+  });
+
+  it("일시적인 heartbeat 실패 뒤 backoff하고 polling을 계속한다", async () => {
+    const controller = new AbortController();
+    let heartbeatCalls = 0;
+    let claimCalls = 0;
+    const client = {
+      async sendHeartbeat() {
+        heartbeatCalls += 1;
+        if (heartbeatCalls === 1) throw new Error("temporary outage");
+        controller.abort();
+        return { desiredDeploymentIds: [] };
+      },
+      async claimJob() {
+        claimCalls += 1;
+        return null;
+      },
+      async getEcrCredential() { throw new Error("not used"); },
+      async prepareTunnel() { throw new Error("not used"); },
+      async reportResult() {},
+    };
+    const executor: OnpremJobExecutor = {
+      async execute() { throw new Error("not used"); },
+      async inventory() { return []; },
+      async reconcile() {},
+    };
+    const service = new AgentService(client, executor, {
+      retryInitialMs: 1,
+      retryMaxMs: 2,
+      pollIntervalMs: 1,
+    });
+
+    await service.run(controller.signal);
+
+    expect(heartbeatCalls).toBe(2);
+    expect(claimCalls).toBe(0);
   });
 });

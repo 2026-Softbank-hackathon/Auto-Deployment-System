@@ -1,5 +1,6 @@
 import type {
   AgentControlPlaneClient,
+  AgentRuntimeReport,
   EcrCredential,
   OnpremAgentJob,
   OnpremExecutionResult,
@@ -11,7 +12,10 @@ import type {
 
 export class FakeControlPlaneClient implements AgentControlPlaneClient {
   readonly reportedResults: OnpremExecutionResult[] = [];
-  readonly heartbeats: Array<string | undefined> = [];
+  readonly heartbeats: Array<{
+    currentJobId?: string;
+    runtimes: AgentRuntimeReport[];
+  }> = [];
   private readonly jobs: OnpremAgentJob[];
   private readonly credentials = new Map<string, EcrCredential>();
   private readonly tunnelSessions = new Map<string, TunnelSession>();
@@ -60,11 +64,17 @@ export class FakeControlPlaneClient implements AgentControlPlaneClient {
     this.reportedResults.push(result);
   }
 
-  async sendHeartbeat(currentJobId?: string): Promise<{ jobCancelled?: boolean }> {
-    this.heartbeats.push(currentJobId);
+  async sendHeartbeat(
+    currentJobId?: string,
+    runtimes: AgentRuntimeReport[] = [],
+  ): Promise<{ jobCancelled?: boolean; desiredDeploymentIds: string[] }> {
+    this.heartbeats.push({
+      ...(currentJobId ? { currentJobId } : {}),
+      runtimes,
+    });
     return currentJobId && this.cancellations.has(currentJobId)
-      ? { jobCancelled: true }
-      : {};
+      ? { jobCancelled: true, desiredDeploymentIds: runtimes.map((runtime) => runtime.deploymentId) }
+      : { desiredDeploymentIds: runtimes.map((runtime) => runtime.deploymentId) };
   }
 }
 

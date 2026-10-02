@@ -32,15 +32,27 @@ export type RegisterAgentResponse = z.infer<typeof RegisterAgentResponseSchema>;
 
 // ── POST /agents/heartbeat ──────────────────────────────────────────────────
 
+export const AgentRuntimeReportSchema = z.object({
+  deploymentId: IdStringSchema,
+  digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  status: z.enum(["running", "stopped"]),
+  health: z.enum(["healthy", "unhealthy", "unknown"]),
+}).strict();
+export type AgentRuntimeReport = z.infer<typeof AgentRuntimeReportSchema>;
+
 export const AgentHeartbeatBodySchema = z.object({
-  /** Agent 가 현재 실행 중인 Job (있으면). 지금은 참고용 — 은영 Job 흐름 들어오면 활용. */
+  /** Agent 가 현재 실행 중인 Job (있으면). */
   currentJobId: IdStringSchema.optional(),
-});
+  /** Agent가 실제로 유지 중인 Compose·Tunnel 런타임 목록. */
+  runtimes: z.array(AgentRuntimeReportSchema).max(100).default([]),
+}).strict();
 export type AgentHeartbeatBody = z.input<typeof AgentHeartbeatBodySchema>;
 
 export const AgentHeartbeatResponseSchema = z.object({
   ok: z.literal(true),
   /** 현재 실행 중 Job 이 취소된 deployment 에 속해있으면 true. Agent 가 즉시 중단해야 함. */
   deploymentCancelled: z.boolean().optional(),
+  /** Control Plane DB에서 계속 유지할 수 있는 것으로 확인된 보고 런타임. */
+  desiredDeploymentIds: z.array(IdStringSchema),
 }).strict();
 export type AgentHeartbeatResponse = z.infer<typeof AgentHeartbeatResponseSchema>;

@@ -6,6 +6,9 @@ import type {
 type AgentServiceOptions = {
   pollIntervalMs?: number;
   heartbeatIntervalMs?: number;
+  retryInitialMs?: number;
+  retryMaxMs?: number;
+  leaseDurationMs?: number;
 };
 
 function wait(milliseconds: number, signal?: AbortSignal): Promise<void> {
@@ -29,6 +32,9 @@ function wait(milliseconds: number, signal?: AbortSignal): Promise<void> {
 export class AgentService {
   private readonly pollIntervalMs: number;
   private readonly heartbeatIntervalMs: number;
+  private readonly retryInitialMs: number;
+  private readonly retryMaxMs: number;
+  private readonly leaseDurationMs: number;
   private readonly activeControllers = new Map<string, AbortController>();
   private readonly activeExecutions = new Set<Promise<void>>();
 
@@ -39,10 +45,17 @@ export class AgentService {
   ) {
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
+    this.retryInitialMs = options.retryInitialMs ?? 1_000;
+    this.retryMaxMs = options.retryMaxMs ?? 30_000;
+    this.leaseDurationMs = options.leaseDurationMs ?? 90_000;
   }
 
-  async sendHeartbeat(): Promise<void> {
-    await this.client.sendHeartbeat();
+  async sendHeartbeat(currentJobId?: string): Promise<void> {
+    const runtimes = await this.executor.inventory?.() ?? [];
+    const result = await this.client.sendHeartbeat(currentJobId, runtimes);
+    if (result.desiredDeploymentIds) {
+      await this.executor.reconcile?.(result.desiredDeploymentIds);
+    }
   }
 
   async pollOnce(): Promise<boolean> {
@@ -52,18 +65,28 @@ export class AgentService {
     const controller = new AbortController();
     this.activeControllers.set(job.jobId, controller);
     let heartbeatRunning = false;
+    let lastLeaseRenewedAt = Date.now();
     const heartbeat = async (): Promise<void> => {
       if (heartbeatRunning || controller.signal.aborted) return;
       heartbeatRunning = true;
       try {
-        const result = await this.client.sendHeartbeat(job.jobId);
+        const runtimes = await this.executor.inventory?.() ?? [];
+        const result = await this.client.sendHeartbeat(job.jobId, runtimes);
+        lastLeaseRenewedAt = Date.now();
+        if (result.desiredDeploymentIds) {
+          await this.executor.reconcile?.(result.desiredDeploymentIds);
+        }
         if (result.jobCancelled) controller.abort();
+      } catch (error) {
+        if (Date.now() - lastLeaseRenewedAt >= this.leaseDurationMs) {
+          controller.abort(error);
+        }
       } finally {
         heartbeatRunning = false;
       }
     };
     const timer = setInterval(
-      () => void heartbeat().catch(() => controller.abort()),
+      () => void heartbeat(),
       this.heartbeatIntervalMs,
     );
 
@@ -91,18 +114,35 @@ export class AgentService {
 
   async run(signal: AbortSignal): Promise<void> {
     let lastHeartbeat = 0;
-    while (!signal.aborted) {
-      const now = Date.now();
-      if (now - lastHeartbeat >= this.heartbeatIntervalMs) {
-        await this.sendHeartbeat();
-        lastHeartbeat = now;
+    let retryDelay = this.retryInitialMs;
+    let restored = false;
+    try {
+      while (!signal.aborted) {
+        try {
+          if (!restored) {
+            await this.executor.restore?.();
+            restored = true;
+          }
+          const now = Date.now();
+          if (now - lastHeartbeat >= this.heartbeatIntervalMs) {
+            await this.sendHeartbeat();
+            lastHeartbeat = now;
+          }
+          if (signal.aborted) break;
+          const claimed = await this.pollOnce();
+          retryDelay = this.retryInitialMs;
+          if (!claimed) {
+            await wait(this.pollIntervalMs, signal).catch(() => undefined);
+          }
+        } catch {
+          if (signal.aborted) break;
+          await wait(retryDelay, signal).catch(() => undefined);
+          retryDelay = Math.min(this.retryMaxMs, retryDelay * 2);
+        }
       }
-      const claimed = await this.pollOnce();
-      if (!claimed) {
-        await wait(this.pollIntervalMs, signal).catch(() => undefined);
-      }
+    } finally {
+      await this.shutdown();
     }
-    await this.shutdown();
   }
 
   async shutdown(): Promise<void> {

@@ -8,6 +8,7 @@ import type {
 import { DockerOnpremJobExecutor } from "../src/executor.js";
 import { AgentError } from "../src/errors.js";
 import { FakeTunnelProvider } from "../src/fakes.js";
+import type { PersistedRuntime, RuntimeStateStore } from "../src/runtime-state-store.js";
 import { createJob } from "./fixtures.js";
 
 class FakeImageManager implements ImageManager {
@@ -37,6 +38,22 @@ class FakeRuntimeManager implements RuntimeManager {
         this.cleanups.push(job.image.digest);
       },
     };
+  }
+}
+
+class FakeRuntimeStateStore implements RuntimeStateStore {
+  readonly records = new Map<number, PersistedRuntime>();
+
+  async load(): Promise<PersistedRuntime[]> {
+    return [...this.records.values()];
+  }
+
+  async save(runtime: PersistedRuntime): Promise<void> {
+    this.records.set(runtime.deploymentId, runtime);
+  }
+
+  async remove(deploymentId: number): Promise<void> {
+    this.records.delete(deploymentId);
   }
 }
 
@@ -317,13 +334,15 @@ describe("On-Prem job 실행", () => {
     expect(starts).toBe(2);
   });
 
-  it("종료 시 활성 Tunnel과 해당 Compose 리소스를 정리한다", async () => {
+  it("종료 시 Tunnel만 멈추고 활성 Compose와 복구 상태는 보존한다", async () => {
     const runtime = new FakeRuntimeManager();
     const tunnel = new FakeTunnelProvider("https://fake.example.test");
+    const stateStore = new FakeRuntimeStateStore();
     const executor = new DockerOnpremJobExecutor({
       imageManager: new FakeImageManager(),
       runtimeManager: runtime,
       tunnelProvider: tunnel,
+      stateStore,
     });
 
     await executor.execute(createJob());
@@ -331,6 +350,56 @@ describe("On-Prem job 실행", () => {
     await executor.shutdown();
 
     expect(tunnel.stops).toEqual([createJob().deploymentId]);
-    expect(runtime.cleanups).toEqual([createJob().image.digest]);
+    expect(runtime.cleanups).toEqual([]);
+    expect(stateStore.records.has(createJob().deploymentId)).toBe(true);
+  });
+
+  it("저장된 Compose를 복구하고 inventory를 보고하며 요구 상태 밖 런타임을 정리한다", async () => {
+    const stateStore = new FakeRuntimeStateStore();
+    const tunnel = new FakeTunnelProvider("https://fake.example.test");
+    const job = createJob();
+    stateStore.records.set(job.deploymentId, {
+      jobId: job.jobId,
+      deploymentId: job.deploymentId,
+      environmentId: job.environmentId,
+      digest: job.image.digest,
+      imageUri: `${job.image.repositoryUri}@${job.image.digest}`,
+      projectName: "camellia-d42-1234567890-aaaaaaaaaaaa",
+      localUrl: "http://127.0.0.1:49152",
+      endpoint: "https://fake.example.test",
+      health: job.plan.health,
+    });
+    let cleaned = false;
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new FakeImageManager(),
+      runtimeManager: {
+        async start() {
+          throw new Error("not used");
+        },
+        async restore() {
+          return {
+            projectName: "camellia-d42-1234567890-aaaaaaaaaaaa",
+            localUrl: "http://127.0.0.1:49152",
+            isRunning: async () => true,
+            isHealthy: async () => true,
+            cleanup: async () => { cleaned = true; },
+          };
+        },
+      },
+      tunnelProvider: tunnel,
+      stateStore,
+    });
+
+    await executor.restore();
+    await expect(executor.inventory()).resolves.toEqual([{
+      deploymentId: "42",
+      digest: job.image.digest,
+      status: "running",
+      health: "healthy",
+    }]);
+
+    await executor.reconcile([]);
+    expect(cleaned).toBe(true);
+    expect(stateStore.records.size).toBe(0);
   });
 });

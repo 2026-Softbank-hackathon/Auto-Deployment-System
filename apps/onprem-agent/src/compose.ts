@@ -219,6 +219,7 @@ export class DockerComposeRuntime implements RuntimeManager {
             return false;
           }
         },
+        isHealthy: () => this.healthChecker.isHealthy(localUrl, job.plan.health),
         cleanup: async () => {
           if (cleaned) return;
           cleaned = true;
@@ -238,6 +239,44 @@ export class DockerComposeRuntime implements RuntimeManager {
       }
       throw new AgentError("compose_failed", "Docker Compose 실행에 실패했습니다.");
     }
+  }
+
+  async restore(input: {
+    projectName: string;
+    localUrl: string;
+    health: OnpremAgentJob["plan"]["health"];
+  }): Promise<RunningDeployment | null> {
+    if (!/^camellia-d\d+-[a-f0-9]{10}-[a-f0-9]{12}$/.test(input.projectName)) {
+      return null;
+    }
+    const projectDirectory = join(this.stateRoot, input.projectName);
+    const composePath = join(projectDirectory, "compose.yaml");
+    if (!(await pathExists(composePath))) return null;
+    const deployment: RunningDeployment = {
+      projectName: input.projectName,
+      localUrl: input.localUrl,
+      isRunning: async () => {
+        try {
+          const current = await this.runCompose(
+            input.projectName,
+            composePath,
+            ["ps", "--status", "running", "--services"],
+          );
+          return current.stdout.split(/\s+/).includes("app");
+        } catch {
+          return false;
+        }
+      },
+      isHealthy: () => this.healthChecker.isHealthy(input.localUrl, input.health),
+      cleanup: async () => {
+        try {
+          await this.down(input.projectName, composePath);
+        } finally {
+          await rm(projectDirectory, { recursive: true, force: true });
+        }
+      },
+    };
+    return (await deployment.isRunning()) ? deployment : null;
   }
 
   private async runCompose(

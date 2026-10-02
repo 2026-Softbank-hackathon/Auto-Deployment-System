@@ -9,6 +9,7 @@ import { FileAgentCredentialStore } from "./credential-store.js";
 import { DockerPrerequisiteChecker } from "./docker-readiness.js";
 import { EcrImageManager } from "./ecr.js";
 import { DockerOnpremJobExecutor } from "./executor.js";
+import { FileRuntimeStateStore } from "./runtime-state-store.js";
 import { StructuredLogger } from "./logger.js";
 import { CloudflaredTunnelProvider } from "./tunnel.js";
 import { join } from "node:path";
@@ -101,6 +102,7 @@ async function main(): Promise<void> {
         stateRoot: join(config.stateDirectory, "deployments"),
       }),
       tunnelProvider,
+      stateStore: new FileRuntimeStateStore(config.stateDirectory),
     });
     const service = new AgentService(controlPlaneClient, executor, {
       pollIntervalMs: config.pollIntervalMs,

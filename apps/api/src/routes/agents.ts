@@ -100,6 +100,10 @@ const agentsRoutes: FastifyPluginAsync<{
             properties: {
               ok: { type: "boolean" },
               deploymentCancelled: { type: "boolean" },
+              desiredDeploymentIds: {
+                type: "array",
+                items: { type: "string" },
+              },
             },
           },
         },
@@ -125,9 +129,13 @@ const agentsRoutes: FastifyPluginAsync<{
       }
 
       const body = AgentHeartbeatBodySchema.parse(request.body);
-      await svc.recordHeartbeat(agent.agentId);
+      const desiredDeploymentIds = await svc.recordHeartbeat(
+        agent.agentId,
+        agent.environmentId,
+        body.runtimes,
+      );
       if (!body.currentJobId) {
-        return reply.status(200).send({ ok: true });
+        return reply.status(200).send({ ok: true, desiredDeploymentIds });
       }
       const heartbeat = await jobService.heartbeat(
         agent.agentId,
@@ -144,6 +152,7 @@ const agentsRoutes: FastifyPluginAsync<{
 
       return reply.status(200).send({
         ok: true,
+        desiredDeploymentIds,
         ...(heartbeat.jobCancelled ? { deploymentCancelled: true } : {}),
       });
     },

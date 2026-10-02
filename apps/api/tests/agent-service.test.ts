@@ -189,15 +189,35 @@ describe("AgentService.authenticate", () => {
 // ── recordHeartbeat ───────────────────────────────────────────────────────────
 
 describe("AgentService.recordHeartbeat", () => {
-  it("Agent 생존 시각만 갱신하고 Job 상태를 직접 조회하지 않는다", async () => {
+  it("Agent 생존 시각과 빈 inventory를 갱신한다", async () => {
     const pool = makePool(async () => ({ rows: [], rowCount: 1 }));
     const svc = new AgentService(pool);
-    await svc.recordHeartbeat(1);
+    await expect(svc.recordHeartbeat(1, 7, [])).resolves.toEqual([]);
 
     expect(pool.query).toHaveBeenCalledTimes(1);
     expect(pool.query).toHaveBeenCalledWith(
-      expect.stringContaining("UPDATE agents SET last_seen_at"),
-      [1],
+      expect.stringContaining("runtime_inventory"),
+      [1, "[]"],
+    );
+  });
+
+  it("보고된 런타임 중 해당 환경에서 유지할 배포만 반환한다", async () => {
+    const pool = makePool(async (sql) => {
+      if (/FROM deployments/.test(sql)) return { rows: [{ id: 42 }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    });
+    const svc = new AgentService(pool);
+    const runtimes = [{
+      deploymentId: "42",
+      digest: `sha256:${"a".repeat(64)}`,
+      status: "running" as const,
+      health: "healthy" as const,
+    }];
+
+    await expect(svc.recordHeartbeat(1, 7, runtimes)).resolves.toEqual(["42"]);
+    expect(pool.query).toHaveBeenLastCalledWith(
+      expect.stringContaining("target_environment_id = $1"),
+      [7, ["42"]],
     );
   });
 });

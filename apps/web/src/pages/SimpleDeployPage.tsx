@@ -44,7 +44,8 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
   const [projectsError, setProjectsError] = useState<unknown>(null);
   const loadApps = useCallback(() => {
     setProjectsError(null);
-    loadProjects().then((items) => setProjects(items.map(({ id, name }) => ({ id, name }))), (loadError) => setProjectsError(loadError));
+    // 삭제 중이거나 삭제에 실패한 앱에는 배포할 수 없다 (#247)
+    loadProjects().then((items) => setProjects(items.filter((project) => !project.deletion).map(({ id, name }) => ({ id, name }))), (loadError) => setProjectsError(loadError));
   }, []);
   useEffect(() => { loadApps(); }, [loadApps]);
 

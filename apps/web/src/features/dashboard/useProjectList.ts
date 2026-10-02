@@ -63,8 +63,8 @@ export function useProjectList() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  // 진행 중인 배포가 있을 때만 목록을 다시 읽는다 (진행률을 추정하지 않는다).
-  const hasActive = state.phase === 'ready' && state.projects.some((project) => latestActive(project, state.loadedAt));
+  // 진행 중인 배포나 삭제 중인 앱이 있을 때만 목록을 다시 읽는다 (진행률을 추정하지 않는다). 삭제가 끝난 앱은 목록에서 빠진다.
+  const hasActive = state.phase === 'ready' && state.projects.some((project) => latestActive(project, state.loadedAt) || project.deletion?.status === 'deleting');
   useEffect(() => {
     if (!hasActive) return;
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, ACTIVE_REFRESH_MS);

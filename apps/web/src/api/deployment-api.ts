@@ -221,20 +221,63 @@ export async function cancelDeployment(deploymentId: string): Promise<void> {
   await assertOk(response);
 }
 
-export type ApprovalGate = 'target' | 'plan';
+/** patch = 코드 수정안(SQLite → PostgreSQL, #277) — 원클릭에서 사용자가 직접 결정하는 유일한 게이트 */
+export type ApprovalGate = 'patch' | 'target' | 'plan';
 
 /**
  * API-11 — 승인 게이트 통과. 원클릭 흐름에서 프론트가 사용자 입력 없이 호출한다 (2026-10-01 팀 결정:
  * 사용자는 벤더만 고르고 대상 확인은 승인으로 받지 않는다). 프론트는 target만 호출하고, plan 승인은 서버가 자동으로 처리한다.
  */
 export async function approveDeploymentGate(deploymentId: string, gate: ApprovalGate, note: string): Promise<void> {
+  await decideDeploymentGate(deploymentId, gate, 'approve', note);
+}
+
+/** 승인 · 거절. 코드 수정안(patch)은 거절해도 실패가 아니라 원래 소스(SQLite 그대로)로 배포를 이어 간다. */
+export async function decideDeploymentGate(deploymentId: string, gate: ApprovalGate, decision: 'approve' | 'reject', note: string): Promise<void> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/approvals`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gate, decision: 'approve', note }),
+    body: JSON.stringify({ gate, decision, note }),
     credentials: 'include',
   });
   await assertOk(response);
+}
+
+export interface SourcePatchFile { path: string; change: 'added' | 'modified'; additions: number; deletions: number; /** 규칙으로 다시 만든 파일(package-lock.json) — diff 에 없음 */ generated: boolean }
+export interface DeploymentSourcePatch {
+  status: 'pending' | 'approved' | 'rejected';
+  summary: string;
+  notes: string[];
+  /** unified diff (generated 파일 제외) */
+  diff: string;
+  files: SourcePatchFile[];
+  model: string | null;
+}
+
+/** 코드 수정안 (#277). 수정안이 없는 배포(404)는 null. */
+export async function getDeploymentPatch(deploymentId: string): Promise<DeploymentSourcePatch | null> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/patch`), { credentials: 'include' });
+  if (response.status === 404) return null;
+  const body = asRecord(await readJson(response), '코드 수정안');
+  if (typeof body.summary !== 'string' || typeof body.diff !== 'string') throw new Error('코드 수정안 응답 형식이 올바르지 않습니다.');
+  const status = body.status === 'approved' || body.status === 'rejected' ? body.status : 'pending';
+  const files = (Array.isArray(body.files) ? body.files : []).flatMap((item): SourcePatchFile[] => {
+    if (!item || typeof item !== 'object') return [];
+    const file = item as Record<string, unknown>;
+    if (typeof file.path !== 'string') return [];
+    return [{
+      path: file.path,
+      change: file.change === 'added' ? 'added' : 'modified',
+      additions: typeof file.additions === 'number' ? file.additions : 0,
+      deletions: typeof file.deletions === 'number' ? file.deletions : 0,
+      generated: file.generated === true,
+    }];
+  });
+  return {
+    status, summary: body.summary, diff: body.diff, files,
+    notes: Array.isArray(body.notes) ? body.notes.filter((note): note is string => typeof note === 'string') : [],
+    model: typeof body.model === 'string' ? body.model : null,
+  };
 }
 
 /** 배포 연결(환경, API-24). 화면에는 종류 · 기본 여부 · 표시용 값(리전 / 호스트 이름) · Agent 상태만 쓴다. */

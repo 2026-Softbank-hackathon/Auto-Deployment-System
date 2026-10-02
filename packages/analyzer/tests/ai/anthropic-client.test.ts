@@ -99,6 +99,13 @@ describe("resolveModel", () => {
   it("빈 문자열 override 는 무시한다", () => {
     expect(resolveModel("analyze", "anthropic", { AI_MODEL_ANALYZE: "" })).toBe("claude-opus-5-5");
   });
+
+  it("patch(코드 수정안)는 AI_MODEL_PATCH → AI_MODEL_ANALYZE → Opus 5.5 순서", () => {
+    expect(resolveModel("patch", "anthropic", {})).toBe("claude-opus-5-5");
+    expect(resolveModel("patch", "bedrock", {})).toBe("global.anthropic.claude-opus-5-5");
+    expect(resolveModel("patch", "anthropic", { AI_MODEL_ANALYZE: "x-analyze" })).toBe("x-analyze");
+    expect(resolveModel("patch", "anthropic", { AI_MODEL_ANALYZE: "x-analyze", AI_MODEL_PATCH: "x-patch" })).toBe("x-patch");
+  });
 });
 
 describe("createClient", () => {

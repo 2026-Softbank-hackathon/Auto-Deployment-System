@@ -334,7 +334,7 @@ async function applyTerraform(input: {
 }): Promise<{ originUrl: string; outputs: TerraformOutputs }> {
   const { deps } = input;
   const refresh = await decideStateRefresh(input);
-  await input.stepLog.line("Terraform init · validate · plan · apply 시작");
+  await input.stepLog.line("Terraform 실행 시작");
   try {
     const outputs = await deps.terraformCli!.apply({
       moduleDirectory: input.moduleDirectory,
@@ -367,7 +367,8 @@ async function applyTerraform(input: {
 /**
  * 이미지만 바뀐 재배포의 상태 재조회 생략 (#252, 팀 합의 2026-10-02).
  * 이미지를 뺀 Terraform 입력(모듈 파일 · 변수 · region · access key ID)의 지문이 같은 프로젝트 · 환경에서
- * 직전에 Terraform 을 돌린 배포와 같고 그 배포가 성공했을 때만 plan 을 -refresh=false 로 한다.
+ * 직전에 Terraform 을 돌린 배포와 같고 그 배포가 성공했을 때만 -refresh=false 로 하고,
+ * 이때는 plan · apply 를 apply 한 번으로 합친다 (#260).
  * 지문은 apply 전에 이번 배포에 기록한다 → apply 나 검증이 실패하면(ECS 롤백 등) 다음 배포는 전체 재조회.
  */
 async function decideStateRefresh(input: {
@@ -410,7 +411,7 @@ async function decideStateRefresh(input: {
   const last = previous.rows[0];
   if (last?.status === "succeeded" && last.terraform_inputs_hash === inputsHash) {
     await input.stepLog.line(
-      `이미지만 바뀌어 상태 재조회 생략 — 직전 성공 배포 #${last.id} 와 인프라 입력이 같아 plan 을 -refresh=false 로 실행합니다.`,
+      `이미지만 바뀌어 상태 재조회 생략 — 직전 성공 배포 #${last.id} 와 인프라 입력이 같아 -refresh=false 로 plan·apply 를 한 번에 실행합니다.`,
     );
     return false;
   }
@@ -419,7 +420,7 @@ async function decideStateRefresh(input: {
     : last.status !== "succeeded"
       ? `직전 배포 #${last.id} 가 성공하지 않음`
       : "인프라 입력 변경";
-  await input.stepLog.line(`전체 상태 재조회로 plan 을 실행합니다 (${reason}).`);
+  await input.stepLog.line(`전체 상태 재조회로 plan → apply 를 실행합니다 (${reason}).`);
   return true;
 }
 

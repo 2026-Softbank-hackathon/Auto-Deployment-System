@@ -65,6 +65,8 @@ async function main(): Promise<void> {
     executable: process.env["TERRAFORM_BINARY"]?.trim() || "terraform",
     // 워커 이미지에 미리 받아 둔 provider 캐시 (#252)
     pluginCacheDir: process.env["TERRAFORM_PLUGIN_CACHE_DIR"]?.trim() || undefined,
+    // 프로젝트 · 환경별 작업 폴더 (#260). 없으면 매번 임시 폴더에서 init
+    workDirRoot: process.env["TERRAFORM_WORK_DIR"]?.trim() || undefined,
   });
   const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
   const awsRegistryFactory = (input: {

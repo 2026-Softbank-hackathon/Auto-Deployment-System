@@ -10,9 +10,8 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { DeployScene, koroSpot, SCENE_SIZE, sceneTarget } from './DeployScene';
+import { DeployScene, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
 import { koroIdle, koroLine, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
-import { localizeLogLine } from './log-line-i18n';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { FailureDetail } from './FailureDetail';
@@ -69,10 +68,6 @@ function appendLogLine(logs: StepLog[], entry: { step: DeploymentLogStep; line: 
 /** 로그 줄 앞의 "[ISO 시각]"으로 가장 최근 줄을 고른다. */
 /** 진행 탭의 "지금" 자리에 보여 주는 최근 로그 줄 수 (좁은 화면에서는 마지막 한 줄만 보인다) */
 const RECENT_LINES = 3;
-/** "지금" 자리에 보여 줄 줄: 시각을 떼고 화면 언어로 옮긴다. 옮길 수 없는 줄은 뺀다. */
-function nowLines(lines: string[], locale: string): string[] {
-  return lines.flatMap((line) => localizeLogLine(line.replace(/^\[[^\]]+\]\s*/, ''), locale) ?? []);
-}
 function lineTime(line: string): number { return Date.parse(line.match(/^\[([^\]]+)\]/)?.[1] ?? '') || 0; }
 
 /** 진행 중일 때만 1초마다 다시 그린다. 경과 시간은 서버의 createdAt 기준 실제 값이다. */
@@ -251,7 +246,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   }, [deploymentId, analysisDone]);
   const target = sceneTarget(text(status?.targetProfile));
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t) : null;
-  const [koroX, koroY] = koroSpot(view);
+  const [koroX, koroY] = koroSpot(view, target);
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
   const failure = failureKind(failureMessage);
@@ -338,22 +333,16 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)에서만 카드 밖으로 나가지 않게 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
-          {talk && <div className={`koro-think ${koroX > SCENE_SIZE.width * 0.82 ? 'is-left' : 'is-right'} ${koroX > SCENE_SIZE.width * 0.7 ? 'is-near-edge' : ''}`}
-            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2) / SCENE_SIZE.height) * 100}%` } as CSSProperties}>
+          {talk && <div className={`koro-think ${koroX > SCENE_SIZE.width * 0.85 ? 'is-left' : 'is-right'} ${koroX > SCENE_SIZE.width * 0.7 ? 'is-near-edge' : ''}`}
+            style={{ '--koro-x': `${(koroX / SCENE_SIZE.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - sceneBox(target).top) / sceneBox(target).height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}
         </figure>
-
-        {/* 지금 서버가 하고 있는 일: 실시간으로 받은 최근 로그 몇 줄(시각은 떼고 화면 언어로 옮긴다). 진행 중이고 받은 줄이 있을 때만 보여 준다. */}
-        {view.outcome === 'active' && !view.waiting && nowLines(recentLines, t.locale).length > 0 && <div className="run-now" aria-live="polite">
-          <span>{t.run.nowLabel}</span>
-          <ol>{nowLines(recentLines, t.locale).map((line, index) => <li key={`${index}-${line}`}><code>{line}</code></li>)}</ol>
-        </div>}
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 

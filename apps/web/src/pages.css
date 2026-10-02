@@ -164,7 +164,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .stage-chip.is-current { border: 2.5px solid var(--koro); color: var(--koro-text); font-weight: 700; }
 .stage-chip.is-pending { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--ink-soft); }
 
-.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 0; }
+.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 44px 0 0; }
 /* 코로의 생각 풍선. 코로 머리 위 한 점(--koro-x, --koro-y)에 붙어서 코로와 같이 움직인다. */
 .koro-think { position: absolute; left: var(--koro-x); top: var(--koro-y); width: 0; height: 0; pointer-events: none; transition: left var(--dur-scene) var(--ease-roll), top var(--dur-scene) var(--ease-roll); }
 .koro-think__dot { position: absolute; border-radius: 50%; background: var(--surface); border: 2px solid var(--koro); }
@@ -179,7 +179,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .koro-think.is-left .koro-think__bubble { right: -22px; }
 /* 좁은 화면에서는 장면이 작아 풍선이 장면 위로 올라가므로, 풍선이 있을 때 위쪽 자리를 비워 둔다 */
 @media (max-width: 719px) {
-  .run-scene.has-talk { margin-top: 56px; }
+  .run-scene { margin-top: 56px; }
   .koro-think.is-near-edge .koro-think__dot:nth-child(1) { left: auto; right: 2px; }
   .koro-think.is-near-edge .koro-think__dot:nth-child(2) { left: auto; right: 10px; }
   .koro-think.is-near-edge .koro-think__bubble { left: auto; right: -22px; }
@@ -187,6 +187,13 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .koro-think__dot:nth-child(1) { width: 6px; height: 6px; }
   .koro-think__dot:nth-child(2) { width: 10px; height: 10px; bottom: 9px; }
 }
+.koro-prop__line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.koro-prop__line--thick { stroke-width: 4.5; }
+.koro-prop__glass { fill: color-mix(in srgb, var(--surface) 70%, transparent); stroke: var(--ink); stroke-width: 4; }
+.koro-prop__hat > path:first-child { fill: var(--brass); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.koro-prop__solid { fill: var(--ink); }
+.koro-prop__box { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.koro-prop__tick { fill: none; stroke: var(--moss); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .scene-zzz text { font-family: var(--font-mono); font-size: 20px; font-weight: 700; fill: var(--ink-soft); }
 @media (prefers-reduced-motion: no-preference) {
   .koro-think__bubble { animation: talk-in 0.3s ease-out both; }
@@ -197,32 +204,7 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 @keyframes zzz-float { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px); } }
 .deploy-scene { display: block; width: 100%; height: auto; overflow: visible; }
 .scene-floor { stroke: var(--line); stroke-width: 3; stroke-linecap: round; }
-.scene-post { stroke: var(--line); stroke-width: 2.5; }
-.scene-ink { fill: var(--ink); }
-.scene-ink-deep { fill: var(--ink-deep); }
-.scene-paper { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
-.scene-stroke { stroke: var(--ink); stroke-width: 1.5; }
 .scene-zip { fill: var(--ink); font-family: var(--font-mono); font-size: 9px; font-weight: 600; }
-.scene-line { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
-.scene-rail, .scene-rail ellipse { fill: none; stroke: var(--line); stroke-width: 6; stroke-linecap: round; transition: stroke var(--dur-scene) var(--ease-roll); }
-.scene-rail.is-done, .scene-rail.is-done ellipse { stroke: var(--brass); }
-.scene-rail--last { stroke-dasharray: 2 9; stroke-width: 5; }
-.scene-domino { transform-box: view-box; transform-origin: 0 0; transition: transform var(--dur-scene) var(--ease-roll); }
-.scene-funnel-body { fill: var(--surface); stroke: var(--line-strong); stroke-width: 3; stroke-linejoin: round; transition: stroke var(--dur-roll); }
-.scene-funnel.is-current .scene-funnel-body { stroke: var(--koro); }
-.scene-funnel.is-done .scene-funnel-body { stroke: var(--brass); }
-.scene-scale line, .scene-scale path { fill: var(--paper); stroke: var(--pebble); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.scene-scale.is-current line, .scene-scale.is-current path { stroke: var(--koro); }
-.scene-scale.is-done line, .scene-scale.is-done path { stroke: var(--brass); }
-.scene-cup path { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2.5; stroke-linejoin: round; }
-.scene-cup.is-done path { stroke: var(--brass); }
-.scene-cup circle { fill: var(--moss); }
-.scene-label rect { fill: none; stroke: var(--pebble); stroke-width: 1.5; stroke-dasharray: 4 3; }
-.scene-label text { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 1px; }
-.scene-label.is-done rect { fill: var(--ink); stroke: none; }
-.scene-label.is-done text { fill: var(--on-ink); }
-.scene-label.is-current rect { fill: var(--koro); stroke: none; }
-.scene-label.is-current text { fill: var(--surface); }
 
 /* 코로: 상태가 바뀔 때만 다음 장치로 굴러가고(--dur-scene), 진행 중에는 제자리에서 살짝 튄다 */
 .scene-koro { transition: transform var(--dur-scene) var(--ease-roll); }
@@ -279,11 +261,6 @@ a.deployment-row__sub:hover { text-decoration: underline; }
   .stage-chips { gap: 8px; }
   .stage-chip + .stage-chip { margin-left: 0; }
   .stage-chip + .stage-chip::before { display: none; }
-}
-
-/* 좁은 화면에서는 장면 안 장치 이름표가 3px 안팎으로 줄어 읽을 수 없다. 단계 이름은 위쪽 칩이 대신한다. */
-@media (max-width: 760px) {
-  .scene-label { display: none; }
 }
 
 /* 배포할 곳 선택 — 선택 표시가 두 선택지 사이를 미끄러진다 (LanguageToggle과 같은 방식) */
@@ -666,48 +643,16 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   }
 }
 
-/* ── 장면: 빌드 · 인프라 준비 · 배포를 장치 하나씩으로 ─────────── */
-.scene-spiral ellipse { fill: none; stroke: var(--line); stroke-width: 6; stroke-linecap: round; transition: stroke var(--dur-scene) var(--ease-roll); }
-.scene-spiral.is-current ellipse { stroke: var(--koro); }
-.scene-spiral.is-done ellipse { stroke: var(--brass); }
-.scene-springboard line, .scene-springboard path { fill: none; stroke: var(--pebble); stroke-width: 3; stroke-linecap: round; transition: stroke var(--dur-roll); }
-.scene-springboard__bed { stroke-width: 5; }
-.scene-springboard.is-current line, .scene-springboard.is-current path { stroke: var(--koro); }
-.scene-springboard.is-done line, .scene-springboard.is-done path { stroke: var(--brass); }
-@media (prefers-reduced-motion: no-preference) {
-  /* 일하는 중인 장치의 움직임. 진행률이 아니라 "지금 여기서 일하고 있다"는 표시다. */
-  .scene-funnel.is-working .scene-funnel__level { animation: funnel-fill 1.4s ease-in-out infinite; }
-  .scene-funnel.is-working .scene-funnel__level + .scene-funnel__level { animation-delay: .35s; }
-  .scene-spiral.is-working ellipse { stroke-dasharray: 26 14; animation: spiral-run 1.6s linear infinite; }
-  .scene-spiral.is-working ellipse:nth-child(2) { animation-duration: 1.2s; animation-direction: reverse; }
-  .scene-spiral.is-working ellipse:nth-child(3) { animation-duration: .9s; }
-  .scene-springboard.is-working .scene-springboard__bed { animation: spring-bounce 1s ease-in-out infinite; }
-  .scene-scale.is-working { transform-origin: 1060px 392px; animation: scale-tilt 1.8s ease-in-out infinite; }
-  @keyframes funnel-fill { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-  @keyframes spiral-run { to { stroke-dashoffset: -40; } }
-  @keyframes spring-bounce { 0%, 100% { d: path("M862 396 Q910 418 958 396"); } 50% { d: path("M862 396 Q910 404 958 396"); } }
-  @keyframes scale-tilt { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-1.6deg); } 75% { transform: rotate(1.6deg); } }
-}
 @media (max-width: 760px) {
   .pipeline-rail__stop { width: 44px; font-size: 11px; }
 }
 
 /* 지금 서버가 하는 일 한 줄 */
-.run-now { display: flex; align-items: flex-end; justify-content: center; gap: 10px; max-width: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
-.run-now > span { flex-shrink: 0; padding: 2px 8px; font-weight: 700; color: var(--koro-text); border: 1.5px solid var(--koro); border-radius: var(--radius-tape); }
-.run-now ol { min-width: 0; margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
-.run-now li { min-width: 0; display: flex; }
-.run-now code { min-width: 0; font-family: var(--font-mono); color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.run-now li:last-child code { color: var(--ink); }
-/* 좁은 화면에서는 가장 최근 한 줄만 */
-@media (max-width: 719px) { .run-now li:not(:last-child) { display: none; } }
 /* 넓은 화면(발표장 화면 등)에서는 경과 시간을 멀리서도 읽히게 키운다 */
 @media (min-width: 900px) {
   .run-head__elapsed { font-size: 26px; font-weight: 700; color: var(--ink); }
-  .run-now { font-size: 14px; }
 }
 
-.scene-cup .scene-cup__detail { fill: none; stroke-width: 2; stroke-linecap: round; }
 
 .stage-timeline { align-self: stretch; display: grid; gap: 10px; text-align: left; }
 .stage-timeline h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
@@ -719,7 +664,6 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @media (prefers-reduced-motion: no-preference) {
   .stage-timeline li { animation: rise-in 0.36s ease-out both; }
   .stage-timeline__bar span { transform-origin: left; animation: timeline-grow 0.5s ease-out both; animation-delay: inherit; }
-  .run-now li { animation: rise-in 0.22s ease-out both; }
 }
 @keyframes timeline-grow { from { transform: scaleX(0); } }
 
@@ -806,3 +750,81 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .connection-option__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .connection-option__meta:empty { display: none; }
 .connection-option__reason { font-size: 13px; color: var(--brick-text); }
+
+/* ── 배포 여정 장면 (DeployScene) ───────────────────────────────────────── */
+.koro-arm { fill: none; stroke: var(--koro); stroke-width: 7; stroke-linecap: round; }
+.koro-hand { fill: var(--koro); }
+.jr-paper { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.jr-line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.jr-line--thick { stroke-width: 4.5; }
+.jr-sign { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 15px; font-weight: 700; letter-spacing: 1.5px; }
+.jr-cloud { fill: var(--surface); stroke: var(--line-strong); stroke-width: 3; }
+.jr-cloudlet { fill: var(--surface); stroke: var(--line); stroke-width: 2.5; stroke-linejoin: round; }
+.jr-route { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 12; }
+.jr-pad { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2.5; stroke-dasharray: 6 5; }
+.jr-pad.is-building { stroke: var(--koro); }
+.jr-pad.is-ready { fill: var(--line); stroke: var(--ink); stroke-dasharray: none; }
+.jr-led { fill: var(--line); }
+.jr-led.is-on { fill: var(--moss); }
+.jr-board-title { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+.jr-draft { fill: none; stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+.jr-easel.is-working .jr-draft { stroke: var(--koro); }
+.jr-easel.is-done .jr-draft { stroke: var(--brass); }
+.jr-wheel { fill: var(--ink); }
+.jr-door { fill: var(--brass); stroke: var(--ink); stroke-width: 2; }
+.jr-window { fill: var(--line); stroke: var(--ink); stroke-width: 2; }
+.jr-window.is-on { fill: var(--moss); }
+.jr-roof { fill: var(--brass); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.jr-flag__cloth { fill: var(--moss); stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
+/* 집 · 수레 · 비행기는 코로와 같은 박자로 자리를 옮긴다 */
+.jr-plane__body { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.jr-plane__tail, .jr-plane__wing { fill: var(--koro-tint); stroke: var(--koro); stroke-width: 2.5; stroke-linejoin: round; }
+.jr-plane__window { fill: var(--koro-tint); stroke: var(--ink); stroke-width: 2; }
+.jr-plane__prop { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.jr-plane__wind { fill: none; stroke: var(--line-strong); stroke-width: 3; stroke-linecap: round; }
+.jr-plane.is-building .jr-plane__wing, .jr-plane.is-building .jr-plane__tail { stroke-dasharray: 7 6; }
+.jr-cart, .jr-plane { opacity: 0; }
+.jr-cart.is-shown, .jr-plane.is-shown { opacity: 1; }
+.jr-house, .jr-cart, .jr-plane { transition: transform var(--dur-scene) var(--ease-roll), opacity var(--dur-roll); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .koro-prop--scan { animation: prop-scan 2.6s ease-in-out infinite; }
+  .koro-prop--hammer { transform-box: view-box; transform-origin: 64px 42px; animation: prop-hammer .7s ease-in infinite alternate; }
+  .koro-prop--wrench { transform-box: view-box; transform-origin: 64px 42px; animation: prop-wrench 1.2s ease-in-out infinite alternate; }
+  .koro-prop--push { animation: prop-push .8s ease-in-out infinite alternate; }
+  .koro-prop--wave { transform-box: view-box; transform-origin: 62px 36px; animation: prop-wave .8s ease-in-out infinite alternate; }
+  .koro-prop--cheer-left { transform-box: view-box; transform-origin: 10px 34px; animation: prop-wave .6s ease-in-out infinite alternate; }
+  .koro-prop--cheer-right { transform-box: view-box; transform-origin: 62px 34px; animation: prop-wave .6s ease-in-out infinite alternate-reverse; }
+  .koro-prop--ticks .koro-prop__tick { animation: prop-tick 2.4s ease-in-out infinite both; }
+  .koro-prop--ticks .koro-prop__tick:nth-child(2) { animation-delay: .5s; }
+  .koro-prop--ticks .koro-prop__tick:nth-child(3) { animation-delay: 1s; }
+  .jr-easel.is-working .jr-draft { stroke-dasharray: 120; animation: draft-draw 2.2s ease-in-out infinite; }
+  .jr-easel.is-working .jr-draft:nth-of-type(2) { animation-delay: .3s; }
+  .jr-easel.is-working .jr-draft:nth-of-type(3) { animation-delay: .6s; }
+  .jr-easel.is-working .jr-draft:nth-of-type(4) { animation-delay: .9s; }
+  .jr-floor { transform-box: fill-box; transform-origin: 50% 100%; animation: floor-rise .5s var(--ease-roll) both; }
+  .jr-roof, .jr-flag { transform-box: fill-box; transform-origin: 50% 100%; animation: floor-rise .5s var(--ease-roll) both; }
+  .jr-pad.is-building { animation: dash-march 1s linear infinite; }
+  .jr-plane.is-building .jr-plane__wing, .jr-plane.is-building .jr-plane__tail { animation: dash-march 1s linear infinite; }
+  .jr-plane.is-flying .jr-plane__prop { transform-box: fill-box; transform-origin: 50% 50%; animation: prop-spin .16s linear infinite alternate; }
+  .jr-plane.is-flying .jr-plane__wind { animation: wind-streak .7s ease-in-out infinite alternate; }
+  .jr-window.is-checking { animation: window-check 1.5s ease-in-out infinite; }
+  .jr-floor:nth-of-type(2) .jr-window.is-checking { animation-delay: .3s; }
+  .jr-floor:nth-of-type(3) .jr-window.is-checking { animation-delay: .6s; }
+  .jr-drift { animation: cloud-drift 14s ease-in-out infinite alternate; }
+  .jr-flag__cloth { transform-box: fill-box; transform-origin: 0% 50%; animation: flag-wave 1.2s ease-in-out infinite alternate; }
+}
+@keyframes prop-scan { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-16px, -14px); } }
+@keyframes prop-hammer { from { transform: rotate(-34deg); } to { transform: rotate(10deg); } }
+@keyframes prop-wrench { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+@keyframes prop-push { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
+@keyframes prop-wave { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+@keyframes prop-tick { 0%, 15% { opacity: 0; } 35%, 85% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes dash-march { to { stroke-dashoffset: -11; } }
+@keyframes draft-draw { 0% { stroke-dashoffset: 120; } 60%, 100% { stroke-dashoffset: 0; } }
+@keyframes floor-rise { from { opacity: 0; transform: translateY(14px) scaleY(.4); } to { opacity: 1; transform: none; } }
+@keyframes prop-spin { from { transform: scaleY(1); } to { transform: scaleY(.12); } }
+@keyframes wind-streak { from { opacity: .2; transform: translateX(10px); } to { opacity: 1; transform: translateX(-6px); } }
+@keyframes window-check { 0%, 100% { fill: var(--line); } 50% { fill: var(--brass); } }
+@keyframes cloud-drift { from { transform: translateX(-10px); } to { transform: translateX(26px); } }
+@keyframes flag-wave { from { transform: scaleX(1); } to { transform: scaleX(.78); } }

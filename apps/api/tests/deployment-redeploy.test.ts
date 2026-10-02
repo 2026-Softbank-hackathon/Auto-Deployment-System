@@ -215,14 +215,25 @@ describe("DeploymentService.redeploy", () => {
     return calls.find((c) => /INSERT INTO deployments/.test(c.sql))?.params;
   }
 
-  function setupIr() {
+  function setupIr(profile = "aws-ecs-basic") {
+    const sourceIr = {
+      "$ir_version": "0.1.0",
+      metadata: { name: "app", version: "1.0.0" },
+      services: { api: { type: "http", port: 3000 } },
+      deploy: { profile, region: "ap-northeast-2" },
+    };
     pool.on(/FROM ir_versions/, () => ({
       rows: [{
         id: 1,
-        ir_json: { "$ir_version": "0.1.0", metadata: { name: "app" } },
+        ir_json: sourceIr,
         source: "analyzer",
       }],
     }));
+    return sourceIr;
+  }
+
+  function insertedIr() {
+    return JSON.parse(calls.find((call) => /INSERT INTO ir_versions/.test(call.sql))!.params[1] as string);
   }
 
   function setupSourceVersion() {
@@ -335,7 +346,7 @@ describe("DeploymentService.redeploy", () => {
 
   it("같은 환경 재배포 — 원본 프로필 · Registry 그대로, build job 에 원본 ID 전달", async () => {
     setupSucceededDeployment();
-    setupIr();
+    const sourceIr = setupIr();
     setupSourceVersion();
     setupNoLock();
     setupTransaction();
@@ -343,6 +354,7 @@ describe("DeploymentService.redeploy", () => {
     await svc.redeploy(42);
 
     expect(insertedDeploymentParams()).toEqual([42, "aws-ecs-basic", 10, 10]);
+    expect(insertedIr()).toEqual(sourceIr);
     expect(boss.sentJobs).toEqual([
       { name: "build", data: { deployment_id: 99, redeployed_from: 42 } },
     ]);
@@ -350,7 +362,7 @@ describe("DeploymentService.redeploy", () => {
 
   it("AWS → 온프레미스 전환 — 프로필 onprem-docker-basic 재선정, Registry 는 원본 AWS 환경 유지", async () => {
     setupSucceededDeployment();
-    setupIr();
+    const sourceIr = setupIr();
     setupSourceVersion();
     setupNoLock();
     setupTransaction();
@@ -363,6 +375,8 @@ describe("DeploymentService.redeploy", () => {
 
     expect(result.status).toBe("queued");
     expect(insertedDeploymentParams()).toEqual([42, "onprem-docker-basic", "20", "10"]);
+    expect(insertedIr()).toEqual({ ...sourceIr, deploy: { ...sourceIr.deploy, profile: "onprem-docker-basic" } });
+    expect(sourceIr.deploy.profile).toBe("aws-ecs-basic");
   });
 
   it("온프레미스 → AWS 전환 — 프로필 aws-ecs-basic 재선정, Registry 는 대상 AWS 환경", async () => {
@@ -371,7 +385,7 @@ describe("DeploymentService.redeploy", () => {
       target_environment_id: "20",
       registry_environment_id: "10",
     });
-    setupIr();
+    const sourceIr = setupIr("onprem-docker-basic");
     setupSourceVersion();
     setupNoLock();
     setupTransaction();
@@ -384,6 +398,8 @@ describe("DeploymentService.redeploy", () => {
     await svc.redeploy(42, { targetEnvironmentId: 11 });
 
     expect(insertedDeploymentParams()).toEqual([42, "aws-ecs-basic", "11", "11"]);
+    expect(insertedIr()).toEqual({ ...sourceIr, deploy: { ...sourceIr.deploy, profile: "aws-ecs-basic" } });
+    expect(sourceIr.deploy.profile).toBe("onprem-docker-basic");
   });
 
   it("온프레미스 전환 시 원본 Registry 가 없으면 프로젝트 기본 AWS 환경 사용", async () => {

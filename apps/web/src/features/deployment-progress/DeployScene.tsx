@@ -6,7 +6,8 @@ import { railStageCount, railStages, type DeploymentStatusView } from '../deploy
 /**
  * 연쇄장치 장면. 코로의 위치는 백엔드 status에서 나온 단계(view.stage)로만 정한다.
  * 단계 사이를 추정해서 움직이지 않는다 — 상태가 바뀔 때만 다음 장치로 굴러간다.
- * 장치: 출발대(ZIP) → 도미노(분석) → 깔때기(빌드) → 나선(인프라 준비) → 도약대(배포) → 저울(검증) → 컵(완료).
+ * 장치: 출발대(ZIP) → 도미노(분석) → 깔때기(빌드) → 나선(인프라 준비) → 도약대(배포) → 저울(검증) → 도착점(완료).
+ * 도착점은 배포할 곳을 그린다 — AWS는 구름, 온프레미스는 서버. 모르면 컵.
  * 시간이 걸리는 빌드 · 인프라 준비 · 배포를 장치 하나씩으로 나눠서, 코로가 긴 구간에서도 자리를 옮긴다.
  */
 
@@ -35,7 +36,16 @@ function Label({ x, y, width, text, state }: { x: number; y: number; width: numb
   </g>;
 }
 
-export function DeployScene({ view }: { view: DeploymentStatusView }) {
+export type SceneTarget = 'aws' | 'onprem' | null;
+
+/** targetProfile(aws-ecs-basic · onprem-docker-basic)에서 도착점 그림을 고른다. */
+export function sceneTarget(profile: string | null): SceneTarget {
+  if (profile?.startsWith('aws')) return 'aws';
+  if (profile?.startsWith('onprem')) return 'onprem';
+  return null;
+}
+
+export function DeployScene({ view, target = null }: { view: DeploymentStatusView; target?: SceneTarget }) {
   const { t } = useI18n();
   const analyze = gadgetState(0, view);
   const build = gadgetState(1, view);
@@ -130,10 +140,16 @@ export function DeployScene({ view }: { view: DeploymentStatusView }) {
 
     <path className={`${railClass(4, view)} scene-rail--last`} d="M1104 414 L1138 440" />
 
-    {/* 5 · 컵 — 완료 */}
+    {/* 5 · 도착점 — 배포할 곳 (AWS 구름 · 온프레미스 서버 · 모르면 컵) */}
     <g className={`scene-cup ${view.outcome === 'success' ? 'is-done' : ''}`}>
-      <path d="M1128 444 H1182 V456 A27 24 0 0 1 1128 456 Z" />
-      {view.outcome === 'success' && <circle cx="1155" cy="452" r="8" />}
+      {target === 'aws' && <path d="M1136 474 H1176 A13 13 0 0 0 1178 448 A17 17 0 0 0 1146 444 A15 15 0 0 0 1136 474 Z" />}
+      {target === 'onprem' && <>
+        <path d="M1128 442 H1182 V456 H1128 Z" />
+        <path d="M1128 460 H1182 V474 H1128 Z" />
+        <path className="scene-cup__detail" d="M1136 449 H1140 M1136 467 H1140 M1150 449 H1174 M1150 467 H1174" />
+      </>}
+      {target === null && <path d="M1128 444 H1182 V456 A27 24 0 0 1 1128 456 Z" />}
+      {target === null && view.outcome === 'success' && <circle cx="1155" cy="452" r="8" />}
     </g>
 
     <g className="scene-koro" style={koroPosition}>

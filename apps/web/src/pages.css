@@ -649,6 +649,32 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 }
 
 /* 지금 서버가 하는 일 한 줄 */
-.run-now { display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
-.run-now span { flex-shrink: 0; padding: 2px 8px; font-weight: 700; color: var(--koro-text); border: 1.5px solid var(--koro); border-radius: var(--radius-tape); }
-.run-now code { min-width: 0; font-family: var(--font-mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-now { display: flex; align-items: flex-end; justify-content: center; gap: 10px; max-width: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
+.run-now > span { flex-shrink: 0; padding: 2px 8px; font-weight: 700; color: var(--koro-text); border: 1.5px solid var(--koro); border-radius: var(--radius-tape); }
+.run-now ol { min-width: 0; margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.run-now li { min-width: 0; display: flex; }
+.run-now code { min-width: 0; font-family: var(--font-mono); color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-now li:last-child code { color: var(--ink); }
+/* 좁은 화면에서는 가장 최근 한 줄만 */
+@media (max-width: 719px) { .run-now li:not(:last-child) { display: none; } }
+/* 넓은 화면(발표장 화면 등)에서는 경과 시간을 멀리서도 읽히게 키운다 */
+@media (min-width: 900px) {
+  .run-head__elapsed { font-size: 26px; font-weight: 700; color: var(--ink); }
+  .run-now { font-size: 14px; }
+}
+
+.scene-cup .scene-cup__detail { fill: none; stroke-width: 2; stroke-linecap: round; }
+
+.stage-timeline { align-self: stretch; display: grid; gap: 10px; text-align: left; }
+.stage-timeline h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.stage-timeline ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.stage-timeline li { display: grid; grid-template-columns: minmax(72px, auto) 1fr auto; align-items: center; gap: 12px; font-size: 14px; }
+.stage-timeline__bar { height: 8px; border-radius: 999px; background: var(--surface-sunken, rgba(0, 0, 0, 0.06)); overflow: hidden; }
+.stage-timeline__bar span { display: block; height: 100%; border-radius: inherit; background: var(--moss); }
+.stage-timeline__time { font-family: var(--font-mono); color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .stage-timeline li { animation: rise-in 0.36s ease-out both; }
+  .stage-timeline__bar span { transform-origin: left; animation: timeline-grow 0.5s ease-out both; animation-delay: inherit; }
+  .run-now li { animation: rise-in 0.22s ease-out both; }
+}
+@keyframes timeline-grow { from { transform: scaleX(0); } }

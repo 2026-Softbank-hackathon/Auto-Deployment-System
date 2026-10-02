@@ -28,6 +28,7 @@ describe.skipIf(!databaseUrl)("Verify → Origin: isolated PostgreSQL + HTTP", (
     for (const file of [
       "001_initial.sql", "002_health_check_attempts.sql", "003_verify_job_idempotency.sql",
       "004_secrets_environments.sql", "006_deployment_environments.sql", "009_onprem_agent_jobs.sql",
+      "012_health_check_attempt_phase.sql",
     ]) {
       await pool.query(await readFile(new URL(`../../../packages/db/migrations/${file}`, import.meta.url), "utf8"));
     }
@@ -90,21 +91,53 @@ describe.skipIf(!databaseUrl)("Verify → Origin: isolated PostgreSQL + HTTP", (
     const calls: string[] = [];
     const cf = {
       ensureNamedTunnel: vi.fn(async () => ({ id: "tunnel-test", name: "test", endpoint: "tunnel-test.cfargotunnel.com" })),
+      getCname: vi.fn(async () => null),
+      deleteCname: vi.fn(async () => undefined),
+      removeTunnelOrigin: vi.fn(async () => undefined),
       setTunnelOrigin: vi.fn(async (input: { serviceUrl: string }) => {
-        const saved = await pool.query("SELECT status FROM deployment_steps WHERE job_id = $1", [payload.jobId]);
-        expect(saved.rows[0].status).toBe("succeeded");
+        const saved = await pool.query(
+          "SELECT status, message FROM deployment_steps WHERE job_id = $1",
+          [payload.jobId],
+        );
+        expect(saved.rows[0].status).toBe("running");
+        expect(JSON.parse(saved.rows[0].message).phase).toBe("origin_switching");
         expect(input.serviceUrl).toBe(localBase);
         calls.push("ingress");
+        return { previousServiceUrl: null };
       }),
       switchServiceOrigin: vi.fn().mockRejectedValueOnce(new Error("fake provider failure")).mockImplementation(async (input) => {
         expect(input.serviceHostname).toBe(`service-${projectId}.example.com`);
         calls.push("dns");
+        return {
+          id: "dns-service",
+          name: input.serviceHostname,
+          content: input.originHostname,
+          proxied: true,
+        };
       }),
     };
     const waitUntilResolvable = vi.fn(async () => true);
-    const deps = { pool, dnsActivationChecker: { waitUntilResolvable }, originActivator: new DeploymentOriginActivator(pool, {
-      cloudflare: cf, zoneId: "test-zone", platformDomain: "example.com",
-    }) } as unknown as WorkerDeps;
+    const deps = {
+      pool,
+      dnsActivationChecker: { waitUntilResolvable },
+      originActivator: new DeploymentOriginActivator(pool, {
+        cloudflare: cf, zoneId: "test-zone", platformDomain: "example.com",
+      }),
+      finalUrlVerifier: {
+        verify: vi.fn(async () => ({
+          deploymentId: payload.deploymentId,
+          environmentId: payload.environmentId,
+          status: "passed" as const,
+          targetUrl: `https://service-${projectId}.example.com/health`,
+          checks: [],
+          consecutivePassed: 3,
+          requiredPasses: 3 as const,
+          startedAt: "2026-10-02T00:00:00.000Z",
+          finishedAt: "2026-10-02T00:00:01.000Z",
+          durationMs: 1_000,
+        })),
+      },
+    } as unknown as WorkerDeps;
     await expect(runVerifyJob({ data: payload }, deps, { sleep: async () => undefined })).rejects.toThrow("ORIGIN_CLOUDFLARE_FAILED");
     expect(waitUntilResolvable).toHaveBeenCalledWith(new URL(payload.targetUrl).hostname, undefined);
     healthStatus = 503;

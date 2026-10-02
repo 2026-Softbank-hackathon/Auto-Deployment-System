@@ -19,6 +19,7 @@ import type { RegistrySession } from "./docker-registry-session.js";
 import type { TerraformBackendConfig, TerraformCli } from "./terraform-cli.js";
 import type { DeploymentOriginActivator } from "./origin-activation.js";
 import type { PublicDnsActivationChecker } from "./public-dns-activation.js";
+import type { FinalUrlVerifier } from "./final-url-verifier.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -40,7 +41,8 @@ export type WorkerDeps = {
   terraformModuleRoot?: string;
   originActivator?: Pick<
     DeploymentOriginActivator,
-    "activate" | "prepareOnpremVerification"
+    "activate" | "prepareOnpremVerification" | "rollback"
   >;
+  finalUrlVerifier?: Pick<FinalUrlVerifier, "verify">;
   dnsActivationChecker?: Pick<PublicDnsActivationChecker, "waitUntilResolvable">;
 };

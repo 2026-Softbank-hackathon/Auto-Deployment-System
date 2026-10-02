@@ -33,7 +33,12 @@ describe("GET /api/v1/deployments/:id/health", () => {
       rows: [{ id: 42, status: "verifying", public_url: "https://example.com" }],
     }));
     pool.on(/FROM deployment_steps/, () => ({
-      rows: [{ id: 10, status: "running", step_name: "verify" }],
+      rows: [{
+        id: 10,
+        status: "running",
+        step_name: "verify",
+        message: JSON.stringify({ phase: "public_url", targetUrl: "https://service-42.example.com/health" }),
+      }],
     }));
     pool.on(/FROM health_check_attempts/, () => ({
       rows: [
@@ -59,6 +64,7 @@ describe("GET /api/v1/deployments/:id/health", () => {
     expect(response.json()).toEqual({
       deploymentId: "42",
       status: "checking",
+      phase: "public_url",
       checks: [
         {
           attempt: 1,
@@ -70,7 +76,7 @@ describe("GET /api/v1/deployments/:id/health", () => {
       ],
       consecutivePassed: 1,
       requiredPasses: 3,
-      targetUrl: "https://example.com/health",
+      targetUrl: "https://service-42.example.com/health",
     });
   });
 

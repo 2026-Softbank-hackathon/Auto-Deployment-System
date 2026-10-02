@@ -74,7 +74,7 @@ export type TunnelManager = {
     tunnelId: string;
     hostname: string;
     serviceUrl: string;
-  }): Promise<void>;
+  }): Promise<unknown>;
   ensureCname(input: {
     zoneId: string;
     hostname: string;

@@ -422,7 +422,9 @@ describe("deployments 응답 계약", () => {
 
   it("GET /deployments/:id/health — 선택 필드 있음 · 없음", async () => {
     pool.on(/FROM deployments/, () => ({ rows: [{ id: 42, status: "verifying", public_url: "https://example.com" }] }));
-    pool.on(/FROM deployment_steps/, () => ({ rows: [{ id: 10, status: "running", message: null }] }));
+    pool.on(/FROM deployment_steps/, () => ({
+      rows: [{ id: 10, status: "running", message: JSON.stringify({ phase: "target" }) }],
+    }));
     pool.on(/FROM health_check_attempts/, () => ({
       rows: [
         { attempt: 1, checked_at: NOW, status_code: null, latency_ms: 3000, passed: false, error_code: "TIMEOUT", error_message: null },

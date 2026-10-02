@@ -210,6 +210,7 @@ export const DeploymentHealthSchema = z
   .object({
     deploymentId: IdStringSchema,
     status: z.enum(["checking", "passed", "failed"]),
+    phase: z.enum(["target", "origin_switching", "public_url"]).optional(),
     checks: z.array(HealthCheckSchema),
     consecutivePassed: z.number().int(),
     requiredPasses: z.literal(3),

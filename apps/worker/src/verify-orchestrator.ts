@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Pool } from "@camellia/db";
 import type { WorkerDeps } from "./deps.js";
 import { transitionTo } from "./state-machine.js";
+import type { OriginActivationReceipt } from "./origin-activation.js";
 import {
   buildHealthUrl,
   handleVerify,
@@ -9,13 +10,26 @@ import {
   type VerifyJobPayload,
   type VerifyResult,
   type VerifyRuntime,
+  REQUIRED_PASSES,
   VerifyJobPayloadSchema,
   VerifyResultSchema,
 } from "./handlers/verify.js";
 
 type VerifyStepClaim =
   | { owned: true; stepId: number }
-  | { owned: false; stepId: number; result: VerifyResult };
+  | {
+      owned: false;
+      stepId: number;
+      result: VerifyResult;
+      phase: VerificationPhase;
+      completed: boolean;
+      activation?: OriginActivationReceipt;
+    };
+
+export type VerificationAttemptPhase = "target" | "public_url";
+export type VerificationPhase =
+  | VerificationAttemptPhase
+  | "origin_switching";
 
 type ExistingVerifyStep = {
   id: string | number;
@@ -51,50 +65,198 @@ export async function runVerifyJob(
 
   const validJob = { data: validated.data };
   const claim = await claimVerifyStep(deps.pool, validJob.data);
-  if (!claim.owned) {
-    if (claim.result.status === "passed") {
-      await deps.originActivator?.activate(validJob.data);
-    }
+  if (!claim.owned && claim.completed) {
+    await resumeCompletedVerify(deps, validJob.data.deploymentId, claim);
     return claim.result;
   }
-  const { stepId } = claim;
+  const stepId = claim.stepId;
 
-  let result: VerifyResult;
-  try {
-    result = await handleVerify(validJob, deps, {
-      ...runtime,
-      onAttempt: (attempt) =>
-        persistHealthCheckAttempt(
-          deps.pool,
-          stepId,
-          validJob.data.environmentId,
-          attempt,
+  let targetResult: VerifyResult;
+  if (claim.owned) {
+    try {
+      targetResult = await handleVerify(validJob, deps, {
+        ...runtime,
+        onAttempt: (attempt) =>
+          persistHealthCheckAttempt(
+            deps.pool,
+            stepId,
+            validJob.data.environmentId,
+            attempt,
+            "target",
         ),
-    });
-    await finishVerifyStep(deps.pool, stepId, result, validJob.data);
+      });
+    } catch (error) {
+      await finishVerifyStep(
+        deps.pool,
+        stepId,
+        internalFailureResult(
+          validJob.data,
+          resolveHealthTargetUrl(validJob.data) ?? "",
+        ),
+        validJob.data,
+        { phase: "target" },
+      );
+      await finalizeDeploymentState(
+        deps,
+        validJob.data.deploymentId,
+        "failed",
+        "verify_internal_error",
+      );
+      throw error;
+    }
+    if (targetResult.status === "failed") {
+      await finishVerifyStep(
+        deps.pool,
+        stepId,
+        targetResult,
+        validJob.data,
+        { phase: "target" },
+      );
+      await finalizeDeploymentState(
+        deps,
+        validJob.data.deploymentId,
+        "failed",
+        targetResult.failureReason,
+      );
+      return targetResult;
+    }
+    await recordTargetVerifyPassed(
+      deps.pool,
+      stepId,
+      targetResult,
+      validJob.data,
+    );
+  } else {
+    targetResult = claim.result;
+  }
+
+  const originActivator = deps.originActivator;
+  const finalUrlVerifier = deps.finalUrlVerifier;
+  if (!originActivator || !finalUrlVerifier) {
+    throw new Error("VERIFY_ROLLOUT_DEPENDENCY_MISSING");
+  }
+
+  const activation = !claim.owned && claim.activation
+    ? claim.activation
+    : await originActivator.activate(validJob.data);
+  if (!activation) return targetResult;
+
+  await recordPublicUrlPhase(
+    deps.pool,
+    stepId,
+    targetResult,
+    validJob.data,
+    activation,
+  );
+
+  let publicResult: VerifyResult;
+  try {
+    publicResult = await finalUrlVerifier.verify(
+      {
+        deploymentId: validJob.data.deploymentId,
+        environmentId: validJob.data.environmentId,
+        serviceHostname: activation.serviceHostname,
+        health: validJob.data.health,
+      },
+      {
+        ...runtime,
+        onAttempt: (attempt) =>
+          persistHealthCheckAttempt(
+            deps.pool,
+            stepId,
+            validJob.data.environmentId,
+            attempt,
+            "public_url",
+          ),
+      },
+    );
   } catch (error) {
-    await failVerifyStep(deps.pool, stepId, error);
-    // verify 자체 crash → deployment 를 failed 로 전이 + 락 해제 + SSE.
-    await finalizeDeploymentState(
+    const internalResult = internalFailureResult(
+      validJob.data,
+      buildHealthUrl(
+        `https://${activation.serviceHostname}`,
+        validJob.data.health.path,
+      ),
+    );
+    await finishVerifyStep(
+      deps.pool,
+      stepId,
+      internalResult,
+      validJob.data,
+      { phase: "public_url", targetResult, activation },
+    );
+    const restored = await rollbackOrigin(
       deps,
       validJob.data.deploymentId,
-      "failed",
-      "verify_internal_error",
+      activation,
+      internalResult.failureReason,
     );
+    if (!restored) throw new Error("ORIGIN_ROLLBACK_FAILED", { cause: error });
     throw error;
   }
-  // Keep the successful health result for retries if Cloudflare activation fails.
-  if (result.status === "passed") {
-    await deps.originActivator?.activate(validJob.data);
+
+  await finishVerifyStep(
+    deps.pool,
+    stepId,
+    publicResult,
+    validJob.data,
+    { phase: "public_url", targetResult, activation },
+  );
+  if (publicResult.status === "failed") {
+    const restored = await rollbackOrigin(
+      deps,
+      validJob.data.deploymentId,
+      activation,
+      publicResult.failureReason,
+    );
+    if (!restored) throw new Error("ORIGIN_ROLLBACK_FAILED");
+    return publicResult;
   }
-  // Verify 결과를 deployment 레벨로 반영 (verifying → succeeded/failed) + env_lock 해제 + SSE 알림.
   await finalizeDeploymentState(
     deps,
     validJob.data.deploymentId,
-    result.status === "passed" ? "succeeded" : "failed",
-    result.status === "passed" ? undefined : result.failureReason,
+    "succeeded",
   );
-  return result;
+  return publicResult;
+}
+
+async function resumeCompletedVerify(
+  deps: WorkerDeps,
+  deploymentId: number,
+  claim: Extract<VerifyStepClaim, { owned: false }>,
+): Promise<void> {
+  const current = await deps.pool.query<{ status: string }>(
+    "SELECT status FROM deployments WHERE id = $1",
+    [deploymentId],
+  );
+  const status = current.rows[0]?.status;
+  if (status === "verifying" && claim.result.status === "passed") {
+    await finalizeDeploymentState(deps, deploymentId, "succeeded");
+    return;
+  }
+  if (
+    claim.result.status === "failed" &&
+    claim.phase === "public_url" &&
+    claim.activation &&
+    (status === "verifying" || status === "rollback" || status === "failed")
+  ) {
+    const restored = await rollbackOrigin(
+      deps,
+      deploymentId,
+      claim.activation,
+      claim.result.failureReason,
+    );
+    if (!restored) throw new Error("ORIGIN_ROLLBACK_FAILED");
+    return;
+  }
+  if (status === "verifying" && claim.result.status === "failed") {
+    await finalizeDeploymentState(
+      deps,
+      deploymentId,
+      "failed",
+      claim.result.failureReason,
+    );
+  }
 }
 
 /**
@@ -155,6 +317,7 @@ export async function claimVerifyStep(
     jobId: payload.jobId,
     environmentId: payload.environmentId,
     requestFingerprint,
+    phase: "target",
     ...(targetUrl ? { targetUrl } : {}),
   });
   const inserted = await pool.query<{ id: string | number }>(
@@ -189,12 +352,30 @@ export async function claimVerifyStep(
     throw new VerifyJobConflictError(payload.jobId);
   }
 
+  const phase = readVerificationPhase(existing.message);
   const storedResult = parseStoredResult(existing.message);
+  const targetResult = parseStoredTargetResult(existing.message);
+  const activation = parseStoredActivation(existing.message);
   if (storedResult) {
     return {
       owned: false,
       stepId: Number(existing.id),
       result: storedResult,
+      phase,
+      completed:
+        existing.status === "failed" ||
+        (phase === "public_url" && existing.status === "succeeded"),
+      ...(activation ? { activation } : {}),
+    };
+  }
+  if (targetResult?.status === "passed") {
+    return {
+      owned: false,
+      stepId: Number(existing.id),
+      result: targetResult,
+      phase,
+      completed: false,
+      ...(activation ? { activation } : {}),
     };
   }
   if (existing.status === "running") {
@@ -232,13 +413,14 @@ export async function persistHealthCheckAttempt(
   deploymentStepId: number,
   environmentId: string,
   check: HealthCheckAttempt,
+  phase: VerificationAttemptPhase = "target",
 ): Promise<void> {
   await pool.query(
     `INSERT INTO health_check_attempts(
-       deployment_step_id, environment_id, attempt, checked_at,
+       deployment_step_id, environment_id, phase, attempt, checked_at,
        status_code, latency_ms, passed, error_code, error_message
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     ON CONFLICT (deployment_step_id, environment_id, attempt)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     ON CONFLICT (deployment_step_id, environment_id, phase, attempt)
      DO UPDATE SET
        checked_at = EXCLUDED.checked_at,
        status_code = EXCLUDED.status_code,
@@ -249,6 +431,7 @@ export async function persistHealthCheckAttempt(
     [
       deploymentStepId,
       environmentId,
+      phase,
       check.attempt,
       new Date(check.timestamp),
       check.statusCode ?? null,
@@ -265,6 +448,11 @@ export async function finishVerifyStep(
   deploymentStepId: number,
   result: VerifyResult,
   payload?: VerifyJobPayload,
+  details: {
+    phase?: VerificationPhase;
+    targetResult?: VerifyResult;
+    activation?: OriginActivationReceipt;
+  } = {},
 ): Promise<void> {
   await pool.query(
     `UPDATE deployment_steps
@@ -279,7 +467,10 @@ export async function finishVerifyStep(
       result.durationMs,
       JSON.stringify({
         ...result,
+        phase: details.phase ?? "target",
         targetUrl: sanitizeTargetUrl(result.targetUrl),
+        ...(details.targetResult ? { targetResult: details.targetResult } : {}),
+        ...(details.activation ? { activation: details.activation } : {}),
         ...(payload
           ? {
               jobId: payload.jobId,
@@ -292,20 +483,110 @@ export async function finishVerifyStep(
   );
 }
 
-async function failVerifyStep(
+async function recordTargetVerifyPassed(
   pool: Pool,
   deploymentStepId: number,
-  _error: unknown,
+  result: VerifyResult,
+  payload: VerifyJobPayload,
 ): Promise<void> {
   await pool.query(
     `UPDATE deployment_steps
-     SET status = 'failed',
-         finished_at = NOW(),
-         duration_ms = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::INTEGER),
-         message = $1
-     WHERE id = $2`,
-    ["verify_internal_error", deploymentStepId],
+     SET message = $1
+     WHERE id = $2 AND status = 'running'`,
+    [
+      JSON.stringify({
+        jobId: payload.jobId,
+        environmentId: payload.environmentId,
+        requestFingerprint: createVerifyRequestFingerprint(payload),
+        phase: "origin_switching",
+        targetUrl: sanitizeTargetUrl(result.targetUrl),
+        targetResult: result,
+      }),
+      deploymentStepId,
+    ],
   );
+}
+
+async function recordPublicUrlPhase(
+  pool: Pool,
+  deploymentStepId: number,
+  targetResult: VerifyResult,
+  payload: VerifyJobPayload,
+  activation: OriginActivationReceipt,
+): Promise<void> {
+  const targetUrl = buildHealthUrl(
+    `https://${activation.serviceHostname}`,
+    payload.health.path,
+  );
+  await pool.query(
+    `UPDATE deployment_steps
+     SET message = $1
+     WHERE id = $2 AND status = 'running'`,
+    [
+      JSON.stringify({
+        jobId: payload.jobId,
+        environmentId: payload.environmentId,
+        requestFingerprint: createVerifyRequestFingerprint(payload),
+        phase: "public_url",
+        targetUrl,
+        targetResult,
+        activation,
+      }),
+      deploymentStepId,
+    ],
+  );
+}
+
+async function rollbackOrigin(
+  deps: WorkerDeps,
+  deploymentId: number,
+  activation: OriginActivationReceipt,
+  reason = "final_url_verification_failed",
+): Promise<boolean> {
+  try {
+    await transitionTo(deps.pool, deploymentId, "rollback", { reason });
+    await deps.notifier?.notify(deploymentId, "state_changed", {
+      status: "rollback",
+    });
+  } catch (error) {
+    deps.log?.warn(
+      { deployment_id: deploymentId, err: error },
+      "verify rollback: rollback state transition skipped",
+    );
+  }
+
+  try {
+    await deps.originActivator?.rollback(activation);
+  } catch (error) {
+    deps.log?.warn(
+      { deployment_id: deploymentId, err: error },
+      "verify rollback: origin restore failed",
+    );
+    return false;
+  }
+
+  await finalizeDeploymentState(deps, deploymentId, "failed", reason);
+  return true;
+}
+
+function internalFailureResult(
+  payload: Pick<VerifyJobPayload, "deploymentId" | "environmentId">,
+  targetUrl: string,
+): VerifyResult {
+  const timestamp = new Date().toISOString();
+  return {
+    deploymentId: payload.deploymentId,
+    environmentId: payload.environmentId,
+    status: "failed",
+    targetUrl,
+    checks: [],
+    consecutivePassed: 0,
+    requiredPasses: REQUIRED_PASSES,
+    startedAt: timestamp,
+    finishedAt: timestamp,
+    durationMs: 0,
+    failureReason: "verify_internal_error",
+  };
 }
 
 function toErrorCode(error?: string): string | null {
@@ -330,6 +611,90 @@ function parseStoredResult(message: string | null): VerifyResult | null {
     const parsed: unknown = JSON.parse(message);
     const result = VerifyResultSchema.safeParse(parsed);
     return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseStoredTargetResult(message: string | null): VerifyResult | null {
+  const parsed = parseMessageObject(message);
+  if (!parsed) return null;
+  const result = VerifyResultSchema.safeParse(Reflect.get(parsed, "targetResult"));
+  return result.success ? result.data : null;
+}
+
+function readVerificationPhase(message: string | null): VerificationPhase {
+  const parsed = parseMessageObject(message);
+  if (!parsed) return "target";
+  const phase = Reflect.get(parsed, "phase");
+  return phase === "target" ||
+      phase === "origin_switching" ||
+      phase === "public_url"
+    ? phase
+    : "target";
+}
+
+function parseStoredActivation(
+  message: string | null,
+): OriginActivationReceipt | null {
+  const parsed = parseMessageObject(message);
+  if (!parsed) return null;
+  const activation = Reflect.get(parsed, "activation");
+  if (!activation || typeof activation !== "object" || Array.isArray(activation)) {
+    return null;
+  }
+  const serviceHostname = Reflect.get(activation, "serviceHostname");
+  const activatedOrigin = Reflect.get(activation, "activatedOrigin");
+  const previousOrigin = Reflect.get(activation, "previousOrigin");
+  const tunnelIngress = Reflect.get(activation, "tunnelIngress");
+  if (typeof serviceHostname !== "string" || typeof activatedOrigin !== "string") {
+    return null;
+  }
+  if (!isPreviousOrigin(previousOrigin) || !isTunnelIngress(tunnelIngress)) {
+    return null;
+  }
+  return {
+    serviceHostname,
+    activatedOrigin,
+    previousOrigin,
+    tunnelIngress,
+  };
+}
+
+function isPreviousOrigin(
+  value: unknown,
+): value is OriginActivationReceipt["previousOrigin"] {
+  if (value === null) return true;
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof Reflect.get(value, "hostname") === "string" &&
+      typeof Reflect.get(value, "proxied") === "boolean",
+  );
+}
+
+function isTunnelIngress(
+  value: unknown,
+): value is OriginActivationReceipt["tunnelIngress"] {
+  if (value === null) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const previousServiceUrl = Reflect.get(value, "previousServiceUrl");
+  return (
+    typeof Reflect.get(value, "tunnelId") === "string" &&
+    typeof Reflect.get(value, "hostname") === "string" &&
+    typeof Reflect.get(value, "activatedServiceUrl") === "string" &&
+    (previousServiceUrl === null || typeof previousServiceUrl === "string")
+  );
+}
+
+function parseMessageObject(message: string | null): object | null {
+  if (!message) return null;
+  try {
+    const parsed: unknown = JSON.parse(message);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
   } catch {
     return null;
   }

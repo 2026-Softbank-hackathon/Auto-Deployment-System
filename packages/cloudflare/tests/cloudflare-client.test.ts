@@ -140,6 +140,49 @@ describe("CloudflareClient", () => {
     });
   });
 
+  it("복구 준비를 위해 기존 CNAME을 조회한다", async () => {
+    const fetcher = vi.fn(async () => apiResponse([
+      {
+        id: "dns-1",
+        type: "CNAME",
+        name: "service-42.example.com",
+        content: "old-origin.example.net",
+        proxied: true,
+      },
+    ]));
+    const client = new CloudflareClient({ ...options, fetcher });
+
+    await expect(client.getCname({
+      zoneId: "zone-1",
+      hostname: "service-42.example.com",
+    })).resolves.toMatchObject({ content: "old-origin.example.net" });
+  });
+
+  it("현재 target이 예상값일 때만 신규 CNAME을 삭제한다", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(apiResponse([
+        {
+          id: "dns-new",
+          type: "CNAME",
+          name: "service-42.example.com",
+          content: "new-origin.example.net",
+          proxied: true,
+        },
+      ]))
+      .mockResolvedValueOnce(apiResponse({ id: "dns-new" }));
+    const client = new CloudflareClient({ ...options, fetcher });
+
+    await client.deleteCname({
+      zoneId: "zone-1",
+      hostname: "service-42.example.com",
+      expectedTarget: "new-origin.example.net",
+    });
+
+    const deleteRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
+    expect(deleteRequest[1].method).toBe("DELETE");
+    expect(deleteRequest[0]).toContain("/dns_records/dns-new");
+  });
+
   it("CNAME이 없으면 자동 TTL과 Cloudflare proxy로 생성한다", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(apiResponse([]))
@@ -202,11 +245,11 @@ describe("CloudflareClient", () => {
       .mockResolvedValueOnce(apiResponse({ id: "ok" }));
     const client = new CloudflareClient({ ...options, fetcher });
 
-    await client.setTunnelOrigin({
+    await expect(client.setTunnelOrigin({
       tunnelId: "tunnel-1",
       hostname: "service-42.example.com",
       serviceUrl: "http://localhost:49152",
-    });
+    })).resolves.toEqual({ previousServiceUrl: "http://localhost:3000" });
     const updateRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
     expect(JSON.parse(String(updateRequest[1].body))).toEqual({
       config: {
@@ -216,6 +259,31 @@ describe("CloudflareClient", () => {
           { service: "http_status:404" },
         ],
       },
+    });
+  });
+
+  it("신규로 추가한 Tunnel ingress를 보상 삭제한다", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(apiResponse({
+        config: {
+          ingress: [
+            { hostname: "service-42.example.com", service: "http://localhost:49152" },
+            { service: "http_status:404" },
+          ],
+        },
+      }))
+      .mockResolvedValueOnce(apiResponse({ id: "ok" }));
+    const client = new CloudflareClient({ ...options, fetcher });
+
+    await client.removeTunnelOrigin({
+      tunnelId: "tunnel-1",
+      hostname: "service-42.example.com",
+      expectedServiceUrl: "http://localhost:49152",
+    });
+
+    const updateRequest = fetcher.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(updateRequest[1].body))).toEqual({
+      config: { ingress: [{ service: "http_status:404" }] },
     });
   });
 

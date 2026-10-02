@@ -222,6 +222,70 @@ describe.skipIf(!databaseUrl)("공용 연결 (#215): isolated PostgreSQL", () =>
         code: "CONFLICT",
       });
     });
+
+    it("기본 연결을 지우면 같은 범위 · 종류에서 가장 오래된 연결이 기본이 된다 (#228)", async () => {
+      const projectId = await project();
+      const a = await sharedAws("aws-a");
+      await sharedAws("aws-b");
+      await sharedAws("aws-c");
+      await sharedOnprem("mac-a");
+      const own = await environments.create({
+        projectId,
+        name: "own-aws",
+        type: "aws",
+        awsConfig: { credentialsType: "assume_role", roleArn: "arn", externalId: "e", region: "ap-northeast-2" },
+      });
+
+      await environments.delete(Number(a.id));
+      const defaults = async () =>
+        (await environments.list({})).filter((e) => e.isDefault).map((e) => e.name);
+      expect(await defaults()).toEqual(["aws-b", "mac-a"]);
+      // 다른 범위(프로젝트 연결)는 건드리지 않는다
+      expect((await environments.get(Number(own.id))).isDefault).toBe(true);
+
+      // 기본이 아닌 연결을 지우면 기본은 그대로
+      const c = (await environments.list({})).find((e) => e.name === "aws-c")!;
+      await environments.delete(Number(c.id));
+      expect(await defaults()).toEqual(["aws-b", "mac-a"]);
+
+      // 프로젝트 연결도 같은 규칙, 마지막 하나를 지우면 기본이 없어진다
+      const own2 = await environments.create({
+        projectId,
+        name: "own-aws-2",
+        type: "aws",
+        awsConfig: { credentialsType: "assume_role", roleArn: "arn", externalId: "e", region: "ap-northeast-2" },
+      });
+      await environments.delete(Number(own.id));
+      expect((await environments.get(Number(own2.id))).isDefault).toBe(true);
+      await environments.delete(Number(own2.id));
+      expect(await environments.list({ projectId })).toEqual([]);
+    });
+
+    it("setDefault 는 같은 범위 · 종류의 기본을 하나로 바꾼다 (#228)", async () => {
+      const projectId = await project();
+      await sharedAws("aws-a");
+      const b = await sharedAws("aws-b");
+      await sharedOnprem("mac-a");
+      const own = await environments.create({
+        projectId,
+        name: "own-aws",
+        type: "aws",
+        awsConfig: { credentialsType: "assume_role", roleArn: "arn", externalId: "e", region: "ap-northeast-2" },
+      });
+
+      const updated = await environments.setDefault(Number(b.id));
+      expect(updated).toMatchObject({ name: "aws-b", isDefault: true, shared: true });
+      expect((await environments.list({})).map((e) => [e.name, e.isDefault])).toEqual([
+        ["aws-a", false],
+        ["aws-b", true],
+        ["mac-a", true],
+      ]);
+      expect((await environments.get(Number(own.id))).isDefault).toBe(true);
+
+      // 이미 기본이어도 그대로 성공
+      await expect(environments.setDefault(Number(b.id))).resolves.toMatchObject({ isDefault: true });
+      await expect(environments.setDefault(99999)).rejects.toMatchObject({ statusCode: 404 });
+    });
   });
 
   describe("배포 생성 시 연결 고르기", () => {
@@ -264,6 +328,21 @@ describe.skipIf(!databaseUrl)("공용 연결 (#215): isolated PostgreSQL", () =>
         registry_environment_id: String(aws.id),
         target_profile: "onprem-docker-basic",
       });
+    });
+
+    it("공용 기본 AWS 를 지워도 남은 공용 AWS 가 On-Prem 레지스트리가 된다 (#228)", async () => {
+      const projectId = await project();
+      const old = await sharedAws("aws-old");
+      const next = await sharedAws("aws-next");
+      await sharedOnprem();
+
+      await environments.delete(Number(old.id));
+      const toMac = await deployments.create({
+        projectId,
+        targetVendor: "onprem",
+        fileBuffer: Buffer.from("zip"),
+      });
+      expect((await createdEnvironments(toMac.deploymentId)).registry_environment_id).toBe(String(next.id));
     });
 
     it("프로젝트 기본 연결이 있으면 공용보다 먼저 쓴다", async () => {

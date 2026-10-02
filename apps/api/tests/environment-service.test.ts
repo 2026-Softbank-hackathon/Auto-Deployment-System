@@ -6,6 +6,7 @@
  * - onprem 정상
  * - 이름 중복 409
  * - 진행 중 배포 있으면 delete 409
+ * - 기본 연결 삭제 시 승계 · 기본 연결 변경 (#228)
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -204,6 +205,29 @@ describe("EnvironmentService.list / get — agentRegistrationToken 노출 제거
 });
 
 describe("EnvironmentService.delete", () => {
+  /** 지울 연결 조회 · DELETE 결과를 정해 두고 실행한 SQL 을 모은다 */
+  function deletePool(opts: {
+    env?: { project_id: number | null; type: "aws" | "onprem" };
+    deleted?: { is_default: boolean };
+    deleteError?: Error;
+  }) {
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = makePool(async (sql, params) => {
+      const s = sql.replace(/\s+/g, " ").trim();
+      calls.push({ sql: s, params });
+      if (s.includes("FROM deployments")) return { rows: [], rowCount: 0 };
+      if (s.startsWith("SELECT project_id, type FROM environments")) {
+        return opts.env ? { rows: [opts.env], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      if (s.startsWith("DELETE FROM environments")) {
+        if (opts.deleteError) throw opts.deleteError;
+        return opts.deleted ? { rows: [opts.deleted], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    return { pool, calls };
+  }
+
   it("진행 중 배포 있으면 409", async () => {
     const pool = makePool(async (sql) => {
       if (sql.includes("FROM deployments")) return { rows: [{ 1: 1 }], rowCount: 1 };
@@ -213,40 +237,102 @@ describe("EnvironmentService.delete", () => {
     await expect(svc.delete(10)).rejects.toMatchObject({ statusCode: 409, code: "CONFLICT" });
   });
 
-  it("진행 중 없고 row 삭제되면 성공", async () => {
-    const pool = makePool(async (sql) => {
-      if (sql.includes("FROM deployments")) return { rows: [], rowCount: 0 };
-      if (sql.startsWith("DELETE FROM environments")) return { rows: [], rowCount: 1 };
-      return { rows: [], rowCount: 0 };
+  it("기본 연결이 아니면 지우기만 하고 기본 연결은 그대로 둔다", async () => {
+    const { pool, calls } = deletePool({
+      env: { project_id: 1, type: "aws" },
+      deleted: { is_default: false },
     });
-    const svc = new EnvironmentService(pool);
-    await expect(svc.delete(10)).resolves.toBeUndefined();
+    await expect(new EnvironmentService(pool).delete(10)).resolves.toBeUndefined();
+    expect(calls.some((c) => c.sql.includes("SET is_default = TRUE"))).toBe(false);
+    expect(calls.at(-1)!.sql).toBe("COMMIT");
+  });
+
+  it("기본 연결을 지우면 같은 소유 범위 · 종류에서 가장 오래된 연결을 기본으로 올린다 (#228)", async () => {
+    const { pool, calls } = deletePool({
+      env: { project_id: null, type: "aws" },
+      deleted: { is_default: true },
+    });
+    await new EnvironmentService(pool).delete(10);
+
+    expect(calls.find((c) => c.sql.includes("pg_advisory_xact_lock"))!.params).toEqual(["shared:aws"]);
+    const promote = calls.find((c) => c.sql.includes("SET is_default = TRUE"))!;
+    expect(promote.sql).toContain("project_id IS NOT DISTINCT FROM $1::bigint AND type = $2");
+    expect(promote.sql).toContain("ORDER BY created_at, id LIMIT 1");
+    expect(promote.params).toEqual([null, "aws"]);
+    // 삭제와 승계는 한 트랜잭션
+    const sqls = calls.map((c) => c.sql);
+    expect(sqls.indexOf("BEGIN")).toBeLessThan(sqls.findIndex((s) => s.startsWith("DELETE")));
+    expect(sqls.indexOf("COMMIT")).toBeGreaterThan(sqls.indexOf(promote.sql));
   });
 
   it("환경 없으면 404", async () => {
-    const pool = makePool(async (sql) => {
-      if (sql.includes("FROM deployments")) return { rows: [], rowCount: 0 };
-      if (sql.startsWith("DELETE FROM environments")) return { rows: [], rowCount: 0 };
-      return { rows: [], rowCount: 0 };
-    });
-    const svc = new EnvironmentService(pool);
-    await expect(svc.delete(999)).rejects.toMatchObject({ statusCode: 404 });
+    const { pool, calls } = deletePool({});
+    await expect(new EnvironmentService(pool).delete(999)).rejects.toMatchObject({ statusCode: 404 });
+    expect(calls.at(-1)!.sql).toBe("ROLLBACK");
   });
 
   it("배포 기록이 참조 중이면(FK RESTRICT) 500 대신 409 (#215)", async () => {
-    const pool = makePool(async (sql) => {
-      if (sql.includes("FROM deployments")) return { rows: [], rowCount: 0 };
-      if (sql.startsWith("DELETE FROM environments")) {
-        throw Object.assign(new Error("violates foreign key constraint"), { code: "23503" });
-      }
-      return { rows: [], rowCount: 0 };
+    const { pool, calls } = deletePool({
+      env: { project_id: 1, type: "aws" },
+      deleteError: Object.assign(new Error("violates foreign key constraint"), { code: "23503" }),
     });
-    const svc = new EnvironmentService(pool);
-    await expect(svc.delete(10)).rejects.toMatchObject({
+    await expect(new EnvironmentService(pool).delete(10)).rejects.toMatchObject({
       statusCode: 409,
       code: "CONFLICT",
       message: expect.stringContaining("배포한 기록"),
     });
+    expect(calls.at(-1)!.sql).toBe("ROLLBACK");
+  });
+});
+
+describe("EnvironmentService.setDefault (#228)", () => {
+  it("같은 소유 범위 · 종류의 기존 기본을 먼저 풀고 이 연결을 기본으로 한 뒤 조회 결과를 돌려준다", async () => {
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const pool = makePool(async (sql, params) => {
+      const s = sql.replace(/\s+/g, " ").trim();
+      calls.push({ sql: s, params });
+      if (s.startsWith("SELECT project_id, type FROM environments")) {
+        return { rows: [{ project_id: 5, type: "onprem" }], rowCount: 1 };
+      }
+      if (s.includes("LEFT JOIN agents")) {
+        return {
+          rows: [
+            {
+              id: 11,
+              project_id: 5,
+              name: "mac",
+              type: "onprem",
+              is_default: true,
+              aws_config: null,
+              onprem_config: { agentRegistrationToken: "t", hostname: "h" },
+              agent_status: null,
+              last_seen_at: null,
+              created_at: new Date("2026-10-01T00:00:00Z"),
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    const dto = await new EnvironmentService(pool).setDefault(11);
+
+    expect(dto).toMatchObject({ id: 11, isDefault: true, onpremConfig: { hostname: "h" } });
+    expect(calls.find((c) => c.sql.includes("pg_advisory_xact_lock"))!.params).toEqual(["5:onprem"]);
+    const sqls = calls.map((c) => c.sql);
+    const unset = sqls.findIndex((s) => s.includes("SET is_default = FALSE"));
+    const set = sqls.findIndex((s) => s.includes("SET is_default = TRUE"));
+    expect(unset).toBeGreaterThan(-1);
+    expect(set).toBeGreaterThan(unset);
+    expect(calls[unset]!.params).toEqual([5, "onprem", 11]);
+    expect(calls[set]!.params).toEqual([11]);
+    expect(sqls.indexOf("COMMIT")).toBeGreaterThan(set);
+  });
+
+  it("환경 없으면 404", async () => {
+    const pool = makePool(async () => ({ rows: [], rowCount: 0 }));
+    await expect(new EnvironmentService(pool).setDefault(999)).rejects.toMatchObject({ statusCode: 404 });
   });
 });
 

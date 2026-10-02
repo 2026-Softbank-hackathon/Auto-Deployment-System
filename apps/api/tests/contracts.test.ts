@@ -630,6 +630,20 @@ describe("environments 응답 계약", () => {
 
     expectContract(EnvironmentSchema, res.json());
   });
+
+  it("PATCH 200 — isDefault: true 로 기본 연결 변경 (#228)", async () => {
+    pool.on(/SELECT project_id, type FROM environments/, () => ({ rows: [{ project_id: null, type: "onprem" }] }));
+    pool.on(/FROM environments/, () => ({ rows: [{ ...envRow, project_id: null }] }));
+
+    const res = await call("PATCH", "/api/v1/environments/10", { isDefault: true });
+    expect(res.statusCode).toBe(200);
+    expectContract(EnvironmentSchema, res.json());
+    expect(res.json()).toMatchObject({ isDefault: true, shared: true });
+
+    const invalid = await call("PATCH", "/api/v1/environments/10", { isDefault: false });
+    expect(invalid.statusCode).toBe(400);
+    expectContract(ErrorBodySchema, invalid.json());
+  });
 });
 
 // ── errors ────────────────────────────────────────────────────────────────────

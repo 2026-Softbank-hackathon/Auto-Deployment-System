@@ -13,7 +13,8 @@ import { useSound } from '../sound/SoundProvider';
 import { DeployScene } from './DeployScene';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
-import { failureKind, fixableByAwsKey } from './failure-reason';
+import { FailureDetail } from './FailureDetail';
+import { failureKind, fixableByAwsKey, parseFailure } from './failure-reason';
 import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { CancelDeployment } from './CancelDeployment';
@@ -220,6 +221,8 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
   const failureMessage = text(status?.error);
   // 서버가 준 실패 코드를 아는 경우에만 안내 문구로 바꾼다. 코드 자체도 함께 보여 준다.
   const failure = failureKind(failureMessage);
+  // 코드와 상세(서버가 붙여 준 오류 원문)를 나눠서, 코드는 한 줄로 · 상세는 접어서 보여 준다.
+  const failureParts = parseFailure(failureMessage);
   const publicUrl = safeHttpUrl(text(status?.publicUrl));
 
   async function loadLogs() {
@@ -288,8 +291,9 @@ export function DeploymentProgress({ deploymentId, onSucceeded, onNewDeployment,
       {view.outcome === 'failed' && <div className="notice error run-failure" role="alert">
         <strong>{t.run.failedCause}</strong>
         {/* 분류하지 못한 코드도 코드만 덩그러니 보이지 않게, 일반 안내 문구 아래에 작게 둔다. */}
-        <p>{failure ? t.run.failureReasons[failure] : failureMessage ? t.run.failureUnknown : t.progress.failedCopy}</p>
-        {failureMessage && <p className="run-failure__code">{t.run.failureCode(failureMessage)}</p>}
+        <p>{failure ? (failureParts.detail ? t.run.failureReasonsWithDetail[failure] : undefined) ?? t.run.failureReasons[failure] : failureMessage ? t.run.failureUnknown : t.progress.failedCopy}</p>
+        {failureParts.code && <p className="run-failure__code">{t.run.failureCode(failureParts.code)}</p>}
+        {failureParts.detail && <FailureDetail detail={failureParts.detail} />}
         <FailureDiagnosis deploymentId={deploymentId} />
         <div className="run-failure__actions">
           {fixableByAwsKey(failure) && onFixSettings && <Keycap onClick={() => onFixSettings(projectId)}>{t.run.fixAwsKey}</Keycap>}

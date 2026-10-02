@@ -531,3 +531,8 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .run-cancel { display: grid; justify-items: center; gap: 8px; }
 .run-cancel__confirm { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink); }
 .run-cancel__error { margin: 0; font-size: 14px; color: var(--brick-text); }
+
+/* 실패 상세 원문 (접어 둠) */
+.run-failure__detail { display: grid; gap: 8px; justify-items: start; text-align: left; }
+.run-failure__detail pre { width: 100%; max-height: 320px; margin: 0; overflow: auto; white-space: pre; font-size: 12px; }
+.run-failure__detail pre:focus-visible { outline: 3px solid var(--koro); outline-offset: 2px; }

@@ -7,7 +7,7 @@ import {
 } from "./handlers/verify.js";
 
 type CloudflareOperations = Pick<CloudflareClient,
-  "deleteCname" | "ensureNamedTunnel" | "ensureCname" | "getCname" |
+  "deleteCname" | "ensureNamedTunnel" | "ensureCname" | "findNamedTunnel" | "getCname" |
   "removeTunnelOrigin" | "setTunnelOrigin" | "switchServiceOrigin">;
 
 export type OriginActivationOptions = {
@@ -199,6 +199,50 @@ export class DeploymentOriginActivator {
       hostname: receipt.serviceHostname,
       expectedTarget: receipt.activatedOrigin,
     }));
+  }
+
+  /**
+   * 앱 삭제 (#247) — 프로젝트 공개 주소(service-{projectId}) CNAME 을 지우고, 온프레미스에 배포한 적이 있으면
+   * 검증용 주소(verify-d{deploymentId}) CNAME 과 프로젝트 Named Tunnel 의 ingress 규칙도 지운다.
+   * best effort: 하나가 실패해도 나머지를 계속하고, 실패한 대상을 돌려준다.
+   * Tunnel 자체는 남긴다 — 온프레미스 cloudflared 가 붙어 있을 수 있고, ingress 가 없으면 외부에서 닿지 않는다.
+   */
+  async removeProjectOrigins(input: {
+    projectId: number;
+    onpremDeploymentIds: number[];
+  }): Promise<string[]> {
+    if (!Number.isSafeInteger(input.projectId) || input.projectId < 1) {
+      throw new OriginActivationError("ORIGIN_PROJECT_INVALID");
+    }
+    const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
+    const serviceHostname = `service-${input.projectId}.${domain}`;
+    const verifyHostnames = input.onpremDeploymentIds.map((id) => `verify-d${id}.${domain}`);
+    const failures: string[] = [];
+
+    for (const hostname of [serviceHostname, ...verifyHostnames]) {
+      try {
+        const record = await cloudflare.getCname({ zoneId, hostname });
+        if (record) {
+          await cloudflare.deleteCname({ zoneId, hostname, expectedTarget: record.content });
+        }
+      } catch {
+        failures.push(`DNS ${hostname}`);
+      }
+    }
+
+    if (verifyHostnames.length > 0) {
+      try {
+        const tunnel = await cloudflare.findNamedTunnel(String(input.projectId));
+        if (tunnel) {
+          for (const hostname of [serviceHostname, ...verifyHostnames]) {
+            await cloudflare.removeTunnelOrigin({ tunnelId: tunnel.id, hostname });
+          }
+        }
+      } catch {
+        failures.push(`Tunnel camellia-service-${input.projectId}`);
+      }
+    }
+    return failures;
   }
 
   private async restoreTunnelIngress(

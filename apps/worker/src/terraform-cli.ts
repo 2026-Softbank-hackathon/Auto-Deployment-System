@@ -61,6 +61,7 @@ export class TerraformCliError extends Error {
       | "TERRAFORM_VALIDATE_FAILED"
       | "TERRAFORM_PLAN_FAILED"
       | "TERRAFORM_APPLY_FAILED"
+      | "TERRAFORM_DESTROY_FAILED"
       | "TERRAFORM_OUTPUT_FAILED"
       | "TERRAFORM_OUTPUT_INVALID",
     readonly detail?: string,
@@ -92,7 +93,7 @@ export type TerraformCliOptions = {
   staleLockBefore?: Date;
 };
 
-/** state 락이 잡혀 있으면 이만큼 기다린다 (plan · apply) */
+/** state 락이 잡혀 있으면 이만큼 기다린다 (plan · apply · destroy) */
 const LOCK_TIMEOUT = "1m";
 
 export class TerraformCli {
@@ -110,6 +111,61 @@ export class TerraformCli {
   }
 
   async apply(request: TerraformCliRequest): Promise<TerraformOutputs> {
+    return this.inWorkspace(request, async (workspace, env) => {
+      await this.run("TERRAFORM_VALIDATE_FAILED", [
+        "validate",
+        "-no-color",
+      ], workspace, env);
+
+      const planPath = path.join(workspace, "tfplan");
+      await this.runReleasingStaleLock("TERRAFORM_PLAN_FAILED", [
+        "plan",
+        "-input=false",
+        "-no-color",
+        `-lock-timeout=${LOCK_TIMEOUT}`,
+        "-var-file=terraform.tfvars.json",
+        `-out=${planPath}`,
+      ], workspace, env, request);
+      await this.run("TERRAFORM_APPLY_FAILED", [
+        "apply",
+        "-input=false",
+        "-no-color",
+        `-lock-timeout=${LOCK_TIMEOUT}`,
+        planPath,
+      ], workspace, env);
+
+      const outputText = await this.run(
+        "TERRAFORM_OUTPUT_FAILED",
+        ["output", "-json"],
+        workspace,
+        env,
+      );
+      return parseTerraformOutputs(outputText);
+    });
+  }
+
+  /**
+   * 앱 삭제 (#247) — apply 와 같은 backend(state key) · 자격 증명으로 state 의 리소스를 모두 지운다.
+   * destroy 는 state 에 있는 리소스를 지우므로 변수 값은 provider region 외에는 결과에 영향이 없다.
+   */
+  async destroy(request: TerraformCliRequest): Promise<void> {
+    await this.inWorkspace(request, async (workspace, env) => {
+      await this.runReleasingStaleLock("TERRAFORM_DESTROY_FAILED", [
+        "destroy",
+        "-auto-approve",
+        "-input=false",
+        "-no-color",
+        `-lock-timeout=${LOCK_TIMEOUT}`,
+        "-var-file=terraform.tfvars.json",
+      ], workspace, env, request);
+    });
+  }
+
+  /** 모듈을 임시 폴더에 복사하고 변수 파일을 쓴 뒤 backend 로 init 한다. 끝나면 임시 폴더를 지운다 */
+  private async inWorkspace<T>(
+    request: TerraformCliRequest,
+    work: (workspace: string, env: NodeJS.ProcessEnv) => Promise<T>,
+  ): Promise<T> {
     validateRequest(request);
 
     const workspace = await fs.mkdtemp(
@@ -143,49 +199,30 @@ export class TerraformCli {
         "-reconfigure",
         ...backendArgs,
       ], workspace, env);
-      await this.run("TERRAFORM_VALIDATE_FAILED", [
-        "validate",
-        "-no-color",
-      ], workspace, env);
-
-      const planPath = path.join(workspace, "tfplan");
-      const planArgs = [
-        "plan",
-        "-input=false",
-        "-no-color",
-        `-lock-timeout=${LOCK_TIMEOUT}`,
-        "-var-file=terraform.tfvars.json",
-        `-out=${planPath}`,
-      ];
-      try {
-        await this.run("TERRAFORM_PLAN_FAILED", planArgs, workspace, env);
-      } catch (error) {
-        // 이전 워커가 apply 도중 죽으면 S3 락 파일이 남는다 → 주인이 죽은 락이면 풀고 한 번 더
-        const lock = error instanceof TerraformCliError ? parseStateLock(error.detail) : null;
-        if (!lock || lock.created >= this.staleLockBefore) throw error;
-        await request.log?.(
-          `이전 워커가 남긴 Terraform state 락(${lock.id}, ${lock.created.toISOString()})을 해제합니다.`,
-        );
-        await this.run("TERRAFORM_PLAN_FAILED", ["force-unlock", "-force", lock.id], workspace, env);
-        await this.run("TERRAFORM_PLAN_FAILED", planArgs, workspace, env);
-      }
-      await this.run("TERRAFORM_APPLY_FAILED", [
-        "apply",
-        "-input=false",
-        "-no-color",
-        `-lock-timeout=${LOCK_TIMEOUT}`,
-        planPath,
-      ], workspace, env);
-
-      const outputText = await this.run(
-        "TERRAFORM_OUTPUT_FAILED",
-        ["output", "-json"],
-        workspace,
-        env,
-      );
-      return parseTerraformOutputs(outputText);
+      return await work(workspace, env);
     } finally {
       await fs.rm(workspace, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  /** 이전 워커가 작업 도중 죽으면 S3 락 파일이 남는다 → 주인이 죽은 락이면 풀고 한 번 더 */
+  private async runReleasingStaleLock(
+    failureCode: ConstructorParameters<typeof TerraformCliError>[0],
+    args: string[],
+    workspace: string,
+    env: NodeJS.ProcessEnv,
+    request: TerraformCliRequest,
+  ): Promise<string> {
+    try {
+      return await this.run(failureCode, args, workspace, env);
+    } catch (error) {
+      const lock = error instanceof TerraformCliError ? parseStateLock(error.detail) : null;
+      if (!lock || lock.created >= this.staleLockBefore) throw error;
+      await request.log?.(
+        `이전 워커가 남긴 Terraform state 락(${lock.id}, ${lock.created.toISOString()})을 해제합니다.`,
+      );
+      await this.run(failureCode, ["force-unlock", "-force", lock.id], workspace, env);
+      return this.run(failureCode, args, workspace, env);
     }
   }
 

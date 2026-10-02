@@ -13,6 +13,7 @@ import { handleProvision, type ProvisionJobPayload } from "./handlers/provision.
 import type { VerifyJobPayload } from "./handlers/verify.js";
 import { runVerifyJob } from "./verify-orchestrator.js";
 import { handleDiagnose, type DiagnoseJobPayload } from "./handlers/diagnose.js";
+import { handleTeardown, type TeardownJobPayload } from "./handlers/teardown.js";
 import { trackActive } from "./shutdown.js";
 
 export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void> {
@@ -26,6 +27,14 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
       const msg = e instanceof Error ? e.message : String(e);
       if (!/already exists|duplicate/i.test(msg)) throw e;
     }
+  }
+  // 앱 삭제 (#247): stately — 프로젝트(singletonKey)마다 대기 1개 · 실행 1개만 둬서
+  // 삭제를 여러 번 눌러도 같은 프로젝트의 destroy 가 겹쳐 돌지 않는다.
+  try {
+    await boss.createQueue("teardown", { name: "teardown", policy: "stately" });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/already exists|duplicate/i.test(msg)) throw e;
   }
 
   await boss.work("analyze", trackActive(async (jobs) => {
@@ -68,6 +77,17 @@ export async function registerAll(boss: PgBoss, deps: WorkerDeps): Promise<void>
         await runVerifyJob(job as { data: VerifyJobPayload }, deps);
       } catch (e) {
         deps.log?.error({ err: e, jobId: job.id }, "verify job failed");
+        throw e;
+      }
+    }
+  }));
+
+  await boss.work("teardown", trackActive(async (jobs) => {
+    for (const job of jobs) {
+      try {
+        await handleTeardown(job as { data: TeardownJobPayload }, deps);
+      } catch (e) {
+        deps.log?.error({ err: e, jobId: job.id }, "teardown job failed");
         throw e;
       }
     }

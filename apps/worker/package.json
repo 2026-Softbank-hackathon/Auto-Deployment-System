@@ -12,8 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@camellia/analyzer": "workspace:*",
+    "@aws-sdk/client-s3": "^3.0.0",
     "@camellia/adapters": "workspace:*",
+    "@camellia/analyzer": "workspace:*",
     "@camellia/aws-registry": "workspace:*",
     "@camellia/build-handler": "workspace:*",
     "@camellia/cloudflare": "workspace:*",

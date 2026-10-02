@@ -27,6 +27,7 @@ import { CloudflareClient } from "@camellia/cloudflare";
 import { DeploymentOriginActivator } from "./origin-activation.js";
 import { PublicDnsActivationChecker } from "./public-dns-activation.js";
 import { FinalUrlVerifier } from "./final-url-verifier.js";
+import { S3TerraformStateStore } from "./terraform-state-store.js";
 
 const log = pino({ name: "worker" });
 
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
     terraformCli,
     terraformBackend: loadTerraformBackendConfig(),
     terraformModuleRoot: path.join(repositoryRoot, "infra/terraform/profiles"),
+    terraformStateStore: new S3TerraformStateStore(),
   };
 
   boss.on("error", (err: unknown) => {

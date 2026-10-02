@@ -29,6 +29,7 @@ import {
   EnvVarListSchema,
   ErrorBodySchema,
   IrVersionSchema,
+  DeleteProjectResponseSchema,
   ProjectDeploymentListSchema,
   ProjectListSchema,
   ProjectSchema,
@@ -111,6 +112,10 @@ function projectSummaryRow(id: number, description: string | null = null, deploy
     latest_status: deployed ? "building" : null,
     latest_environment_type: deployed ? "aws" : null,
     latest_created_at: deployed ? NOW : null,
+    deletion_status: null,
+    deletion_error: null,
+    deletion_requested_at: null,
+    deletion_warnings: [],
   };
 }
 
@@ -172,6 +177,36 @@ describe("projects 응답 계약", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().live.deploymentId).toBe("7");
     expectContract(ProjectSchema, res.json());
+  });
+
+  it("DELETE /projects/:id 202 · 삭제 중인 프로젝트의 deletion (#247)", async () => {
+    pool.on(/FROM projects WHERE id = \$1 FOR UPDATE/, () => ({ rows: [{ id: 1 }] }));
+    pool.on(/onprem_agent_jobs/, () => ({ rows: [{ onprem: true }] }));
+    pool.on(/^UPDATE projects SET deletion_status/, () => ({
+      rows: [{
+        deletion_status: "deleting",
+        deletion_error: null,
+        deletion_requested_at: NOW,
+        deletion_warnings: ["ONPREM_MANUAL_CLEANUP"],
+      }],
+    }));
+    pool.on(/FROM projects p/, () => ({
+      rows: [{
+        ...projectSummaryRow(1),
+        deletion_status: "failed",
+        deletion_error: "TERRAFORM_DESTROY_FAILED",
+        deletion_requested_at: NOW,
+        deletion_warnings: [],
+      }],
+    }));
+
+    const res = await call("DELETE", "/api/v1/projects/1");
+    expect(res.statusCode).toBe(202);
+    expectContract(DeleteProjectResponseSchema, res.json());
+
+    const project = await call("GET", "/api/v1/projects/1");
+    expect(project.json().deletion).toMatchObject({ status: "failed", error: "TERRAFORM_DESTROY_FAILED" });
+    expectContract(ProjectSchema, project.json());
   });
 
   it("GET /projects/:id/deployments — sourceVersion · 환경 있음 · null", async () => {

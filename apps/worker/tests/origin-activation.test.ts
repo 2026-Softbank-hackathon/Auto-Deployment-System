@@ -318,3 +318,73 @@ describe("Verify → Origin 활성화 연결", () => {
     expect(activate).not.toHaveBeenCalled();
   });
 });
+
+describe("DeploymentOriginActivator.removeProjectOrigins (#247 앱 삭제)", () => {
+  function activatorWith(cf: ReturnType<typeof cloudflare> & { findNamedTunnel?: ReturnType<typeof vi.fn> }) {
+    return new DeploymentOriginActivator({ query: vi.fn() } as unknown as Pool, {
+      cloudflare: cf, zoneId: "zone-1", platformDomain: "example.com",
+    });
+  }
+
+  it("AWS 만 쓴 앱 — 공개 주소 CNAME 을 현재 target 그대로 지우고 Tunnel 은 건드리지 않는다", async () => {
+    const cf = { ...cloudflare(), findNamedTunnel: vi.fn(async () => null) };
+
+    const failures = await activatorWith(cf).removeProjectOrigins({ projectId: 4, onpremDeploymentIds: [] });
+
+    expect(failures).toEqual([]);
+    expect(cf.deleteCname).toHaveBeenCalledWith({
+      zoneId: "zone-1", hostname: "service-4.example.com", expectedTarget: "old-origin.example.com",
+    });
+    expect(cf.findNamedTunnel).not.toHaveBeenCalled();
+    expect(cf.removeTunnelOrigin).not.toHaveBeenCalled();
+    expect(cf.ensureNamedTunnel).not.toHaveBeenCalled();
+  });
+
+  it("온프레미스 앱 — 검증용 CNAME 과 프로젝트 Tunnel 의 ingress 규칙(공개 · 검증 주소)도 지운다", async () => {
+    const cf = {
+      ...cloudflare(),
+      findNamedTunnel: vi.fn(async () => ({ id: "tunnel-4", name: "camellia-service-4", endpoint: "tunnel-4.cfargotunnel.com" })),
+    };
+
+    const failures = await activatorWith(cf).removeProjectOrigins({ projectId: 4, onpremDeploymentIds: [42, 43] });
+
+    expect(failures).toEqual([]);
+    expect(cf.deleteCname.mock.calls.map(([input]) => (input as { hostname: string }).hostname)).toEqual([
+      "service-4.example.com", "verify-d42.example.com", "verify-d43.example.com",
+    ]);
+    expect(cf.findNamedTunnel).toHaveBeenCalledWith("4");
+    expect(cf.removeTunnelOrigin.mock.calls.map(([input]) => input)).toEqual([
+      { tunnelId: "tunnel-4", hostname: "service-4.example.com" },
+      { tunnelId: "tunnel-4", hostname: "verify-d42.example.com" },
+      { tunnelId: "tunnel-4", hostname: "verify-d43.example.com" },
+    ]);
+  });
+
+  it("레코드가 없으면 지우지 않고, 실패는 멈추지 않고 모아서 돌려준다 (best effort)", async () => {
+    const cf = {
+      ...cloudflare(),
+      getCname: vi.fn(async (input: { hostname: string }) =>
+        input.hostname.startsWith("verify-d42")
+          ? null
+          : { id: "dns", name: input.hostname, content: "tunnel-4.cfargotunnel.com", proxied: true }),
+      deleteCname: vi.fn(async () => { throw new Error("cloudflare down"); }),
+      findNamedTunnel: vi.fn(async () => { throw new Error("cloudflare down"); }),
+    };
+
+    const failures = await activatorWith(cf).removeProjectOrigins({ projectId: 4, onpremDeploymentIds: [42] });
+
+    expect(cf.deleteCname).toHaveBeenCalledTimes(1);
+    expect(failures).toEqual([
+      "DNS service-4.example.com",
+      "Tunnel camellia-service-4",
+    ]);
+  });
+
+  it("Cloudflare 설정이 없으면 ORIGIN_CONFIGURATION_MISSING", async () => {
+    const activator = new DeploymentOriginActivator({ query: vi.fn() } as unknown as Pool, {});
+
+    await expect(
+      activator.removeProjectOrigins({ projectId: 4, onpremDeploymentIds: [] }),
+    ).rejects.toMatchObject({ code: "ORIGIN_CONFIGURATION_MISSING" });
+  });
+});

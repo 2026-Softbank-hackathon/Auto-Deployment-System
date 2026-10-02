@@ -249,4 +249,68 @@ describe("TerraformCli", () => {
     ).rejects.toBeInstanceOf(TerraformCliError);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it("destroy (#247) — 같은 backend 로 init 한 뒤 destroy -auto-approve 를 state 락 대기와 함께 실행하고 임시 폴더를 지운다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const commands: Array<{ args: string[]; cwd: string; env: NodeJS.ProcessEnv }> = [];
+    let variablesFile = "";
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args, cwd, env }) => {
+      commands.push({ args, cwd, env });
+      if (args[0] === "destroy") {
+        variablesFile = await fs.readFile(path.join(cwd, "terraform.tfvars.json"), "utf8");
+      }
+      return "";
+    });
+
+    await new TerraformCli({ execute }).destroy(makeRequest(moduleDirectory));
+
+    expect(commands.map((c) => c.args[0])).toEqual(["init", "destroy"]);
+    expect(commands[0]!.args).toContain("-backend-config=key=projects/12/environments/34/terraform.tfstate");
+    expect(commands[0]!.args).toContain("-backend-config=use_lockfile=true");
+    expect(commands[1]!.args).toEqual([
+      "destroy",
+      "-auto-approve",
+      "-input=false",
+      "-no-color",
+      "-lock-timeout=1m",
+      "-var-file=terraform.tfvars.json",
+    ]);
+    expect(commands[1]!.env["AWS_ACCESS_KEY_ID"]).toBe("user-access-key");
+    expect(JSON.parse(variablesFile)).toMatchObject({ app_name: "demo-web" });
+    await expect(fs.access(commands[0]!.cwd)).rejects.toThrow();
+  });
+
+  it("destroy 실패는 TERRAFORM_DESTROY_FAILED 와 stderr 상세로 알린다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      if (args[0] === "destroy") {
+        throw new TerraformProcessError("terraform exited with code 1", "Error: DependencyViolation");
+      }
+      return "";
+    });
+
+    await expect(
+      new TerraformCli({ execute }).destroy(makeRequest(moduleDirectory)),
+    ).rejects.toMatchObject({ code: "TERRAFORM_DESTROY_FAILED", detail: "Error: DependencyViolation" });
+  });
+
+  it("destroy 도 워커 시작 전에 남은 state 락은 해제하고 다시 한다", async () => {
+    const moduleDirectory = await createModuleDirectory();
+    const commands: string[][] = [];
+    let destroys = 0;
+    const execute: TerraformCommandExecutor = vi.fn(async ({ args }) => {
+      commands.push(args);
+      if (args[0] === "destroy" && destroys++ === 0) {
+        throw lockError("2026-10-02 05:20:11.123456789 +0000 UTC");
+      }
+      return "";
+    });
+
+    await new TerraformCli({
+      execute,
+      staleLockBefore: new Date("2026-10-02T05:30:00Z"),
+    }).destroy(makeRequest(moduleDirectory));
+
+    expect(commands.map((args) => args[0])).toEqual(["init", "destroy", "force-unlock", "destroy"]);
+  });
 });

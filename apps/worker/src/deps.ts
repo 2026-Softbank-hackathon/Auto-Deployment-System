@@ -20,6 +20,7 @@ import type { TerraformBackendConfig, TerraformCli } from "./terraform-cli.js";
 import type { DeploymentOriginActivator } from "./origin-activation.js";
 import type { PublicDnsActivationChecker } from "./public-dns-activation.js";
 import type { FinalUrlVerifier } from "./final-url-verifier.js";
+import type { TerraformStateStore } from "./terraform-state-store.js";
 
 export type AwsRegistryFactory = (input: {
   region: string;
@@ -36,12 +37,14 @@ export type WorkerDeps = {
   buildHandler?: Pick<BuildHandler, "build">;
   awsRegistryFactory?: AwsRegistryFactory;
   registrySession?: RegistrySession;
-  terraformCli?: Pick<TerraformCli, "apply">;
+  terraformCli?: Pick<TerraformCli, "apply" | "destroy">;
   terraformBackend?: TerraformBackendConfig;
   terraformModuleRoot?: string;
+  /** 앱 삭제 때 Terraform state 파일 확인 · 삭제 (#247) */
+  terraformStateStore?: TerraformStateStore;
   originActivator?: Pick<
     DeploymentOriginActivator,
-    "activate" | "prepareOnpremVerification" | "rollback"
+    "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
   >;
   finalUrlVerifier?: Pick<FinalUrlVerifier, "verify">;
   dnsActivationChecker?: Pick<PublicDnsActivationChecker, "waitUntilResolvable">;

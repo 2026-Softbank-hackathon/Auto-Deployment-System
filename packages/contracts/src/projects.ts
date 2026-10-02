@@ -4,6 +4,7 @@
  *   GET  /projects                  → 200 ProjectList
  *   GET  /projects/:id              → 200 Project
  *   GET  /projects/:id/deployments  → 200 ProjectDeploymentList (최신순 · 커서)
+ *   DELETE /projects/:id            → 202 DeleteProjectResponse (리소스 정리를 시작, #247)
  */
 
 import { z } from "zod";
@@ -68,6 +69,30 @@ export const ProjectLatestDeploymentSchema = z
   .strict();
 export type ProjectLatestDeployment = z.infer<typeof ProjectLatestDeploymentSchema>;
 
+/** 앱 삭제 진행 상태 — 정리가 끝나면 프로젝트 자체가 사라진다 */
+export const PROJECT_DELETION_STATUSES = ["deleting", "failed"] as const;
+export const ProjectDeletionStatusSchema = z.enum(PROJECT_DELETION_STATUSES);
+export type ProjectDeletionStatus = z.infer<typeof ProjectDeletionStatusSchema>;
+
+/**
+ * 자동으로 정리하지 못해 사용자가 직접 해야 하는 일.
+ * ONPREM_MANUAL_CLEANUP: 온프레미스에서 돌던 컨테이너는 Agent 가 지우지 못해 직접 내려야 한다.
+ */
+export const PROJECT_DELETION_WARNINGS = ["ONPREM_MANUAL_CLEANUP"] as const;
+export const ProjectDeletionWarningSchema = z.enum(PROJECT_DELETION_WARNINGS);
+export type ProjectDeletionWarning = z.infer<typeof ProjectDeletionWarningSchema>;
+
+export const ProjectDeletionSchema = z
+  .object({
+    status: ProjectDeletionStatusSchema,
+    requestedAt: IsoDateTimeSchema,
+    /** status=failed 일 때 실패 이유 (오류 코드 + 상세). 진행 중이면 null */
+    error: z.string().nullable(),
+    warnings: z.array(ProjectDeletionWarningSchema),
+  })
+  .strict();
+export type ProjectDeletion = z.infer<typeof ProjectDeletionSchema>;
+
 export const ProjectSchema = z
   .object({
     id: IdStringSchema,
@@ -80,9 +105,20 @@ export const ProjectSchema = z
     live: ProjectLiveDeploymentSchema.nullable(),
     /** 가장 최근 배포 (POST /projects 응답은 항상 null) */
     latest: ProjectLatestDeploymentSchema.nullable(),
+    /** 삭제 요청 상태. 삭제 요청이 없으면 null */
+    deletion: ProjectDeletionSchema.nullable(),
   })
   .strict();
 export type Project = z.infer<typeof ProjectSchema>;
+
+/** DELETE /projects/:id 202 — 정리 작업을 큐에 넣었다. 진행 상황은 GET /projects 의 deletion 으로 본다 */
+export const DeleteProjectResponseSchema = z
+  .object({
+    projectId: IdStringSchema,
+    deletion: ProjectDeletionSchema,
+  })
+  .strict();
+export type DeleteProjectResponse = z.infer<typeof DeleteProjectResponseSchema>;
 
 export const ProjectListSchema = z
   .object({

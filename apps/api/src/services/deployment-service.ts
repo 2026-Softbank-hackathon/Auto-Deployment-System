@@ -111,6 +111,7 @@ export class DeploymentService {
 
   async create(input: CreateDeploymentInput): Promise<CreateDeploymentResponse> {
     const { projectId, fileBuffer } = input;
+    await this.assertProjectNotDeleting(projectId);
 
     const { targetVendor, targetEnvironmentId, registryEnvironmentId } =
       await this.resolveEnvironments(projectId, input.targetVendor, input.environmentId);
@@ -346,6 +347,7 @@ export class DeploymentService {
     if (!src) {
       throw new ApiError(404, "NOT_FOUND", `배포 ID ${fromDeploymentId}를 찾을 수 없습니다.`);
     }
+    await this.assertProjectNotDeleting(src.project_id);
 
     // 2. 소스가 아직 진행 중이면 409
     const IN_PROGRESS_STATUSES = new Set([
@@ -520,6 +522,22 @@ export class DeploymentService {
       status: "queued" as const,
       eventsUrl: `/api/v1/deployments/${newDeploymentId}/events`,
     };
+  }
+
+  /** 삭제 중이거나 삭제에 실패한 앱에는 새 배포를 만들지 않는다 (#247) */
+  private async assertProjectNotDeleting(projectId: number | string): Promise<void> {
+    const result = await this.pool.query<{ deletion_status: string | null }>(
+      `SELECT deletion_status FROM projects WHERE id = $1`,
+      [projectId],
+    );
+    if (result.rows[0]?.deletion_status) {
+      throw new ApiError(
+        409,
+        "PROJECT_DELETING",
+        "삭제 중인 앱에는 배포할 수 없습니다.",
+        "삭제가 끝난 뒤 새 앱으로 배포하세요.",
+      );
+    }
   }
 
   /** 재배포 대상 환경 — 원본 배포의 프로젝트 환경이거나 공용 환경(project_id NULL)이어야 한다. */

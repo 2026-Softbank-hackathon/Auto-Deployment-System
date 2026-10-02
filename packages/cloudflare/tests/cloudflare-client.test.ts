@@ -314,6 +314,32 @@ describe("CloudflareClient", () => {
     });
   });
 
+  it("getTunnelOrigin (#301) — hostname 규칙의 service 를 읽기만 하고, 없으면 null", async () => {
+    const config = apiResponse({
+      config: {
+        ingress: [
+          { hostname: "shop.example.com", service: "http://127.0.0.1:50001" },
+          { service: "http_status:404" },
+        ],
+      },
+    });
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(config)
+      .mockResolvedValueOnce(config.clone());
+    const client = new CloudflareClient({ ...options, fetcher });
+
+    await expect(client.getTunnelOrigin({ tunnelId: "tunnel-1", hostname: "Shop.Example.com" }))
+      .resolves.toBe("http://127.0.0.1:50001");
+    await expect(client.getTunnelOrigin({ tunnelId: "tunnel-1", hostname: "new.example.com" }))
+      .resolves.toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect((fetcher.mock.calls[0] as unknown as [string])[0])
+      .toBe("https://cf.test/client/v4/accounts/account-1/cfd_tunnel/tunnel-1/configurations");
+    for (const call of fetcher.mock.calls as unknown as Array<[string, RequestInit]>) {
+      expect(call[1].method ?? "GET").toBe("GET");
+    }
+  });
+
   it("findNamedTunnel — 있으면 돌려주고 없으면 만들지 않고 null", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(apiResponse([{ id: "tunnel-1", name: "camellia-service-42" }]))

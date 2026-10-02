@@ -39,6 +39,7 @@ const project = {
   deployMode: "container",
   subdomain: "service-1",
   publicUrl: "https://service-1.camellia-deploy.app",
+  addressChange: null,
   live: null,
   latest: null,
   deletion: null,

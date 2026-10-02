@@ -15,6 +15,8 @@ import type {
   ProjectDeletionWarning,
   ProjectDeployment,
   ProjectDeploymentList,
+  ProjectAddressChange,
+  ProjectAddressChangeStatus,
   ProjectList,
   SubdomainAvailability,
   TargetVendor,
@@ -32,6 +34,13 @@ export interface ProjectRow {
   deploy_mode?: DeployMode | null;
   /** 앱 주소 (#300). 비어 있으면 service-{id} */
   subdomain?: string | null;
+  /** 마지막 주소 변경 (#301). 읽지 않았거나 바꾼 적이 없으면 null */
+  address_change_status?: ProjectAddressChangeStatus | null;
+  address_change_from?: string | null;
+  address_change_to?: string | null;
+  address_change_error?: string | null;
+  address_change_requested_at?: Date | null;
+  address_change_finished_at?: Date | null;
   /** 삭제 요청 상태 (#247). POST /projects 의 RETURNING 처럼 읽지 않으면 undefined */
   deletion_status?: ProjectDeletionStatus | null;
   deletion_error?: string | null;
@@ -72,17 +81,51 @@ function subdomainTakenError(subdomain: string): ApiError {
   );
 }
 
-/** 다른 앱이 이 주소를 쓰는지 (대소문자 무시). excludeProjectId 는 자기 자신 */
+/**
+ * 주소 변경이 진행 중인지 (#301). 워커가 끝내지 못하고 사라진 작업(30분 넘게 changing)은 진행 중으로 보지 않는다
+ * — 배포 · 앱 삭제 · 다음 주소 변경이 영원히 막히지 않게.
+ */
+export const ADDRESS_CHANGE_ACTIVE_SQL =
+  `(address_change_status = 'changing' AND address_change_requested_at > NOW() - INTERVAL '30 minutes')`;
+
+export function addressChangeInProgressError(): ApiError {
+  return new ApiError(
+    409,
+    "ADDRESS_CHANGE_IN_PROGRESS",
+    "앱 주소를 바꾸는 중입니다.",
+    "주소 변경이 끝난 뒤 다시 시도하세요.",
+  );
+}
+
+/**
+ * 다른 앱이 이 주소를 쓰는지 (대소문자 무시) — 다른 앱이 바꾸는 중인 새 주소도 쓰는 것으로 본다.
+ * excludeProjectId 는 자기 자신
+ */
 async function isSubdomainTaken(
   db: { query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }> },
   subdomain: string,
   excludeProjectId?: number,
 ): Promise<boolean> {
   const result = await db.query(
-    `SELECT id FROM projects WHERE lower(subdomain) = $1 AND ($2::bigint IS NULL OR id <> $2) LIMIT 1`,
+    `SELECT id FROM projects
+     WHERE (lower(subdomain) = $1 OR (${ADDRESS_CHANGE_ACTIVE_SQL} AND lower(address_change_to) = $1))
+       AND ($2::bigint IS NULL OR id <> $2)
+     LIMIT 1`,
     [subdomain.toLowerCase(), excludeProjectId ?? null],
   );
   return result.rows.length > 0;
+}
+
+function addressChangeToDto(row: ProjectRow): ProjectAddressChange | null {
+  if (!row.address_change_status || !row.address_change_requested_at) return null;
+  return {
+    status: row.address_change_status,
+    from: row.address_change_from ?? "",
+    to: row.address_change_to ?? "",
+    requestedAt: row.address_change_requested_at.toISOString(),
+    finishedAt: row.address_change_finished_at?.toISOString() ?? null,
+    error: row.address_change_error ?? null,
+  };
 }
 
 function idOrNull(value: number | string | null): string | null {
@@ -116,6 +159,7 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
     deployMode: row.deploy_mode === "serverless" ? "serverless" : "container",
     subdomain,
     publicUrl,
+    addressChange: addressChangeToDto(row),
     live:
       summary?.live_deployment_id != null
         ? {
@@ -157,6 +201,8 @@ function liveDeploymentIdSql(p: string): string {
 const PROJECT_SUMMARY_SELECT = `
   SELECT p.id, p.name, p.description, p.created_at, p.updated_at, p.deploy_mode, p.subdomain,
          p.deletion_status, p.deletion_error, p.deletion_requested_at, p.deletion_warnings,
+         p.address_change_status, p.address_change_from, p.address_change_to, p.address_change_error,
+         p.address_change_requested_at, p.address_change_finished_at,
          live.id AS live_deployment_id,
          live.target_environment_id AS live_environment_id,
          live_env.type AS live_environment_type,
@@ -242,10 +288,15 @@ export class ProjectService {
     try {
       await client.query("BEGIN");
       // 배포 생성(deployments FK)과 겹치지 않도록 프로젝트 row 를 잠근다
-      const project = await client.query(`SELECT id FROM projects WHERE id = $1 FOR UPDATE`, [id]);
+      const project = await client.query<{ address_change_active?: boolean }>(
+        `SELECT id, ${ADDRESS_CHANGE_ACTIVE_SQL} AS address_change_active FROM projects WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
       if (project.rows.length === 0) {
         throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${id}를 찾을 수 없습니다.`, "ID를 확인하세요.");
       }
+      // 주소 변경 중에 지우면 새 주소 레코드가 남을 수 있다 (#301)
+      if (project.rows[0]?.address_change_active === true) throw addressChangeInProgressError();
       const active = await client.query(
         `SELECT id, status FROM deployments WHERE project_id = $1 AND NOT (status = ANY($2::text[])) LIMIT 1`,
         [id, FINISHED_DEPLOYMENT_STATUSES],
@@ -341,6 +392,123 @@ export class ProjectService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * PATCH /projects/:id/subdomain — 앱 주소 변경 (#301).
+   * 서비스 중인 배포가 없으면(또는 플랫폼 도메인 설정이 없으면) 연결된 주소가 없으니 바로 바꾼다 → 200.
+   * 있으면 changing 으로 바꾸고 address-change 잡을 넣는다 → 202. 워커가 새 주소를 지금 origin 에 연결하고
+   * 최종 URL 검증이 통과하면 subdomain 을 바꾸고 예전 주소를 지운다. 실패하면 새 주소만 지우고 예전 주소를 둔다.
+   * 정적 사이트(S3)는 버킷 이름이 주소와 같아야 해서 버킷을 새로 만들어야 하므로 지원하지 않는다 → 409.
+   */
+  async requestSubdomainChange(id: number, subdomain: string): Promise<{ accepted: boolean; project: Project }> {
+    const client = await this.pool.connect();
+    let enqueue = false;
+    try {
+      await client.query("BEGIN");
+      await client.query(SUBDOMAIN_LOCK_SQL);
+      const result = await client.query<{
+        id: number | string;
+        subdomain: string | null;
+        deletion_status: string | null;
+        address_change_active: boolean;
+      }>(
+        `SELECT id, subdomain, deletion_status, ${ADDRESS_CHANGE_ACTIVE_SQL} AS address_change_active
+         FROM projects WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      const project = result.rows[0];
+      if (!project) {
+        throw new ApiError(404, "NOT_FOUND", `프로젝트 ID ${id}를 찾을 수 없습니다.`, "ID를 확인하세요.");
+      }
+      if (project.deletion_status) {
+        throw new ApiError(409, "PROJECT_DELETING", "삭제 중인 앱의 주소는 바꿀 수 없습니다.");
+      }
+      if (project.address_change_active) throw addressChangeInProgressError();
+      const current = projectSubdomain(project.subdomain, id);
+      if (current !== subdomain) {
+        const active = await client.query(
+          `SELECT id, status FROM deployments WHERE project_id = $1 AND NOT (status = ANY($2::text[])) LIMIT 1`,
+          [id, FINISHED_DEPLOYMENT_STATUSES],
+        );
+        if (active.rows.length > 0) {
+          throw new ApiError(
+            409,
+            "PROJECT_DEPLOYMENT_IN_PROGRESS",
+            "진행 중인 배포가 있어 주소를 바꿀 수 없습니다.",
+            "배포가 끝나거나 취소한 뒤 다시 시도하세요.",
+          );
+        }
+        if (await isSubdomainTaken(client, subdomain, id)) throw subdomainTakenError(subdomain);
+
+        const live = await client.query<{ id: number | string; target_profile: string | null }>(
+          `SELECT d.id, d.target_profile FROM deployments d WHERE d.id = (${liveDeploymentIdSql("$1")})`,
+          [id],
+        );
+        const liveDeployment = live.rows[0];
+        if (liveDeployment?.target_profile === "aws-static-basic") {
+          throw new ApiError(
+            409,
+            "ADDRESS_CHANGE_STATIC_UNSUPPORTED",
+            "정적 사이트는 주소 변경 미지원 — S3 버킷 이름이 주소와 같아야 해서 지금은 바꿀 수 없습니다.",
+            "새 주소로 앱을 다시 만들어 배포하세요.",
+          );
+        }
+        if (!liveDeployment || !this.platformDomain) {
+          await client.query(
+            `UPDATE projects SET subdomain = $2, address_change_status = 'succeeded',
+                    address_change_from = $3, address_change_to = $2, address_change_error = NULL,
+                    address_change_requested_at = NOW(), address_change_finished_at = NOW(), updated_at = NOW()
+             WHERE id = $1`,
+            [id, subdomain, current],
+          );
+        } else {
+          await client.query(
+            `UPDATE projects SET address_change_status = 'changing',
+                    address_change_from = $3, address_change_to = $2, address_change_error = NULL,
+                    address_change_requested_at = NOW(), address_change_finished_at = NULL
+             WHERE id = $1`,
+            [id, subdomain, current],
+          );
+          enqueue = true;
+        }
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      if (
+        err instanceof Error &&
+        (err as { code?: string }).code === "23505" &&
+        (err as { constraint?: string }).constraint === "projects_subdomain_unique"
+      ) {
+        throw subdomainTakenError(subdomain);
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    if (enqueue) {
+      if (!this.boss) throw new ApiError(500, "INTERNAL_ERROR", "작업 큐가 설정되지 않았습니다.");
+      try {
+        // 같은 프로젝트의 주소 변경이 겹쳐 돌지 않게 singletonKey. 워커가 실패를 직접 기록하므로
+        // 재시도는 워커가 죽었을 때만 의미가 있다 — 핸들러는 다시 돌아도 같은 결과가 되게 짰다.
+        await this.boss.send("address-change", { project_id: id }, {
+          singletonKey: `address-change-${id}`,
+          expireInSeconds: 20 * 60,
+          retryLimit: 1,
+        });
+      } catch (err) {
+        await this.pool.query(
+          `UPDATE projects SET address_change_status = 'failed', address_change_error = 'ADDRESS_CHANGE_ENQUEUE_FAILED',
+                  address_change_finished_at = NOW()
+           WHERE id = $1 AND address_change_status = 'changing'`,
+          [id],
+        );
+        throw err;
+      }
+    }
+    return { accepted: enqueue, project: await this.get(id) };
   }
 
   /** GET /projects/subdomain-availability — 형식 · 예약어는 DB 를 보지 않고 답한다 */

@@ -51,7 +51,9 @@ export type WorkerDeps = {
   lambdaRolloutWaiter?: Pick<LambdaRolloutWaiter, "wait">;
   originActivator?: Pick<
     DeploymentOriginActivator,
-    "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
+    | "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
+    // 앱 주소 변경 (#301)
+    | "addServiceAlias" | "removeServiceAlias" | "removeServiceHostname"
   >;
   finalUrlVerifier?: Pick<FinalUrlVerifier, "verify">;
   /** 플랫폼 공개 도메인 (DEMO_PLATFORM_DOMAIN) — 정적 사이트 버킷 이름 = {앱 주소}.{도메인} (#274, #300) */

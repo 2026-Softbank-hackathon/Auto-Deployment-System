@@ -15,6 +15,7 @@ import { loadProjects } from '../features/dashboard/useProjectList';
 import { requestReview } from '../features/deployment-progress/review-flag';
 import { usePreferences } from '../features/settings/preferences';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
+import { ServerReason } from '../features/deployment-progress/ServerReason';
 
 /** 고른 연결을 쓸 수 없어 서버가 거절한 경우 (apps/api deployment-service resolveEnvironments · 자격증명 사전 검증). */
 const connectionRejectedCodes = ['TARGET_ENVIRONMENT_REQUIRED', 'AWS_REGISTRY_ENVIRONMENT_REQUIRED', 'AWS_CREDENTIALS_MISSING', 'AWS_CREDENTIALS_INVALID', 'NOT_FOUND'];
@@ -198,7 +199,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
       : !file ? copy.hintEmpty
         : !appReady ? (choice.mode === 'new' ? copy.hintNeedsName : copy.hintPickApp)
           : !selected ? copy.hintPickConnection : copy.hintReady;
-  // 아는 거절 사유는 안내 문구로, 모르는 사유는 서버가 준 설명을 그대로 보여 준다 (숫자 코드만 보이지 않게).
+  // 아는 거절 사유는 안내 문구로, 모르는 사유는 오류 코드별 문구로 보여 준다 (서버 원문은 "자세한 오류 보기" 안에, #147).
   const errorCopy = (() => {
     if (!error) return null;
     const cause = error.error;
@@ -207,7 +208,7 @@ export function SimpleDeployPage({ onStarted, onNavigate }: { onStarted: (deploy
       return cause instanceof DeploymentApiError && cause.status === 409 ? copy.app.nameTaken : errorMessage(cause, t, copy.app.createError);
     }
     if (cause instanceof DeploymentApiError && cause.code && connectionRejectedCodes.includes(cause.code)) return copy.startRejected;
-    return cause instanceof DeploymentApiError && cause.serverMessage ? `${cause.serverMessage} (${cause.status})` : errorMessage(cause, t, t.errors.startFailed);
+    return <ServerReason error={cause} fallback={t.errors.startFailed} />;
   })();
 
   return <>

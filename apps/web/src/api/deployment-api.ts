@@ -3,11 +3,19 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$
 export class DeploymentApiError extends Error {
   /**
    * code — 서버 오류 본문의 error.code (예: DEPLOYMENT_LOCKED). 본문을 읽은 경우에만 있다.
-   * serverMessage — 서버가 준 설명(error.message). 화면이 모르는 오류 코드일 때 그대로 보여 준다.
+   * serverMessage — 서버가 준 설명(error.message, 한국어). 한국어 화면은 본문에, 일본어 화면은 "자세한 오류 보기" 안에만 보여 준다 (I18nProvider serverReason).
    */
   constructor(public readonly status: number, message: string, public readonly code?: string, public readonly serverMessage?: string) {
     super(message);
     this.name = 'DeploymentApiError';
+  }
+}
+
+/** 서버 응답이 기대한 모양이 아닐 때. 화면은 현재 언어의 일반 문구로 보여 준다 (message 는 개발용 한국어) */
+export class ResponseFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ResponseFormatError';
   }
 }
 
@@ -82,7 +90,7 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 function asRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} 응답 형식이 올바르지 않습니다.`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ResponseFormatError(`${label} 응답 형식이 올바르지 않습니다.`);
   return value as Record<string, unknown>;
 }
 
@@ -116,7 +124,7 @@ export async function createDeployment(source: File, projectId: string, environm
   const deploymentId = typeof body.deploymentId === 'string' ? body.deploymentId : null;
   const status = body.status === 'received' ? body.status : null;
   const eventsUrl = typeof body.eventsUrl === 'string' ? body.eventsUrl : null;
-  if (!deploymentId || !status || !eventsUrl) throw new Error('배포 생성 응답 형식이 올바르지 않습니다.');
+  if (!deploymentId || !status || !eventsUrl) throw new ResponseFormatError('배포 생성 응답 형식이 올바르지 않습니다.');
   return { deploymentId, status, eventsUrl };
 }
 
@@ -135,7 +143,7 @@ export async function createProject(name: string, subdomain?: string): Promise<C
   const body = asRecord(await readJson(response), '프로젝트 생성');
   const id = typeof body.id === 'string' ? body.id : null;
   const projectName = typeof body.name === 'string' ? body.name : null;
-  if (!id || !projectName) throw new Error('프로젝트 생성 응답 형식이 올바르지 않습니다.');
+  if (!id || !projectName) throw new ResponseFormatError('프로젝트 생성 응답 형식이 올바르지 않습니다.');
   return { id, name: projectName };
 }
 
@@ -202,7 +210,7 @@ export async function getDeploymentDiagnosis(deploymentId: string): Promise<Depl
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/diagnosis`), { credentials: 'include' });
   if (response.status === 404) return null;
   const body = asRecord(await readJson(response), 'AI 진단');
-  if (typeof body.summary !== 'string') throw new Error('AI 진단 응답 형식이 올바르지 않습니다.');
+  if (typeof body.summary !== 'string') throw new ResponseFormatError('AI 진단 응답 형식이 올바르지 않습니다.');
   const patchCandidates = (Array.isArray(body.patchCandidates) ? body.patchCandidates : []).flatMap((item): DeploymentPatchCandidate[] => {
     if (!item || typeof item !== 'object') return [];
     const { description, descriptionI18n, diff } = item as { description?: unknown; descriptionI18n?: unknown; diff?: unknown };
@@ -224,7 +232,7 @@ export async function redeployDeployment(deploymentId: string, targetEnvironment
   });
   const body = asRecord(await readJson(response), '재배포');
   const id = typeof body.deploymentId === 'string' || typeof body.deploymentId === 'number' ? String(body.deploymentId) : '';
-  if (!id) throw new Error('재배포 응답 형식이 올바르지 않습니다.');
+  if (!id) throw new ResponseFormatError('재배포 응답 형식이 올바르지 않습니다.');
   return { deploymentId: id };
 }
 
@@ -277,7 +285,7 @@ export async function getDeploymentPatch(deploymentId: string): Promise<Deployme
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/patch`), { credentials: 'include' });
   if (response.status === 404) return null;
   const body = asRecord(await readJson(response), '코드 수정안');
-  if (typeof body.summary !== 'string' || typeof body.diff !== 'string') throw new Error('코드 수정안 응답 형식이 올바르지 않습니다.');
+  if (typeof body.summary !== 'string' || typeof body.diff !== 'string') throw new ResponseFormatError('코드 수정안 응답 형식이 올바르지 않습니다.');
   const status = body.status === 'approved' || body.status === 'rejected' ? body.status : 'pending';
   const files = (Array.isArray(body.files) ? body.files : []).flatMap((item): SourcePatchFile[] => {
     if (!item || typeof item !== 'object') return [];
@@ -428,7 +436,7 @@ export interface AgentRegistrationToken { token: string; expiresAt: string }
 export async function issueAgentRegistrationToken(environmentId: string): Promise<AgentRegistrationToken> {
   const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}/agent-registration-token`), { method: 'POST', credentials: 'include' });
   const body = asRecord(await readJson(response), '등록 토큰');
-  if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new Error('등록 토큰 응답 형식이 올바르지 않습니다.');
+  if (typeof body.token !== 'string' || typeof body.expiresAt !== 'string') throw new ResponseFormatError('등록 토큰 응답 형식이 올바르지 않습니다.');
   return { token: body.token, expiresAt: body.expiresAt };
 }
 
@@ -703,7 +711,7 @@ export async function listProjectDeployments(projectId: string, options: { limit
 export async function getProject(projectId: string): Promise<ProjectSummary> {
   const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { credentials: 'include' });
   const project = parseProject(asRecord(await readJson(response), '프로젝트'));
-  if (!project) throw new Error('프로젝트 응답 형식이 올바르지 않습니다.');
+  if (!project) throw new ResponseFormatError('프로젝트 응답 형식이 올바르지 않습니다.');
   return project;
 }
 
@@ -715,7 +723,7 @@ export async function deleteProject(projectId: string): Promise<ProjectDeletion>
   const response = await fetch(endpoint(`/api/v1/projects/${encodeURIComponent(projectId)}`), { method: 'DELETE', credentials: 'include' });
   const body = asRecord(await readJson(response), '앱 삭제');
   const deletion = parseDeletion(body.deletion);
-  if (!deletion) throw new Error('앱 삭제 응답 형식이 올바르지 않습니다.');
+  if (!deletion) throw new ResponseFormatError('앱 삭제 응답 형식이 올바르지 않습니다.');
   return deletion;
 }
 

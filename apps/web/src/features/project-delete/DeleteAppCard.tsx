@@ -4,7 +4,8 @@ import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { Marble } from '../../components/ui/Marble';
 import { elapsed } from '../dashboard/format';
-import { serverReasonText, useI18n } from '../../i18n/I18nProvider';
+import { useI18n } from '../../i18n/I18nProvider';
+import { ServerReason } from '../deployment-progress/ServerReason';
 import type { Messages } from '../../i18n/ko';
 
 /** 삭제가 끝났는지(앱이 사라졌는지) 다시 읽는 간격 */
@@ -156,9 +157,7 @@ export function DeleteAppCard({ projectId, appName, onDeleted, onNavigate }: {
       </form>
       {requestError !== null && <div className="notice error" role="alert">
         <strong>{copy.requestFailed}</strong>{' '}
-        {requestError instanceof DeploymentApiError && requestError.code && copy.errors[requestError.code]
-          ? copy.errors[requestError.code]
-          : serverReasonText(requestError, t, copy.requestFailed)}
+        <ServerReason error={requestError} fallback={copy.requestFailed} known={copy.errors} />
       </div>}
     </>;
   }

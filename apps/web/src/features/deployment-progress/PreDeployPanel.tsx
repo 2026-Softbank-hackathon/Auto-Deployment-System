@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent } from 'react';
-import { DeploymentApiError, patchDeploymentIr, patchProjectEnv } from '../../api/deployment-api';
+import { patchDeploymentIr, patchProjectEnv } from '../../api/deployment-api';
 import { Keycap } from '../../components/ui/Keycap';
-import { errorMessage, useI18n } from '../../i18n/I18nProvider';
+import { useI18n } from '../../i18n/I18nProvider';
+import { ServerReason } from './ServerReason';
 import { looksSecret } from '../setup/env-plan';
 
 const VALUE_MAX = 4096;
@@ -94,7 +95,7 @@ export function PreDeployPanel({ deploymentId, projectId, review, onDone }: { de
     </div>}
 
     {error !== null && <div className="notice error" role="alert"><strong>{copy.saveError}</strong><br />
-      {error instanceof DeploymentApiError && error.serverMessage ? error.serverMessage : errorMessage(error, t, copy.saveError)}</div>}
+      <ServerReason error={error} fallback={copy.saveError} /></div>}
     <div><Keycap type="submit" sound="start" disabled={!portsValid || !envComplete || saving}>{saving ? t.deploy.aws.saving : copy.submit}</Keycap></div>
   </form>;
 }

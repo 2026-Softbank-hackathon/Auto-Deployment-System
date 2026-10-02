@@ -61,7 +61,13 @@ function givenProject(options: {
   pool.on(/FROM deployments WHERE project_id = \$1 AND NOT \(status = ANY/, () => ({
     rows: options.inProgress ? [{ id: 7, status: "building" }] : [],
   }));
-  pool.on(/onprem_agent_jobs/, () => ({ rows: [{ onprem: options.onprem === true }] }));
+  pool.on(/SELECT DISTINCT d\.id/, () => ({
+    rows: options.onprem ? [{ id: 42 }] : [],
+  }));
+  pool.on(/INSERT INTO onprem_agent_cleanup_jobs/, () => ({
+    rows: [{ job_id: "cleanup-42" }],
+    rowCount: 1,
+  }));
   pool.on(/^UPDATE projects SET deletion_status = 'deleting'/, (params) => ({
     rows: [{
       deletion_status: "deleting",
@@ -100,13 +106,15 @@ describe("DELETE /api/v1/projects/:id", () => {
     expect(queries.some((q) => q.sql === "COMMIT")).toBe(true);
   });
 
-  it("온프레미스에서 돈 적이 있으면 직접 정리해야 한다는 경고를 남긴다", async () => {
+  it("온프레미스에서 돈 적이 있으면 cleanup Job을 만들고 수동 정리 경고는 남기지 않는다", async () => {
     givenProject({ onprem: true });
 
     const res = await server.inject({ method: "DELETE", url: "/api/v1/projects/24" });
 
     expect(res.statusCode, res.body).toBe(202);
-    expect(res.json().deletion.warnings).toEqual(["ONPREM_MANUAL_CLEANUP"]);
+    expect(res.json().deletion.warnings).toEqual([]);
+    const cleanup = queries.find((q) => q.sql.startsWith("INSERT INTO onprem_agent_cleanup_jobs"));
+    expect(cleanup?.params.slice(0, 2)).toEqual([42, "project_deleted"]);
   });
 
   it("진행 중인 배포가 있으면 409 PROJECT_DEPLOYMENT_IN_PROGRESS — 잡을 넣지 않는다", async () => {

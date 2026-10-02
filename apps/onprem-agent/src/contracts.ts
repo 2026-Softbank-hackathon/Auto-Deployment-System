@@ -47,6 +47,26 @@ export type AgentRuntimeReport = {
   health: "healthy" | "unhealthy" | "unknown";
 };
 
+export type OnpremCleanupJob = {
+  jobId: string;
+  attempt: number;
+  deploymentId: number;
+  environmentId: string;
+  reason:
+    | "superseded"
+    | "deployment_failed"
+    | "deployment_cancelled"
+    | "project_deleted";
+};
+
+export type OnpremCleanupResult = OnpremCleanupJob & {
+  status: "succeeded" | "failed";
+  errorCode?: "cleanup_failed" | "internal_error";
+  errorMessage?: string;
+  startedAt: string;
+  finishedAt: string;
+};
+
 export type OnpremExecutionResult =
   | {
       deploymentId: number;
@@ -75,6 +95,7 @@ export type OnpremExecutionResult =
     };
 
 export interface AgentControlPlaneClient {
+  claimCleanupJob(): Promise<OnpremCleanupJob | null>;
   claimJob(): Promise<OnpremAgentJob | null>;
   getEcrCredential(jobId: string): Promise<EcrCredential>;
   prepareTunnel(
@@ -82,6 +103,10 @@ export interface AgentControlPlaneClient {
     options?: { signal?: AbortSignal },
   ): Promise<TunnelSession>;
   reportResult(jobId: string, result: OnpremExecutionResult): Promise<void>;
+  reportCleanupResult(
+    jobId: string,
+    result: OnpremCleanupResult,
+  ): Promise<void>;
   sendHeartbeat(
     currentJobId?: string,
     runtimes?: AgentRuntimeReport[],
@@ -96,6 +121,7 @@ export interface OnpremJobExecutor {
   restore?(): Promise<void>;
   inventory?(): Promise<AgentRuntimeReport[]>;
   reconcile?(desiredDeploymentIds: string[]): Promise<void>;
+  cleanup?(deploymentId: number): Promise<void>;
   shutdown?(): Promise<void>;
 }
 

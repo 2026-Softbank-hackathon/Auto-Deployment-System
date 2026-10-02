@@ -39,6 +39,8 @@ describe("migration files", () => {
       "014_health_check_legacy_unique.sql",
       "015_project_deletion.sql",
       "016_terraform_inputs_hash.sql",
+      "017_agent_runtime_inventory.sql",
+      "018_onprem_agent_cleanup_jobs.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

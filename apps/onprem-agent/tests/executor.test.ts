@@ -402,4 +402,25 @@ describe("On-Prem job 실행", () => {
     expect(cleaned).toBe(true);
     expect(stateStore.records.size).toBe(0);
   });
+
+  it("cleanup Job은 Tunnel·Compose·로컬 상태를 배포 ID 기준으로 멱등 정리한다", async () => {
+    const runtime = new FakeRuntimeManager();
+    const tunnel = new FakeTunnelProvider("https://fake.example.test");
+    const stateStore = new FakeRuntimeStateStore();
+    const executor = new DockerOnpremJobExecutor({
+      imageManager: new FakeImageManager(),
+      runtimeManager: runtime,
+      tunnelProvider: tunnel,
+      stateStore,
+    });
+
+    await executor.execute(createJob());
+    await executor.cleanup(createJob().deploymentId);
+    await executor.cleanup(createJob().deploymentId);
+
+    expect(tunnel.stops).toEqual([createJob().deploymentId, createJob().deploymentId]);
+    expect(runtime.cleanups).toEqual([createJob().image.digest]);
+    expect(stateStore.records.size).toBe(0);
+    await expect(executor.inventory()).resolves.toEqual([]);
+  });
 });

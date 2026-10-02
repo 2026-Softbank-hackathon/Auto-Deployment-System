@@ -3,7 +3,7 @@
  * projects 테이블 CRUD.
  */
 
-import type { Pool } from "@camellia/db";
+import { enqueueOnpremCleanup, type Pool } from "@camellia/db";
 import type PgBoss from "pg-boss";
 import type {
   DeleteProjectResponse,
@@ -217,16 +217,21 @@ export class ProjectService {
           "배포가 끝나거나 취소한 뒤 다시 시도하세요.",
         );
       }
-      // Agent 에는 컨테이너를 내리는 작업이 없다 — 온프레미스에서 돈 적이 있으면 직접 정리해야 한다
-      const onprem = await client.query<{ onprem: boolean }>(
-        `SELECT EXISTS (
-           SELECT 1 FROM onprem_agent_jobs job
-           JOIN deployments d ON d.id = job.deployment_id
-           WHERE d.project_id = $1
-         ) AS onprem`,
+      const onprem = await client.query<{ id: number | string }>(
+        `SELECT DISTINCT d.id
+         FROM deployments d
+         JOIN onprem_agent_jobs job ON job.deployment_id = d.id
+         WHERE d.project_id = $1
+         ORDER BY d.id`,
         [id],
       );
-      const warnings: ProjectDeletionWarning[] = onprem.rows[0]?.onprem ? ["ONPREM_MANUAL_CLEANUP"] : [];
+      for (const deployment of onprem.rows) {
+        await enqueueOnpremCleanup(client, {
+          deploymentId: Number(deployment.id),
+          reason: "project_deleted",
+        });
+      }
+      const warnings: ProjectDeletionWarning[] = [];
       const updated = await client.query<ProjectRow>(
         `UPDATE projects
          SET deletion_status = 'deleting',

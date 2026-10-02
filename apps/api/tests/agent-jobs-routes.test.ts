@@ -9,6 +9,8 @@ let claimNext: ReturnType<typeof vi.fn>;
 let authenticate: ReturnType<typeof vi.fn>;
 let prepareTunnel: ReturnType<typeof vi.fn>;
 let reportResult: ReturnType<typeof vi.fn>;
+let claimCleanupNext: ReturnType<typeof vi.fn>;
+let reportCleanupResult: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
   claimNext = vi.fn(async () => null);
@@ -18,6 +20,8 @@ beforeEach(async () => {
     hostname: "verify-d73.camellia-deploy.app",
   }));
   reportResult = vi.fn(async () => undefined);
+  claimCleanupNext = vi.fn(async () => null);
+  reportCleanupResult = vi.fn(async () => undefined);
   authenticate = vi.fn(async (token: string) => token === "valid-agent-key"
     ? { agentId: 7, environmentId: 12 }
     : null);
@@ -39,6 +43,10 @@ beforeEach(async () => {
       claimNext,
       prepareTunnel,
       reportResult,
+    },
+    agentCleanupJobService: {
+      claimNext: claimCleanupNext,
+      reportResult: reportCleanupResult,
     },
     authenticate,
     pollTimeoutMs: 10,
@@ -204,5 +212,59 @@ describe("POST /jobs/claim", () => {
 
     expect(response.statusCode).toBe(500);
     expect(response.json().error.code).toBe("AGENT_JOB_PAYLOAD_INVALID");
+  });
+});
+
+describe("Agent cleanup Job API", () => {
+  it("cleanup Job을 비차단 claim하고 성공 결과를 저장한다", async () => {
+    const job = {
+      jobId: "cleanup-73",
+      attempt: 1,
+      deploymentId: 73,
+      environmentId: "12",
+      reason: "project_deleted",
+    };
+    claimCleanupNext.mockResolvedValueOnce(job);
+
+    const claim = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/cleanup-jobs/claim",
+      headers: { authorization: "Bearer valid-agent-key" },
+    });
+    expect(claim.statusCode).toBe(200);
+    expect(claim.json()).toEqual({ job });
+    expect(claimCleanupNext).toHaveBeenCalledWith(7, 12, 90);
+
+    const result = {
+      ...job,
+      status: "succeeded",
+      startedAt: "2026-10-02T00:00:00.000Z",
+      finishedAt: "2026-10-02T00:00:01.000Z",
+    };
+    const report = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/cleanup-jobs/cleanup-73/result",
+      headers: { authorization: "Bearer valid-agent-key" },
+      payload: result,
+    });
+    expect(report.statusCode).toBe(204);
+    expect(reportCleanupResult).toHaveBeenCalledWith(7, 12, "cleanup-73", result);
+  });
+
+  it("잘못된 cleanup 결과와 인증되지 않은 claim을 거부한다", async () => {
+    const unauthorized = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/cleanup-jobs/claim",
+    });
+    const invalid = await server.inject({
+      method: "POST",
+      url: "/api/v1/agents/cleanup-jobs/cleanup-73/result",
+      headers: { authorization: "Bearer valid-agent-key" },
+      payload: { status: "succeeded" },
+    });
+
+    expect(unauthorized.statusCode).toBe(401);
+    expect(invalid.statusCode).toBe(400);
+    expect(reportCleanupResult).not.toHaveBeenCalled();
   });
 });

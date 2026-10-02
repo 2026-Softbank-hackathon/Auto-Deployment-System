@@ -88,7 +88,7 @@ describe.skipIf(!databaseUrl)("앱 삭제 요청 (#247): isolated PostgreSQL", (
     expect(Date.now() - Date.parse(result.deletion.requestedAt)).toBeLessThan(60_000);
   });
 
-  it("온프레미스 Agent 작업이 있던 앱은 ONPREM_MANUAL_CLEANUP 경고", async () => {
+  it("온프레미스 Agent 작업이 있던 앱은 수동 경고 대신 cleanup Job을 예약한다", async () => {
     const id = await project();
     const env = await pool.query<{ id: string }>(
       `INSERT INTO environments(project_id, name, type, onprem_config) VALUES($1, 'mac', 'onprem', '{}'::jsonb) RETURNING id`,
@@ -101,7 +101,12 @@ describe.skipIf(!databaseUrl)("앱 삭제 요청 (#247): isolated PostgreSQL", (
       [String(deploymentId), deploymentId, env.rows[0]!.id],
     );
 
-    expect((await projects.requestDeletion(id)).deletion.warnings).toEqual(["ONPREM_MANUAL_CLEANUP"]);
+    expect((await projects.requestDeletion(id)).deletion.warnings).toEqual([]);
+    const cleanup = await pool.query<{ reason: string; status: string }>(
+      `SELECT reason, status FROM onprem_agent_cleanup_jobs WHERE deployment_id = $1`,
+      [deploymentId],
+    );
+    expect(cleanup.rows).toEqual([{ reason: "project_deleted", status: "pending" }]);
   });
 
   it("진행 중인 배포가 있으면 409 · 상태를 바꾸지 않는다", async () => {

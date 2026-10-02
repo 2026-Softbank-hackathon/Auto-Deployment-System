@@ -2,13 +2,12 @@
  * apps/worker/src/handlers/teardown.ts
  *
  * 앱 삭제 (#247) — DELETE /projects/:id 가 넣은 teardown 잡.
- * 1. 공개 주소(service-{projectId}) · 온프레미스 검증 주소 DNS 와 Tunnel ingress 정리 (best effort)
- * 2. 이 앱을 배포한 AWS 연결마다 provision 과 같은 backend · 자격 증명으로 terraform destroy → state 삭제
- * 3. 배포 기록(deployments 와 딸린 row) · 프로젝트 전용 연결 · 시크릿 · 환경변수 삭제 (공용 연결은 그대로)
+ * 1. Agent cleanup Job 완료를 확인해 온프레미스 런타임 정리
+ * 2. 공개 주소(service-{projectId}) · 온프레미스 검증 주소 DNS 와 Tunnel ingress 정리 (best effort)
+ * 3. 이 앱을 배포한 AWS 연결마다 provision 과 같은 backend · 자격 증명으로 terraform destroy → state 삭제
+ * 4. 배포 기록(deployments 와 딸린 row) · 프로젝트 전용 연결 · 시크릿 · 환경변수 삭제 (공용 연결은 그대로)
  * 실패하면 프로젝트를 남기고 deletion_status=failed + 이유를 기록해 다시 시도할 수 있게 한다.
- *
- * 온프레미스 Agent 에는 컨테이너를 내리는 작업이 없어서 온프레미스 컨테이너는 사용자가 직접 지워야 한다
- * (API 가 ONPREM_MANUAL_CLEANUP 경고로 알린다). ECR 이미지 · 업로드한 소스 ZIP 은 남긴다.
+ * ECR 이미지 · 업로드한 소스 ZIP 은 남긴다.
  */
 
 import path from "node:path";
@@ -28,6 +27,8 @@ export type TeardownJobPayload = {
 const FINISHED_DEPLOYMENT_STATUSES = ["succeeded", "failed", "cancelled", "rejected"];
 
 const DEFAULT_AWS_MODULE_REF = "infra/terraform/profiles/aws-ecs-basic";
+const DEFAULT_ONPREM_CLEANUP_TIMEOUT_MS = 120_000;
+const DEFAULT_ONPREM_CLEANUP_POLL_INTERVAL_MS = 1_000;
 
 /**
  * IR 을 읽을 수 없을 때 쓰는 변수. destroy 는 state 에 있는 리소스를 지우므로
@@ -100,6 +101,9 @@ export async function handleTeardown(
       )
     ).rows.map((row) => Number(row.id));
 
+    // 프로젝트/배포 row를 지우면 cleanup Job도 cascade 되므로 Agent 완료 확인이 선행되어야 한다.
+    await waitForOnpremCleanup(deps, onpremDeploymentIds);
+
     // 1. 공개 주소부터 내린다 — 지울 ALB 를 가리키는 레코드가 남지 않게
     const cloudflareFailures = await removeOrigins(deps, projectId, onpremDeploymentIds);
 
@@ -115,12 +119,6 @@ export async function handleTeardown(
     const deploymentIds = await deleteProjectRows(deps, projectId);
     await deleteStepLogs(deps, deploymentIds);
 
-    if (warnings.includes("ONPREM_MANUAL_CLEANUP")) {
-      deps.log?.warn(
-        { project_id: projectId },
-        "teardown: 온프레미스 컨테이너는 Agent 가 지우지 못해 직접 정리해야 합니다",
-      );
-    }
     await writeAuditLog(deps, projectId, 200, {
       result: "deleted",
       name: project.name,
@@ -150,6 +148,39 @@ export async function handleTeardown(
       error: code,
       warnings,
     });
+  }
+}
+
+async function waitForOnpremCleanup(
+  deps: WorkerDeps,
+  deploymentIds: number[],
+): Promise<void> {
+  if (deploymentIds.length === 0) return;
+  const timeoutMs = deps.onpremCleanupWait?.timeoutMs ?? DEFAULT_ONPREM_CLEANUP_TIMEOUT_MS;
+  const pollIntervalMs = deps.onpremCleanupWait?.pollIntervalMs
+    ?? DEFAULT_ONPREM_CLEANUP_POLL_INTERVAL_MS;
+  const sleep = deps.onpremCleanupWait?.sleep
+    ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const deadline = Date.now() + timeoutMs;
+
+  while (true) {
+    const result = await deps.pool.query<{ deployment_id: number | string; status: string }>(
+      `SELECT deployment_id, status
+       FROM onprem_agent_cleanup_jobs
+       WHERE deployment_id = ANY($1::bigint[])`,
+      [deploymentIds],
+    );
+    const statuses = new Map(
+      result.rows.map((row) => [Number(row.deployment_id), row.status]),
+    );
+    if (deploymentIds.every((id) => statuses.get(id) === "succeeded")) return;
+    if (deploymentIds.some((id) => statuses.get(id) === "failed")) {
+      throw new TeardownError("ONPREM_CLEANUP_FAILED");
+    }
+    if (Date.now() >= deadline) {
+      throw new TeardownError("ONPREM_CLEANUP_TIMEOUT");
+    }
+    await sleep(Math.max(1, pollIntervalMs));
   }
 }
 

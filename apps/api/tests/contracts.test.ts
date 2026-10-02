@@ -181,13 +181,17 @@ describe("projects 응답 계약", () => {
 
   it("DELETE /projects/:id 202 · 삭제 중인 프로젝트의 deletion (#247)", async () => {
     pool.on(/FROM projects WHERE id = \$1 FOR UPDATE/, () => ({ rows: [{ id: 1 }] }));
-    pool.on(/onprem_agent_jobs/, () => ({ rows: [{ onprem: true }] }));
+    pool.on(/SELECT DISTINCT d\.id/, () => ({ rows: [{ id: 7 }] }));
+    pool.on(/INSERT INTO onprem_agent_cleanup_jobs/, () => ({
+      rows: [{ job_id: "cleanup-7" }],
+      rowCount: 1,
+    }));
     pool.on(/^UPDATE projects SET deletion_status/, () => ({
       rows: [{
         deletion_status: "deleting",
         deletion_error: null,
         deletion_requested_at: NOW,
-        deletion_warnings: ["ONPREM_MANUAL_CLEANUP"],
+        deletion_warnings: [],
       }],
     }));
     pool.on(/FROM projects p/, () => ({

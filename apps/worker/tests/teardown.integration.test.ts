@@ -165,6 +165,12 @@ describe.skipIf(!databaseUrl)("teardown (#247): isolated PostgreSQL", () => {
          VALUES($1, $2, $3, 'ready_for_verify', '{}'::jsonb)`,
         [String(deploymentId), deploymentId, input.targetEnvironmentId],
       );
+      await pool.query(
+        `INSERT INTO onprem_agent_cleanup_jobs(
+           job_id, deployment_id, environment_id, reason, status, attempt, result
+         ) VALUES($1, $2, $3, 'project_deleted', 'succeeded', 1, '{}'::jsonb)`,
+        [`cleanup-${deploymentId}`, deploymentId, input.targetEnvironmentId],
+      );
     }
     return deploymentId;
   }

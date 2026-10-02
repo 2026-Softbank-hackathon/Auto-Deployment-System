@@ -393,6 +393,34 @@ export class DockerOnpremJobExecutor implements OnpremJobExecutor {
     );
   }
 
+  async cleanup(deploymentId: number): Promise<void> {
+    const matches = [...this.activeDeployments.entries()].filter(
+      ([, deployment]) => deployment.deploymentId === deploymentId,
+    );
+    await this.tunnelProvider?.stop(deploymentId);
+
+    if (matches.length > 0) {
+      for (const [, deployment] of matches) {
+        await deployment.resources.cleanup();
+      }
+    } else if (this.stateStore && this.runtimeManager.restore) {
+      const persisted = (await this.stateStore.load()).find(
+        (runtime) => runtime.deploymentId === deploymentId,
+      );
+      if (persisted) {
+        const resources = await this.runtimeManager.restore({
+          projectName: persisted.projectName,
+          localUrl: persisted.localUrl,
+          health: persisted.health,
+        });
+        await resources?.cleanup();
+      }
+    }
+
+    await this.stateStore?.remove(deploymentId);
+    for (const [key] of matches) this.activeDeployments.delete(key);
+  }
+
   async shutdown(): Promise<void> {
     const deployments = [...this.activeDeployments.values()];
     this.activeDeployments.clear();

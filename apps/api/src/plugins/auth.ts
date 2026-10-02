@@ -70,7 +70,9 @@ const authPlugin: FastifyPluginAsync<{
       opts.agentJobClaimEnabled &&
       request.method === "POST" &&
       (path === "/api/v1/agents/jobs/claim" ||
-        /^\/api\/v1\/agents\/jobs\/[^/]+\/(?:tunnel|result)$/.test(path))
+        path === "/api/v1/agents/cleanup-jobs/claim" ||
+        /^\/api\/v1\/agents\/jobs\/[^/]+\/(?:tunnel|result)$/.test(path) ||
+        /^\/api\/v1\/agents\/cleanup-jobs\/[^/]+\/result$/.test(path))
     ) {
       return;
     }

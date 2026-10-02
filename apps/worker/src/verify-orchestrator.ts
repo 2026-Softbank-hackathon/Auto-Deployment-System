@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Pool } from "@camellia/db";
+import { enqueueOnpremCleanup, type Pool } from "@camellia/db";
 import type { WorkerDeps } from "./deps.js";
 import { transitionTo } from "./state-machine.js";
 import type { OriginActivationReceipt } from "./origin-activation.js";
@@ -51,6 +51,8 @@ export class VerifyJobConflictError extends Error {
     this.name = "VerifyJobConflictError";
   }
 }
+
+export const ONPREM_ROLLBACK_GRACE_MS = 15 * 60 * 1000;
 
 export async function runVerifyJob(
   job: { data: VerifyJobPayload },
@@ -264,8 +266,8 @@ async function resumeCompletedVerify(
  *   - verifying → succeeded / failed 전이 (state-machine 유효 전이)
  *   - env_locks 삭제 (해당 환경 재배포 unblock)
  *   - SSE state_changed 알림
- * 모든 단계는 best-effort — 이미 다른 상태로 전이됐거나 알림 발행이 실패해도
- * verify 자체는 종료되어야 한다.
+ * 상태 전이·lock/SSE는 기존처럼 best-effort다. 단, 런타임 cleanup 예약 실패는
+ * worker 재시도로 복구할 수 있도록 마지막에 다시 던진다.
  */
 export async function finalizeDeploymentState(
   deps: WorkerDeps,
@@ -273,6 +275,7 @@ export async function finalizeDeploymentState(
   nextStatus: "succeeded" | "failed",
   reason?: string,
 ): Promise<void> {
+  let cleanupSchedulingError: unknown;
   try {
     await transitionTo(deps.pool, deploymentId, nextStatus, {
       reason,
@@ -282,6 +285,15 @@ export async function finalizeDeploymentState(
     deps.log?.warn(
       { deployment_id: deploymentId, next: nextStatus, err },
       "verify finalize: transitionTo skipped (likely terminal state already)",
+    );
+  }
+  try {
+    await scheduleOnpremRuntimeCleanup(deps, deploymentId, nextStatus);
+  } catch (err) {
+    cleanupSchedulingError = err;
+    deps.log?.warn(
+      { deployment_id: deploymentId, next: nextStatus, err },
+      "verify finalize: on-prem cleanup scheduling failed",
     );
   }
   try {
@@ -304,6 +316,50 @@ export async function finalizeDeploymentState(
       { deployment_id: deploymentId, next: nextStatus, err },
       "verify finalize: SSE notify failed",
     );
+  }
+  if (cleanupSchedulingError) throw cleanupSchedulingError;
+}
+
+async function scheduleOnpremRuntimeCleanup(
+  deps: WorkerDeps,
+  deploymentId: number,
+  nextStatus: "succeeded" | "failed",
+): Promise<void> {
+  const current = await deps.pool.query<{ status: string }>(
+    `SELECT status FROM deployments WHERE id = $1`,
+    [deploymentId],
+  );
+  if (current.rows[0]?.status !== nextStatus) return;
+
+  if (nextStatus === "failed") {
+    await enqueueOnpremCleanup(deps.pool, {
+      deploymentId,
+      reason: "deployment_failed",
+    });
+    return;
+  }
+
+  // 새 Origin 검증까지 성공한 시점부터 15분 동안만 직전 On-Prem 런타임을
+  // rollback 후보로 보존한다. 오래된 런타임도 함께 예약해 최대 2개 정책의 기반을 만든다.
+  const previous = await deps.pool.query<{ id: number | string }>(
+    `SELECT previous.id
+     FROM deployments current
+     JOIN deployments previous
+       ON previous.project_id = current.project_id
+      AND previous.id <> current.id
+      AND previous.status = 'succeeded'
+     JOIN onprem_agent_jobs job ON job.deployment_id = previous.id
+     WHERE current.id = $1
+     ORDER BY previous.succeeded_at DESC NULLS LAST, previous.id DESC`,
+    [deploymentId],
+  );
+  const availableAt = new Date(Date.now() + ONPREM_ROLLBACK_GRACE_MS);
+  for (const row of previous.rows) {
+    await enqueueOnpremCleanup(deps.pool, {
+      deploymentId: Number(row.id),
+      reason: "superseded",
+      availableAt,
+    });
   }
 }
 

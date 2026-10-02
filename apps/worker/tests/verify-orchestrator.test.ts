@@ -313,7 +313,7 @@ describe("verify 결과 영속화", () => {
 });
 
 describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반영", () => {
-  function makeTxnHarness(initialStatus = "verifying") {
+  function makeTxnHarness(initialStatus = "verifying", previousOnpremIds: number[] = []) {
     let currentStatus = initialStatus;
     const clientQueries: Array<{ sql: string; params: unknown[] }> = [];
     const client = {
@@ -338,6 +338,15 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
       connect: vi.fn(async () => client),
       query: vi.fn(async (sql: string, params: unknown[] = []) => {
         poolQueries.push({ sql, params });
+        if (sql.includes("SELECT status FROM deployments")) {
+          return { rows: [{ status: currentStatus }] };
+        }
+        if (sql.includes("SELECT previous.id")) {
+          return { rows: previousOnpremIds.map((id) => ({ id })) };
+        }
+        if (sql.includes("INSERT INTO onprem_agent_cleanup_jobs")) {
+          return { rows: [{ job_id: `cleanup-${String(params[0])}` }], rowCount: 1 };
+        }
         return { rows: [] };
       }),
     } as unknown as Pool;
@@ -351,7 +360,7 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
   }
 
   it("succeeded 전이 + env_lock DELETE + SSE state_changed 알림", async () => {
-    const harness = makeTxnHarness();
+    const harness = makeTxnHarness("verifying", [31, 32]);
     const bossSend = vi.fn(async () => "job");
     const notify = vi.fn(async () => {});
     const deps = {
@@ -373,6 +382,17 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
     });
     // succeeded 는 diagnose 안 큐잉
     expect(bossSend).not.toHaveBeenCalled();
+    const cleanupJobs = harness.poolQueries.filter((q) =>
+      q.sql.includes("INSERT INTO onprem_agent_cleanup_jobs"),
+    );
+    expect(cleanupJobs.map((q) => q.params.slice(0, 2))).toEqual([
+      [31, "superseded"],
+      [32, "superseded"],
+    ]);
+    for (const cleanup of cleanupJobs) {
+      expect(cleanup.params[2]).toBeInstanceOf(Date);
+      expect((cleanup.params[2] as Date).getTime() - Date.now()).toBeGreaterThan(14 * 60 * 1000);
+    }
   });
 
   it("failed 전이 + boss diagnose 큐잉 + env_lock DELETE + SSE 알림", async () => {
@@ -397,6 +417,10 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
     expect(notify).toHaveBeenCalledWith(42, "state_changed", {
       status: "failed",
     });
+    const cleanup = harness.poolQueries.find((q) =>
+      q.sql.includes("INSERT INTO onprem_agent_cleanup_jobs"),
+    );
+    expect(cleanup?.params.slice(0, 2)).toEqual([42, "deployment_failed"]);
   });
 
   it("이미 cancelled 등 다른 terminal 상태면 transitionTo 는 예외 삼키고 env_lock·SSE 는 계속", async () => {

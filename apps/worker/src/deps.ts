@@ -51,4 +51,10 @@ export type WorkerDeps = {
   >;
   finalUrlVerifier?: Pick<FinalUrlVerifier, "verify">;
   dnsActivationChecker?: Pick<PublicDnsActivationChecker, "waitUntilResolvable">;
+  /** 프로젝트 삭제 시 Agent cleanup 확인 대기 설정. 테스트에서는 sleep을 주입할 수 있다. */
+  onpremCleanupWait?: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    sleep?: (milliseconds: number) => Promise<void>;
+  };
 };

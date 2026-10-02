@@ -142,6 +142,22 @@ export async function runVerifyJob(
     ? claim.activation
     : await originActivator.activate(validJob.data);
   if (!activation) return targetResult;
+  if (activation.reused) {
+    // 공개 주소 레코드가 이미 이번 origin 이라 DNS 갱신 · 권한 DNS 대기 없이 공개 주소 검증으로 간다 (#299)
+    const line = "주소 연결 그대로 — 갱신 생략";
+    deps.log?.info(
+      { deployment_id: validJob.data.deploymentId, origin: activation.activatedOrigin },
+      line,
+    );
+    try {
+      await deps.notifier?.notify(validJob.data.deploymentId, "log.line", {
+        step: "verify",
+        line: `[${new Date().toISOString()}] ${line}`,
+      });
+    } catch {
+      // 진행 로그 발행 실패는 검증을 멈추지 않는다
+    }
+  }
 
   await recordPublicUrlPhase(
     deps.pool,
@@ -159,6 +175,7 @@ export async function runVerifyJob(
         environmentId: validJob.data.environmentId,
         serviceHostname: activation.serviceHostname,
         health: validJob.data.health,
+        ...(activation.reused ? { originUnchanged: true } : {}),
       },
       {
         ...runtime,
@@ -716,6 +733,7 @@ function parseStoredActivation(
     activatedOrigin,
     previousOrigin,
     tunnelIngress,
+    ...(Reflect.get(activation, "reused") === true ? { reused: true as const } : {}),
   };
 }
 

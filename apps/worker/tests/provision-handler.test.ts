@@ -785,6 +785,8 @@ describe("handleProvision", () => {
         moduleDirectory: string; region: string; credentials: { accessKeyId: string }; variables: Record<string, unknown>;
       }];
       expect(input.variables).not.toHaveProperty("container_image");
+      // 앱 이름도 배포마다 바뀔 수 있고(분석기가 이름을 못 찾으면 업로드 폴더 이름) apply 는 그대로 반영한다 (#299)
+      expect(input.variables).not.toHaveProperty("app_name");
       expect(input.variables).toMatchObject({ region: "ap-northeast-2", environment_variables: { PUBLIC_MODE: "demo" } });
       expect(input.credentials.accessKeyId).toBe("access-key-value");
       const previous = harness.queries.find(({ sql }) => sql.includes("terraform_inputs_hash IS NOT NULL"))!;

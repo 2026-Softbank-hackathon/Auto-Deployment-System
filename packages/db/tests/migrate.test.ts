@@ -43,6 +43,7 @@ describe("migration files", () => {
       "018_onprem_agent_cleanup_jobs.sql",
       "019_deploy_mode.sql",
       "020_source_patches.sql",
+      "021_terraform_outputs.sql",
     ]);
     for (const file of MIGRATION_FILES) {
       expect(existsSync(join(MIGRATIONS_DIR, file))).toBe(true);

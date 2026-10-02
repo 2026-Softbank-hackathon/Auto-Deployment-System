@@ -724,7 +724,6 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 @keyframes timeline-grow { from { transform: scaleX(0); } }
 
 /* 연결 화면 (#218) */
-.connections__count { min-width: 28px; padding: 2px 10px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; text-align: center; color: var(--ink-soft); background: var(--paper-sunken); border-radius: var(--radius-tape); }
 .connections-empty { display: flex; align-items: center; gap: 20px; padding: 24px 28px; background: var(--surface); border: 2px dashed var(--line-strong); border-radius: var(--radius-card); }
 .connections-empty h2 { margin: 0 0 6px; font-family: var(--font-display); font-size: 22px; }
 .connections-empty p { margin: 0; color: var(--ink-soft); }
@@ -734,19 +733,50 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .connection-row__main strong { font-family: var(--font-mono); font-size: 16px; color: var(--ink); overflow-wrap: anywhere; }
 .connection-row__main span { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
 .connection-row__state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.connection-row__actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: wrap; }
-.connection-row__confirm { display: grid; gap: 10px; justify-items: end; max-width: 420px; }
-.setup-card__body .connection-row__confirm p { color: var(--ink); text-align: right; }
-.setup-card__body .connection-row__error { color: var(--brick-text); font-weight: 700; }
-.connection-row__detail { grid-column: 1 / -1; padding-top: 12px; border-top: var(--border); }
 .connection-badge { padding: 2px 8px; font-size: 12px; font-weight: 700; color: var(--brass-deep); border: 1px solid var(--brass); border-radius: var(--radius-tape); white-space: nowrap; }
 .agent-steps { display: grid; gap: 12px; }
+/* 연결 표 (#236): 넓은 화면은 표, 좁은 화면은 줄마다 카드로 쌓는다 */
+.connections-area { container: connections / inline-size; }
+.connections-card { overflow-x: auto; background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
+.connections-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.connections-table th, .connections-table td { padding: 12px 16px; text-align: left; vertical-align: middle; border-top: var(--border); }
+.connections-table thead th { padding-block: 10px; border-top: 0; font-size: 12px; font-weight: 700; color: var(--ink-soft); white-space: nowrap; background: var(--paper-sunken); }
+.connections-table__row.is-open > * { background: color-mix(in srgb, var(--koro-tint) 22%, transparent); }
+.connections-table__type { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.connections-table__name { font-family: var(--font-mono); font-weight: 700; color: var(--ink); white-space: nowrap; }
+.connections-table__detail { display: inline-flex; align-items: center; gap: 8px; }
+.connections-table__detail code { font-family: var(--font-mono); color: var(--ink-soft); white-space: nowrap; }
+.connections-table__actions { text-align: right; }
+.connections-table__buttons { display: flex; align-items: center; justify-content: flex-end; gap: 4px; white-space: nowrap; }
+.connections-table__expand > td { padding: 16px 20px 20px; border-top: 1px dashed var(--line); background: color-mix(in srgb, var(--koro-tint) 22%, transparent); }
+.connections-note { margin-top: 10px; }
+.connection-confirm { display: grid; gap: 10px; max-width: 560px; }
+.connection-confirm p { margin: 0; color: var(--ink); }
+.connection-confirm__error { margin: 6px 0 0; font-size: 13px; color: var(--brick-text); font-weight: 700; }
+.connection-dialog { width: min(640px, calc(100vw - 32px)); }
+.connection-dialog__tab { display: inline-flex; align-items: center; gap: 6px; }
+.connection-dialog__panel { display: grid; gap: 12px; }
 @media (max-width: 760px) {
   .connections-empty { flex-direction: column; align-items: flex-start; padding: 20px 16px; }
   .connection-row { grid-template-columns: minmax(0, 1fr); }
-  .connection-row__state, .connection-row__actions { justify-content: flex-start; }
-  .connection-row__confirm { justify-items: start; }
-  .setup-card__body .connection-row__confirm p { text-align: left; }
+  .connection-row__state { justify-content: flex-start; }
+}
+
+/* 연결 표: 본문 폭이 좁으면(좁은 노트북 · 태블릿 · 휴대폰) 줄마다 카드로 쌓는다. 사이드바 유무와 상관없이 표가 놓인 폭으로 정한다 */
+@container connections (max-width: 860px) {
+  .connections-card { overflow: visible; background: transparent; border: 0; box-shadow: none; }
+  .connections-table, .connections-table tbody, .connections-table tr, .connections-table th, .connections-table td { display: block; }
+  .connections-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .connections-table__row { display: grid !important; gap: 6px; margin-top: 10px; padding: 14px 16px; background: var(--surface); border: var(--border); border-radius: var(--radius-input); }
+  .connections-table__row.is-open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .connections-table__row.is-open > * { background: transparent; }
+  .connections-table th, .connections-table td { padding: 0; border-top: 0; }
+  .connections-table [data-label] { display: grid; grid-template-columns: 5em minmax(0, 1fr); align-items: center; justify-items: start; gap: 8px; }
+  .connections-table [data-label]::before { content: attr(data-label); font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+  .connections-table__actions { text-align: left; }
+  .connections-table__buttons, .connections-table__detail { justify-content: flex-start; flex-wrap: wrap; }
+  .connections-table__expand > td { padding: 14px 16px; border: var(--border); border-top: 0; border-radius: 0 0 var(--radius-input) var(--radius-input); }
+  .connections-table__name, .connections-table__detail code { white-space: normal; overflow-wrap: anywhere; }
 }
 
 /* 간단 배포: 앱 고르기 · 배포할 연결 고르기 (#218) */

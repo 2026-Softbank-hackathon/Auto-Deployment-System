@@ -277,6 +277,14 @@ export async function deleteEnvironment(environmentId: string): Promise<void> {
   await assertOk(response);
 }
 
+/** 이 연결을 같은 종류(AWS / 온프레미스)의 기본 연결로 바꾼다 (#228). 원래 기본이던 연결은 서버가 함께 푼다. */
+export async function setDefaultEnvironment(environmentId: string): Promise<void> {
+  const response = await fetch(endpoint(`/api/v1/environments/${encodeURIComponent(environmentId)}`), {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isDefault: true }),
+  });
+  await assertOk(response);
+}
+
 function randomSuffix(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(4)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

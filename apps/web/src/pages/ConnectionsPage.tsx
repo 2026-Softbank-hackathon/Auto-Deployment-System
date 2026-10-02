@@ -1,37 +1,24 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useState } from 'react';
 import {
-  createSharedAwsConnection, createSharedOnpremConnection, deleteEnvironment, deleteSharedSecret, DeploymentApiError, issueAgentRegistrationToken,
+  deleteEnvironment, deleteSharedSecret, DeploymentApiError, setDefaultEnvironment,
   type AgentRegistrationToken, type EnvironmentSummary,
 } from '../api/deployment-api';
 import { Keycap } from '../components/ui/Keycap';
 import { Koro } from '../components/ui/Koro';
+import { StatusTape } from '../components/ui/StatusTape';
+import { AddConnectionDialog } from '../features/connections/AddConnectionDialog';
 import { AgentInstallSteps } from '../features/connections/AgentInstallSteps';
 import { AgentState } from '../features/connections/AgentState';
 import { useSharedConnections } from '../features/connections/useSharedConnections';
-import { AwsKeyForm } from '../features/deployment-start/AwsKeyForm';
+import { EnvironmentIcon } from '../features/dashboard/DeploymentRow';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
-const HOST_MAX = 128;
+const COLUMNS = 5;
 
-function Section({ title, copy, count, children }: { title: string; copy: string; count: number; children: ReactNode }) {
-  const titleId = useId();
-  return <section className="setup-card" aria-labelledby={titleId}>
-    <div className="setup-card__head">
-      <h2 id={titleId}>{title}</h2>
-      <span className="connections__count">{count}</span>
-    </div>
-    <div className="setup-card__body">
-      <p>{copy}</p>
-      {children}
-    </div>
-  </section>;
-}
-
-/** 연결 한 줄의 삭제 버튼. 브라우저 확인 창 대신 줄 안에서 한 번 더 묻는다. */
-function RemoveConnection({ connection, others, onRemoved }: { connection: EnvironmentSummary; /** 남는 공용 연결 (키를 같이 쓰는지 확인용) */ others: EnvironmentSummary[]; onRemoved: () => Promise<void> }) {
+/** 삭제 확인. 브라우저 확인 창 대신 줄 바로 아래에서 한 번 더 묻는다. */
+function RemoveConfirm({ connection, others, onRemoved, onCancel }: { connection: EnvironmentSummary; /** 남는 공용 연결 (키를 같이 쓰는지 확인용) */ others: EnvironmentSummary[]; onRemoved: () => Promise<void>; onCancel: () => void }) {
   const { t } = useI18n();
   const copy = t.connections;
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -49,78 +36,93 @@ function RemoveConnection({ connection, others, onRemoved }: { connection: Envir
     const stillUsed = new Set(others.flatMap((other) => other.secretNames));
     await Promise.allSettled(connection.secretNames.filter((name) => !stillUsed.has(name)).map((name) => deleteSharedSecret(name)));
     await onRemoved();
-    setBusy(false);
-    setConfirming(false);
   }
 
-  if (!confirming) return <Keycap variant="ghost" onClick={() => setConfirming(true)}>{copy.remove}<span className="visually-hidden"> {connection.name}</span></Keycap>;
-  return <div className="connection-row__confirm" role="group" aria-label={copy.remove}>
+  return <div className="connection-confirm" role="group" aria-label={copy.remove}>
     <p>{copy.removeConfirm(connection.hostname ?? connection.name)}</p>
-    {error !== null && <p className="connection-row__error" role="alert">
+    {error !== null && <p className="connection-confirm__error" role="alert">
       {error instanceof DeploymentApiError && error.status === 409 ? copy.removeInUse : `${copy.removeError} ${errorMessage(error, t, copy.removeError)}`}
     </p>}
     <div className="aws-key-form__actions">
       <Keycap variant="secondary" disabled={busy} onClick={() => void remove()}>{busy ? copy.removing : copy.removeYes}</Keycap>
-      <Keycap variant="ghost" disabled={busy} onClick={() => { setConfirming(false); setError(null); }}>{copy.cancel}</Keycap>
+      <Keycap variant="ghost" disabled={busy} onClick={onCancel}>{copy.cancel}</Keycap>
     </div>
   </div>;
 }
 
-function OnpremForm({ takenNames, onCreated, onCancel }: { takenNames: string[]; onCreated: (id: string, token: AgentRegistrationToken | null) => Promise<void>; onCancel?: () => void }) {
+/** 표의 한 줄. 설치 안내와 삭제 확인은 줄 바로 아래 칸에 펼친다. */
+function ConnectionRow({ connection, others, now, freshToken, onRefresh }: {
+  connection: EnvironmentSummary; others: EnvironmentSummary[]; now: number; freshToken: AgentRegistrationToken | null; onRefresh: () => Promise<void>;
+}) {
   const { t } = useI18n();
-  const copy = t.connections.onprem;
-  const hostId = useId();
-  const [hostname, setHostname] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
+  const copy = t.connections;
+  const cols = copy.columns;
+  const [panel, setPanel] = useState<'steps' | 'remove' | null>(null);
+  const [defaulting, setDefaulting] = useState(false);
+  const [defaultError, setDefaultError] = useState<unknown>(null);
+  const label = connection.hostname ?? connection.name;
+  const detailId = `connection-detail-${connection.id}`;
+  const toggle = (next: 'steps' | 'remove') => setPanel((current) => (current === next ? null : next));
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = hostname.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const id = await createSharedOnpremConnection(trimmed, takenNames);
-      // 서버를 등록했으면 바로 Agent 등록 명령까지 보여 준다. 토큰 발급이 실패하면 설치 안내에서 다시 발급할 수 있다.
-      const token = await issueAgentRegistrationToken(id).catch(() => null);
-      await onCreated(id, token);
-    } catch (requestError) {
-      setError(requestError);
-    } finally {
-      setBusy(false);
-    }
+  async function makeDefault() {
+    setDefaulting(true);
+    setDefaultError(null);
+    try { await setDefaultEnvironment(connection.id); await onRefresh(); } catch (requestError) { setDefaultError(requestError); } finally { setDefaulting(false); }
   }
 
   return <>
-    <form className="setup-form" onSubmit={(event) => void submit(event)} autoComplete="off">
-      <div className="aws-key-form__field">
-        <label htmlFor={hostId}>{copy.hostLabel}</label>
-        <input id={hostId} value={hostname} onChange={(event) => setHostname(event.target.value)} maxLength={HOST_MAX} required autoComplete="off" spellCheck={false} disabled={busy} placeholder={copy.hostPlaceholder} />
-      </div>
-      <Keycap type="submit" variant="secondary" disabled={busy || !hostname.trim()}>{busy ? copy.adding : copy.register}</Keycap>
-      {onCancel && <Keycap variant="ghost" disabled={busy} onClick={onCancel}>{t.connections.cancel}</Keycap>}
-    </form>
-    {error !== null && <div className="notice error" role="alert"><strong>{copy.addError}</strong><br />{errorMessage(error, t, copy.addError)}</div>}
+    <tr className={`connections-table__row${panel ? ' is-open' : ''}`}>
+      <td data-label={cols.type}><span className="connections-table__type"><EnvironmentIcon type={connection.type} />{t.deploy.targets[connection.type]}</span></td>
+      <th scope="row" data-label={cols.name}><span className="connections-table__name">{connection.name}</span></th>
+      <td data-label={cols.detail}><span className="connections-table__detail">
+        <code>{connection.type === 'aws' ? connection.region ?? '—' : connection.hostname ?? '—'}</code>
+        {connection.isDefault && <span className="connection-badge">{copy.default}</span>}
+      </span></td>
+      <td data-label={cols.status}>{connection.type === 'aws'
+        ? <StatusTape tone="success">{copy.awsReady}</StatusTape>
+        : <AgentState connection={connection} now={now} />}</td>
+      <td className="connections-table__actions">
+        <div className="connections-table__buttons">
+          {connection.type === 'onprem' && <Keycap variant="ghost" aria-expanded={panel === 'steps'} aria-controls={panel === 'steps' ? detailId : undefined} onClick={() => toggle('steps')}>
+            {panel === 'steps' ? copy.agent.hideSteps : copy.agent.showSteps}<span className="visually-hidden"> {label}</span>
+          </Keycap>}
+          {!connection.isDefault && <Keycap variant="ghost" disabled={defaulting} onClick={() => void makeDefault()}>
+            {defaulting ? copy.makingDefault : copy.makeDefault}<span className="visually-hidden"> {label}</span>
+          </Keycap>}
+          <Keycap variant="ghost" aria-expanded={panel === 'remove'} aria-controls={panel === 'remove' ? detailId : undefined} onClick={() => toggle('remove')}>
+            {copy.remove}<span className="visually-hidden"> {label}</span>
+          </Keycap>
+        </div>
+        {defaultError !== null && <p className="connection-confirm__error" role="alert">{copy.makeDefaultError} {errorMessage(defaultError, t, copy.makeDefaultError)}</p>}
+      </td>
+    </tr>
+    {panel && <tr className="connections-table__expand">
+      <td colSpan={COLUMNS} id={detailId}>
+        {panel === 'steps'
+          ? <AgentInstallSteps environmentId={connection.id} initialToken={freshToken} />
+          : <RemoveConfirm connection={connection} others={others} onRemoved={onRefresh} onCancel={() => setPanel(null)} />}
+      </td>
+    </tr>}
   </>;
 }
 
 /**
- * 연결 (#218): AWS 계정과 온프레미스 서버를 한 번만 등록해 두고, 간단 배포에서 앱마다 골라 쓴다.
+ * 연결 (#218, #236): AWS 계정과 온프레미스 서버를 한 번만 등록해 두고, 간단 배포에서 앱마다 골라 쓴다.
+ * 등록한 연결은 한 표에서 관리하고(기본 지정 · 삭제 · Agent 설치 안내), 새 연결은 "연결 추가" 창에서 탭으로 골라 등록한다.
  * 여기서 다루는 것은 공용 연결뿐이다. 예전에 앱 하나에만 등록한 연결은 그 앱의 설정 탭에서 볼 수 있다.
  */
 export function ConnectionsPage() {
   const { t } = useI18n();
   const copy = t.connections;
   const { state, refresh, retry } = useSharedConnections();
-  const [adding, setAdding] = useState<'aws' | 'onprem' | null>(null);
-  /** 설치 안내를 펼친 온프레미스 연결 */
-  const [openSteps, setOpenSteps] = useState<ReadonlySet<string>>(new Set());
+  const [adding, setAdding] = useState(false);
   /** 방금 등록한 서버의 Agent 등록 토큰 (한 번만 받는 값이라 화면 상태에만 둔다) */
   const [freshTokens, setFreshTokens] = useState<Record<string, AgentRegistrationToken>>({});
 
+  const ready = state.phase === 'ready';
   const head = <div className="page-head">
     <div><h1>{copy.title}</h1><p>{copy.description}</p></div>
+    {ready && <div className="page-head__actions"><Keycap variant="primary" onClick={() => setAdding(true)}>{copy.add}</Keycap></div>}
   </div>;
 
   if (state.phase === 'loading') return <>{head}<p className="dashboard-status" role="status">{copy.loading}</p></>;
@@ -130,81 +132,33 @@ export function ConnectionsPage() {
   </div></>;
 
   const { connections, loadedAt } = state;
-  const aws = connections.filter((connection) => connection.type === 'aws');
-  const onprem = connections.filter((connection) => connection.type === 'onprem');
-  const takenNames = connections.map((connection) => connection.name);
-  const othersOf = (connection: EnvironmentSummary) => connections.filter((other) => other.id !== connection.id);
-  // AWS 계정이 하나도 없으면 등록 칸을 바로 펼친다 (어느 배포든 이미지를 AWS 계정에 둔다).
-  const showAwsForm = adding === 'aws' || aws.length === 0;
-  const toggleSteps = (id: string) => setOpenSteps((current) => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  // AWS를 먼저 (어느 배포든 이미지는 AWS 계정에 둔다). 기본을 바꿔도 줄 순서는 그대로 둔다.
+  const sorted = [...connections].sort((a, b) => (a.type === b.type ? 0 : a.type === 'aws' ? -1 : 1));
+  const cols = copy.columns;
 
   return <>
     {head}
-    {connections.length === 0 && <section className="connections-empty" aria-label={copy.emptyTitle}>
-      <Koro size={56} />
-      <div>
-        <h2>{copy.emptyTitle}</h2>
-        <p>{copy.emptyCopy}</p>
-      </div>
-    </section>}
+    {connections.length === 0
+      ? <section className="connections-empty" aria-label={copy.emptyTitle}>
+        <Koro size={56} />
+        <div>
+          <h2>{copy.emptyTitle}</h2>
+          <p>{copy.emptyCopy}</p>
+        </div>
+      </section>
+      : <section className="connections-area" aria-label={copy.tableLabel}><div className="connections-card">
+        <table className="connections-table">
+          <thead><tr>
+            <th scope="col">{cols.type}</th><th scope="col">{cols.name}</th><th scope="col">{cols.detail}</th><th scope="col">{cols.status}</th>
+            <th scope="col"><span className="visually-hidden">{cols.actions}</span></th>
+          </tr></thead>
+          <tbody>{sorted.map((connection) => <ConnectionRow key={connection.id} connection={connection} now={loadedAt}
+            others={connections.filter((other) => other.id !== connection.id)} freshToken={freshTokens[connection.id] ?? null} onRefresh={refresh} />)}</tbody>
+        </table>
+      </div></section>}
+    {connections.some((connection) => connection.type === 'onprem') && <p className="aws-key-form__note connections-note">{copy.agent.autoRefresh}</p>}
 
-    <Section title={copy.aws.title} copy={copy.aws.copy} count={aws.length}>
-      {aws.length > 0 && <ul className="connection-list" aria-label={copy.aws.title}>
-        {aws.map((connection) => <li key={connection.id} className="connection-row">
-          <div className="connection-row__main">
-            <strong>{connection.region ?? connection.name}</strong>
-            <span>{connection.name}</span>
-          </div>
-          <div className="connection-row__state">{connection.isDefault && <span className="connection-badge">{copy.default}</span>}</div>
-          <div className="connection-row__actions"><RemoveConnection connection={connection} others={othersOf(connection)} onRemoved={refresh} /></div>
-        </li>)}
-      </ul>}
-      {showAwsForm
-        ? <AwsKeyForm onCancel={aws.length > 0 ? () => setAdding(null) : undefined}
-          onSubmit={async (input) => { await createSharedAwsConnection(input, takenNames); await refresh(); setAdding(null); }} />
-        : <div><Keycap variant="secondary" onClick={() => setAdding('aws')}>{copy.aws.add}</Keycap></div>}
-    </Section>
-
-    <Section title={copy.onprem.title} copy={copy.onprem.copy} count={onprem.length}>
-      {onprem.length > 0 && <ul className="connection-list" aria-label={copy.onprem.title}>
-        {onprem.map((connection) => {
-          const stepsOpen = openSteps.has(connection.id);
-          const stepsId = `agent-steps-${connection.id}`;
-          return <li key={connection.id} className="connection-row">
-            <div className="connection-row__main">
-              <strong>{connection.hostname ?? connection.name}</strong>
-              <span>{connection.name}</span>
-            </div>
-            <div className="connection-row__state">
-              <AgentState connection={connection} now={loadedAt} />
-              {connection.isDefault && <span className="connection-badge">{copy.default}</span>}
-            </div>
-            <div className="connection-row__actions">
-              <Keycap variant="ghost" aria-expanded={stepsOpen} aria-controls={stepsId} onClick={() => toggleSteps(connection.id)}>
-                {stepsOpen ? copy.agent.hideSteps : copy.agent.showSteps}<span className="visually-hidden"> {connection.hostname ?? connection.name}</span>
-              </Keycap>
-              <RemoveConnection connection={connection} others={othersOf(connection)} onRemoved={refresh} />
-            </div>
-            {stepsOpen && <div id={stepsId} className="connection-row__detail">
-              <AgentInstallSteps environmentId={connection.id} initialToken={freshTokens[connection.id] ?? null} />
-            </div>}
-          </li>;
-        })}
-      </ul>}
-      {onprem.length > 0 && <p className="aws-key-form__note">{copy.agent.autoRefresh}</p>}
-      {adding === 'onprem'
-        ? <OnpremForm takenNames={takenNames} onCancel={() => setAdding(null)}
-          onCreated={async (id, token) => {
-            if (token) setFreshTokens((current) => ({ ...current, [id]: token }));
-            setOpenSteps((current) => new Set(current).add(id));
-            await refresh();
-            setAdding(null);
-          }} />
-        : <div><Keycap variant="secondary" onClick={() => setAdding('onprem')}>{copy.onprem.add}</Keycap></div>}
-    </Section>
+    <AddConnectionDialog open={adding} takenNames={connections.map((connection) => connection.name)} onRefresh={refresh}
+      onTokenIssued={(id, token) => setFreshTokens((current) => ({ ...current, [id]: token }))} onClose={() => setAdding(false)} />
   </>;
 }

@@ -3,7 +3,7 @@ import { cancelDeployment, listEnvironments, listSharedEnvironments, redeployDep
 
 /** 배포 형태로 서로 바뀌는 AWS 프로필 (컨테이너 · 서버리스) */
 const AWS_COMPUTE_PROFILES = new Set(['aws-ecs-basic', SERVERLESS_PROFILE]);
-import type { Navigate } from '../../app/navigation';
+import { followAppLink, type Navigate } from '../../app/navigation';
 import { Keycap } from '../../components/ui/Keycap';
 import { useI18n } from '../../i18n/I18nProvider';
 import { ServerReason } from '../deployment-progress/ServerReason';
@@ -11,7 +11,8 @@ import { deploymentStatusView } from '../deployment-status/status-view';
 import { DeploymentRow } from './DeploymentRow';
 import { CONNECTIONS_PATH, EnvironmentChooser } from './EnvironmentChooser';
 import { RowMenu, type RowMenuItem } from './RowMenu';
-import { displayProjectName, isStalled, safeHttpUrl } from './format';
+import { displayProjectName, hostOf, isStalled, safeHttpUrl } from './format';
+import { StatusTape } from '../../components/ui/StatusTape';
 import type { DeploymentListItem } from './useDeploymentList';
 
 /** 환경을 잡고 있는 상태 (서버의 재배포 락 검사와 같은 목록). 이 상태의 배포가 있으면 같은 환경으로는 재배포할 수 없다. */
@@ -196,7 +197,48 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     ];
   }
 
+  /**
+   * 지금 서비스 중인 버전으로 바로 할 수 있는 일 — 재배포 · 다른 환경으로 옮기기 · 서버리스(컨테이너)로 재배포.
+   * 행의 ⋯ 메뉴와 같은 동작이다(같은 확인 · 막힘 이유 · 실패 표시). 메뉴는 그대로 두고, 자주 쓰는 동작만 목록 위로 꺼낸다.
+   */
+  function liveActions(item: DeploymentListItem) {
+    const url = safeHttpUrl(item.publicUrl);
+    const busy = starting !== null;
+    const blockedReason = blocked(item) ? t.redeploy.blocked : null;
+    const switchItem = projectId ? switchItems(item)[0] : undefined;
+    const needsConnection = Array.isArray(targets) && switchTargets(item).length === 0;
+    const mode = modeItems(item)[0];
+    const switchLabel = item.environmentType === 'aws' ? t.versions.switchTo(t.deploy.targets.onprem)
+      : item.environmentType === 'onprem' ? t.versions.switchTo(t.deploy.targets.aws) : t.versions.switchEnv;
+    const titleId = `${searchId}-live`;
+    return <section className="live-actions" aria-labelledby={titleId}>
+      <div className="live-actions__head">
+        <StatusTape tone="success">LIVE</StatusTape>
+        <h2 id={titleId}>{t.versions.liveTitle}</h2>
+      </div>
+      <p className="live-actions__meta">
+        <span>{t.dashboard.deploymentNo(item.id)}</span>
+        <span>{environmentLabel(item)}</span>
+        {url && <a href={url} target="_blank" rel="noreferrer">{hostOf(url)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
+      </p>
+      <p className="live-actions__hint">{t.versions.liveHint}</p>
+      <div className="live-actions__buttons">
+        <Keycap sound="start" disabled={busy || blockedReason !== null} onClick={() => void redeploy(item, t.redeploy.failed)}
+          aria-label={`${t.redeploy.button} — ${itemName(item)}`}>{starting === item.id ? t.redeploy.starting : t.redeploy.button}</Keycap>
+        {switchItem && <Keycap variant="secondary" disabled={busy || switchItem.disabledReason !== undefined} onClick={switchItem.onSelect}>{switchLabel}</Keycap>}
+        {mode && <Keycap variant="secondary" disabled={busy || mode.disabledReason !== undefined} onClick={mode.onSelect}>{mode.label}</Keycap>}
+      </div>
+      {/* 누를 수 없는 동작은 이유를 바로 아래에 적는다 (진행 중인 배포 때문에 막히면 모든 버튼이 같은 이유) */}
+      {blockedReason ? <p className="live-actions__reason">{blockedReason}</p>
+        : switchItem?.disabledReason && <p className="live-actions__reason">{switchItem.disabledReason}{needsConnection && <> <a href={CONNECTIONS_PATH} onClick={(event) => followAppLink(event, onNavigate)}>{t.versions.goConnections}</a></>}</p>}
+    </section>;
+  }
+  // 지금 서비스 중인 버전 (한 앱의 목록일 때만)
+  const live = projectId ? items.find((item) => item.isLive && deploymentStatusView(item.status).outcome === 'success') ?? null : null;
+
   return <>
+    {live && liveActions(live)}
+
     <div className="dashboard-tools" role="search" ref={toolsRef}>
       <div className="aws-key-form__field dashboard-tools__search">
         <label htmlFor={searchId}>{t.dashboard.searchLabel}</label>

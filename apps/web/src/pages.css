@@ -91,6 +91,15 @@
 .dashboard-counts__note { margin-left: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
 
 .deployment-list { display: flex; flex-direction: column; gap: 14px; }
+/* 앱 상세 배포 내역: 지금 서비스 중인 버전으로 바로 할 수 있는 일 */
+.live-actions { display: grid; gap: 8px; margin-bottom: 20px; padding: 18px 20px; background: var(--surface); border: 2px solid var(--moss); border-radius: var(--radius-card); }
+.live-actions__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.live-actions__head h2 { margin: 0; font-size: 17px; }
+.live-actions__meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
+.live-actions__meta a { color: var(--koro-text); overflow-wrap: anywhere; }
+.live-actions__hint { margin: 0; font-size: 14px; color: var(--ink-soft); }
+.live-actions__buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.live-actions__reason { margin: 0; font-size: 13px; color: var(--ink-soft); }
 .deployment-row {
   display: grid; grid-template-columns: minmax(0, 240px) 130px minmax(120px, 1fr) 150px 190px; align-items: center; column-gap: 24px;
   padding: 18px 24px; background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest);

@@ -11,7 +11,7 @@ import { deploymentStatusView } from '../deployment-status/status-view';
 import { DeploymentRow } from './DeploymentRow';
 import { CONNECTIONS_PATH, EnvironmentChooser } from './EnvironmentChooser';
 import { RowMenu, type RowMenuItem } from './RowMenu';
-import { displayProjectName, hostOf, isStalled, safeHttpUrl } from './format';
+import { displayProjectName, hostOf, isStalled, relativeTime, safeHttpUrl } from './format';
 import { StatusTape } from '../../components/ui/StatusTape';
 import type { DeploymentListItem } from './useDeploymentList';
 
@@ -97,6 +97,9 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
   const [cancelling, setCancelling] = useState(false);
   // 롤백도 지금 서비스 중인 버전을 바꾸므로 한 번 더 확인받는다.
   const [rollbackTarget, setRollbackTarget] = useState<DeploymentListItem | null>(null);
+  // "지금 서비스 중인 버전" 상자에서 되돌릴 버전을 고르는 중인지, 고른 버전의 배포 번호
+  const [rollbackPicking, setRollbackPicking] = useState(false);
+  const [rollbackPickId, setRollbackPickId] = useState('');
   // 다른 환경으로 배포할 원래 배포 (연결 고르는 창이 열려 있는 동안)
   const [switchSource, setSwitchSource] = useState<DeploymentListItem | null>(null);
 
@@ -216,6 +219,10 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     const switchLabel = item.environmentType === 'aws' ? t.versions.switchTo(t.deploy.targets.onprem)
       : item.environmentType === 'onprem' ? t.versions.switchTo(t.deploy.targets.aws) : t.versions.switchEnv;
     const titleId = `${searchId}-live`;
+    const pickId = `${searchId}-rollback`;
+    // 되돌릴 수 있는 버전: 지금 서비스 중이 아닌 성공한 배포 (⋯ 메뉴의 "이 버전으로 롤백"과 같은 조건). 최근 것부터
+    const previous = items.filter((other) => other.id !== item.id && !other.isLive && deploymentStatusView(other.status).outcome === 'success');
+    const picked = previous.find((other) => other.id === rollbackPickId) ?? previous[0] ?? null;
     return <section className="live-actions" aria-labelledby={titleId}>
       <div className="live-actions__head">
         <StatusTape tone="success">LIVE</StatusTape>
@@ -232,10 +239,28 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
           aria-label={`${t.redeploy.button} — ${itemName(item)}`}>{starting === item.id ? t.redeploy.starting : t.redeploy.button}</Keycap>
         {switchItem && <Keycap variant="secondary" disabled={busy || switchItem.disabledReason !== undefined} onClick={switchItem.onSelect}>{switchLabel}</Keycap>}
         {mode && <Keycap variant="secondary" disabled={busy || mode.disabledReason !== undefined} onClick={mode.onSelect}>{mode.label}</Keycap>}
+        {previous.length > 0 && <Keycap variant="secondary" disabled={busy || blockedReason !== null} aria-expanded={rollbackPicking} aria-controls={rollbackPicking ? pickId : undefined}
+          onClick={() => { ask({}); setRollbackPicking((open) => !open); }}>{t.versions.rollbackPick}</Keycap>}
       </div>
       {/* 누를 수 없는 동작은 이유를 바로 아래에 적는다 (진행 중인 배포 때문에 막히면 모든 버튼이 같은 이유) */}
       {blockedReason ? <p className="live-actions__reason">{blockedReason}</p>
         : switchItem?.disabledReason && <p className="live-actions__reason">{switchItem.disabledReason}{needsConnection && <> <a href={CONNECTIONS_PATH} onClick={(event) => followAppLink(event, onNavigate)}>{t.versions.goConnections}</a></>}</p>}
+      {/* 이전 버전으로 롤백: 배포 이력에서 되돌릴 버전을 고른 뒤 시작한다. 고르는 것 자체가 확인 단계라 따로 묻지 않는다 */}
+      {rollbackPicking && picked && blockedReason === null && <div id={pickId} className="live-actions__rollback">
+        <div className="aws-key-form__field">
+          <label htmlFor={`${pickId}-select`}>{t.versions.rollbackChoose}</label>
+          <select id={`${pickId}-select`} value={picked.id} disabled={busy} onChange={(event) => setRollbackPickId(event.target.value)}>
+            {previous.map((other) => <option key={other.id} value={other.id}>
+              {t.dashboard.deploymentNo(other.id)} · {environmentLabel(other)} · {relativeTime(other.succeededAt ?? other.createdAt, now, t)}
+            </option>)}
+          </select>
+        </div>
+        <p className="live-actions__reason">{t.versions.rollbackConfirm(itemName(picked), environmentLabel(picked))}</p>
+        <div className="live-actions__buttons">
+          <Keycap sound="start" disabled={busy} onClick={() => void redeploy(picked, t.versions.rollbackFailed)}>{starting === picked.id ? t.versions.rollbackStarting : t.versions.rollbackStart}</Keycap>
+          <Keycap variant="ghost" disabled={busy} onClick={() => setRollbackPicking(false)}>{t.versions.rollbackKeep}</Keycap>
+        </div>
+      </div>}
     </section>;
   }
   // 지금 서비스 중인 버전 (한 앱의 목록일 때만)

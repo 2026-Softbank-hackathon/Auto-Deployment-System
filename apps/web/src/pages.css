@@ -100,6 +100,10 @@
 .live-actions__hint { margin: 0; font-size: 14px; color: var(--ink-soft); }
 .live-actions__buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
 .live-actions__reason { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.live-actions__rollback { display: grid; gap: 10px; margin-top: 6px; padding-top: 14px; border-top: var(--border); }
+.live-actions__rollback select { max-width: 100%; }
+/* 배포 진행 화면: 앱의 배포 내역으로 돌아가는 링크 */
+.run-back { display: inline-block; margin-bottom: 12px; }
 .deployment-row {
   display: grid; grid-template-columns: minmax(0, 240px) 130px minmax(120px, 1fr) 150px 190px; align-items: center; column-gap: 24px;
   padding: 18px 24px; background: var(--surface); border: var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-rest);

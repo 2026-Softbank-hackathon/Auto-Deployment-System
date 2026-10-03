@@ -351,6 +351,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const needsAttention = waitingForEnv || waitingForPatch || approvalError !== null;
 
   return <>
+    {/* 이 배포가 속한 앱의 배포 내역으로 돌아가는 길 (앱을 알 때만) */}
+    {projectId && <a className="project-detail__back run-back" href={`/projects/${encodeURIComponent(projectId)}`} onClick={(event) => followAppLink(event, onNavigate)}>
+      ← {t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</a>}
     <section className={`run-stage is-${view.outcome}`} aria-labelledby="run-title">
       <div className="run-head" aria-live="polite">
         <div className="run-head__title">

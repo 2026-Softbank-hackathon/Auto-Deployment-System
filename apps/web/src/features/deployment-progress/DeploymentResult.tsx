@@ -26,7 +26,7 @@ function targetLabel(profile: string | null, labels: { aws: string; onprem: stri
  * 배포 결과 화면. 성공하면 공개 주소를 가장 크게 보여 주고, 서버가 준 사실(배포한 곳 · 걸린 시간 · 완료 시각)만 덧붙인다.
  * 아직 진행 중이거나 실패한 배포는 진행 화면으로 돌려보낸다.
  */
-export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRedeployed }: { deploymentId: string; onBack: () => void; onNewDeployment: () => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed: (deploymentId: string) => void }) {
+export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRedeployed, onOpenProject }: { deploymentId: string; onBack: () => void; onNewDeployment: () => void; /** 이 배포가 속한 앱의 배포 내역으로 간다 */ onOpenProject?: (projectId: string) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed: (deploymentId: string) => void }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -120,6 +120,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
     <div className="result-card__actions">
       <DeployKeycap onClick={onNewDeployment}>{t.result.newDeploy}</DeployKeycap>
       <RedeployButton deploymentId={deploymentId} onStarted={onRedeployed} />
+      {projectId && onOpenProject && <Keycap variant="secondary" onClick={() => onOpenProject(projectId)}>{t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</Keycap>}
       <Keycap variant="ghost" onClick={onBack}>{t.result.back}</Keycap>
     </div>
   </section>;

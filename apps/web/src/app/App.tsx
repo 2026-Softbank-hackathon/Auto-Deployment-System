@@ -39,7 +39,7 @@ export function App() {
         {route.page === 'project' && <ProjectDetailPage projectId={route.projectId} tab={route.tab} onNavigate={navigate} />}
         {route.page === 'deploy' && <SimpleDeployPage onNavigate={navigate} onStarted={(deploymentId) => navigate(`/deployments/${encodeURIComponent(deploymentId)}`)} />}
         {route.page === 'progress' && <DeploymentProgress key={route.deploymentId} deploymentId={route.deploymentId} tab={route.tab} onNavigate={navigate} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onSucceeded={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}/result`)} onNewDeployment={() => navigate('/deploy')} onFixSettings={() => navigate('/connections')} />}
-        {route.page === 'result' && <DeploymentResult deploymentId={route.deploymentId} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onBack={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}`)} onNewDeployment={() => navigate('/deploy')} />}
+        {route.page === 'result' && <DeploymentResult deploymentId={route.deploymentId} onRedeployed={(id) => navigate(`/deployments/${encodeURIComponent(id)}`)} onBack={() => navigate(`/deployments/${encodeURIComponent(route.deploymentId)}`)} onNewDeployment={() => navigate('/deploy')} onOpenProject={(id) => navigate(`/projects/${encodeURIComponent(id)}`)} />}
       </main>
     </div>
     <DeploymentNotifier route={route} onNavigate={navigate} />

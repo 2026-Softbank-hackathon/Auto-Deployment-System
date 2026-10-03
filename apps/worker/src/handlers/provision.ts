@@ -264,6 +264,9 @@ export async function handleProvision(
       variables: terraformVariables,
       log: (line: LogText) => stepLog.line(line),
     };
+    // 재시도로 apply 를 건너뛰면 롤아웃 대기에 apply 시작 시각을 넘기지 않는다
+    const reusingApply = context.status === "deploying" && Boolean(context.origin_url);
+    const appliedSince = new Date();
     const applied = context.status === "deploying" && context.origin_url
       ? {
           originUrl: context.origin_url,
@@ -320,6 +323,7 @@ export async function handleProvision(
         clusterName: stringOutput(applied.outputs, "cluster_name") ?? resourceName,
         serviceName: stringOutput(applied.outputs, "service_name") ?? resourceName,
         expectedTaskDefinition,
+        ...(reusingApply ? {} : { appliedSince }),
         log: (line) => stepLog.line(line),
       });
     }

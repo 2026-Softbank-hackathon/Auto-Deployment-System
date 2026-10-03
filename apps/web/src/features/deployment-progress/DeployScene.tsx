@@ -138,7 +138,7 @@ export function houseFloors(story: DeployStory | null): number {
 
 type Windows = 'off' | 'checking' | 'on';
 /** 집 한 채 (바닥 중심이 원점). 층수 · 지붕 · 창문 불빛 · 이미지 이름표 */
-function House({ floors, total = FLOORS, roofed, windows, tag }: { floors: number; /** 다 지었을 때의 층수 (지붕 높이) */ total?: number; roofed: boolean; windows: Windows; tag: string | null }) {
+export function House({ floors, total = FLOORS, roofed, windows, tag }: { floors: number; /** 다 지었을 때의 층수 (지붕 높이) */ total?: number; roofed: boolean; windows: Windows; tag: string | null }) {
   const light = windows === 'on' ? 'is-on' : windows === 'checking' ? 'is-checking' : '';
   return <>
     {Array.from({ length: floors }, (_, index) => <g key={index} className="jr-floor">

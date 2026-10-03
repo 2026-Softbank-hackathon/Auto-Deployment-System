@@ -158,7 +158,10 @@ export const ko = {
     loading: '프로젝트를 불러오고 있어요…',
     loadError: '프로젝트를 불러오지 못했어요.',
     neverDeployed: '아직 배포하지 않았어요',
-    liveSwitch: { title: '서비스 실행 환경이 AWS로 전환되었습니다.', copy: '기존 공개 주소는 그대로 유지됩니다.' },
+    liveSwitch: {
+      title: '서비스 실행 환경이 AWS로 전환되었습니다.', copy: '기존 공개 주소는 그대로 유지됩니다.',
+      scene: (from: string, to: string) => `LIVE 표지가 온프레미스 서버 옆의 집(${from})에서 구름 위 AWS의 집(${to})으로 옮겨 갔다. 온프레미스 쪽은 불이 꺼져 있다`,
+    },
     deletionDetail: '설정 탭에서 보기',
     deletionLocked: '삭제를 요청한 앱이라 다시 배포할 수 없어요.',
     olderHidden: (shown: number) => `최근 ${shown}건만 보여 줘요. 더 오래된 배포는 이 목록에 나오지 않아요.`,

@@ -495,6 +495,29 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 /* 화면 안에 놓는 알림 (앱 상세의 실행 환경 전환 안내). 떠 있는 알림과 같은 모양을 쓴다 */
 .page-toast { display: grid; }
 .page-toast .toast { margin-bottom: 18px; }
+/* 온프레미스 → AWS 자동 전환 장면 (LiveSwitchScene). 알림 바로 위에 붙여서 한 덩어리로 보이게 한다 */
+.live-switch-scene { display: block; width: 100%; max-height: 260px; padding: 6px 0 0; background: var(--surface); border: var(--border); border-bottom: 0; border-radius: var(--radius-card) var(--radius-card) 0 0; }
+.page-toast.has-scene .toast { border-top-left-radius: 0; border-top-right-radius: 0; }
+.ls-number { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+.ls-live rect, .ls-live path { fill: var(--moss); }
+.ls-live text { fill: var(--surface); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+/* 마지막 모습 (움직임 줄이기 설정에서는 이것만 보인다): LIVE 는 구름 위 집에, 온프레미스 쪽은 불이 꺼진 채 */
+.ls-live { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
+.ls-onprem { opacity: .55; }
+@media (prefers-reduced-motion: no-preference) {
+  .ls-live { animation: ls-fly 1.4s var(--ease-roll) 1.8s both; }
+  .ls-onprem { animation: ls-dim .8s ease-out 1s both; }
+  .ls-onprem .jr-window, .ls-onprem .jr-led { animation: ls-lights-off .8s ease-out 1s both; }
+  .ls-koro { animation: ls-appear .5s ease-out 3.2s both; }
+}
+@keyframes ls-fly {
+  from { transform: translate(var(--ls-from-x), var(--ls-from-y)); }
+  55% { transform: translate(calc((var(--ls-from-x) + var(--ls-to-x)) / 2), calc(var(--ls-to-y) - 14px)); }
+  to { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
+}
+@keyframes ls-dim { from { opacity: 1; } to { opacity: .55; } }
+@keyframes ls-lights-off { from { fill: var(--moss); } to { fill: var(--line); } }
+@keyframes ls-appear { from { opacity: 0; } to { opacity: 1; } }
 .toast.is-failed { border-left-color: var(--brick-text); }
 .toast__body { display: grid; gap: 2px; min-width: 0; }
 .toast__body strong { color: var(--ink); }

@@ -98,8 +98,8 @@ function useNow(active: boolean): number {
 }
 
 const noop = () => {};
-/** 자동 전환을 알아차린 뒤 코로가 놀라 있는 시간. 그 뒤 LIVE 표지가 구름으로 옮겨 간다 */
-const FAILOVER_ALARM_MS = 1800;
+/** 자동 전환 장면의 각 단계가 시작하는 시각(ms): 놀람 → 비행기에 태움 → 구름으로 비행 → 도착 */
+const FAILOVER_STEPS = { announce: 2000, moving: 4000, recovered: 6200 } as const;
 
 function StageChips({ view, currentElapsed, skipped = 0 }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null; /** 앞에서부터 건너뛴 단계 수 — 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않는다 */ skipped?: number }) {
   const { t } = useI18n();
@@ -243,15 +243,22 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   // 이 배포(온프레미스)가 서비스하던 것이 AWS 로 자동 전환되면, 위에 따로 띄우지 않고 배포 장면 안에서 보여 준다:
   // 온프레미스 불이 꺼지고 코로가 놀람(alarm) → 잠시 뒤 LIVE 표지가 구름으로 옮겨 가고 코로가 기뻐함(recovered).
   // 움직임 줄이기 설정에서는 곧바로 마지막 모습으로 간다.
-  const failoverHere = liveSwitch !== null && liveSwitch.fromDeploymentId === deploymentId;
+  // 자동 전환은 새 배포를 만들지 않고 "전부터 있던" AWS 배포로 되돌린다 — 새 live 의 배포 번호가 이 배포보다 작다.
+  // (사용자가 직접 다른 환경으로 옮기면 새 배포가 생겨 번호가 더 크다. 그때는 문제가 생겼다고 말하지 않는다.)
+  const failoverHere = liveSwitch !== null && liveSwitch.fromDeploymentId === deploymentId && Number(liveSwitch.toDeploymentId) < Number(liveSwitch.fromDeploymentId);
   const [failoverPhase, setFailoverPhase] = useState<FailoverPhase | null>(null);
   useEffect(() => {
     if (!failoverHere) { setFailoverPhase(null); return; }
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    if (reduced) { setFailoverPhase('recovered'); playRef.current('check'); return; }
+    if (reduced) { setFailoverPhase('recovered'); playRef.current('success'); return; }
     setFailoverPhase('alarm');
-    const timer = window.setTimeout(() => { setFailoverPhase('recovered'); playRef.current('check'); }, FAILOVER_ALARM_MS);
-    return () => window.clearTimeout(timer);
+    playRef.current('failure');
+    const timers = [
+      window.setTimeout(() => setFailoverPhase('announce'), FAILOVER_STEPS.announce),
+      window.setTimeout(() => { setFailoverPhase('moving'); playRef.current('takeoff'); }, FAILOVER_STEPS.moving),
+      window.setTimeout(() => { setFailoverPhase('recovered'); playRef.current('success'); }, FAILOVER_STEPS.recovered),
+    ];
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [failoverHere]);
   const statusView = deploymentStatusView(currentStatus ?? 'received');
   // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
@@ -315,11 +322,14 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   // 정적 사이트: AWS 는 프로필로(서버 없이 S3), 온프레미스는 분석 결과로 안다 (#275)
   const staticSite = isAwsStaticSiteProfile(text(status?.targetProfile)) || facts?.staticSite === true;
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
-  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story, irOrigin) : null;
+  const scenePhase = target === 'onprem' ? failoverPhase : null;
+  // 자동 전환 중에는 코로가 지금 무슨 일이 일어났는지 말한다 (놀람 → AWS 로 전환 → 복구 완료)
+  const talk = scenePhase !== null ? t.run.failoverTalk[scenePhase]
+    : rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story, irOrigin) : null;
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
-  const box = sceneBox(target, story, irOrigin, target === 'onprem' && failoverPhase !== null);
+  const box = sceneBox(target, story, irOrigin, scenePhase !== null);
   const irSpot = irBoardSpot(target, story, irOrigin);
-  const [koroX, koroY] = koroSpot(view, target, story);
+  const [koroX, koroY] = koroSpot(view, target, story, scenePhase);
   // 환경 전환(AWS → 온프레미스)의 배포 단계: 코로 오른쪽 위로 집이 낙하산을 타고 내려오므로 풍선은 왼쪽으로 펼친다.
   const parachuting = target === 'onprem' && view.stage === 3 && story?.kind === 'switch' && story.reused && story.prev !== null;
   // 장면 효과음: 코로가 새 일을 시작할 때 한 번. 화면을 처음 열었을 때는 내지 않는다(이미 진행 중이던 단계).
@@ -429,11 +439,11 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} notLive={notLive} failover={target === 'onprem' ? failoverPhase : null} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} notLive={notLive} failover={scenePhase} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
-          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 || parachuting ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''}`}
+          {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 || parachuting || scenePhase !== null ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''} ${scenePhase === 'alarm' ? 'is-alert' : scenePhase === 'recovered' ? 'is-done' : ''}`}
             style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>

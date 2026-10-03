@@ -641,7 +641,14 @@ export const ko = {
     sceneQueued: (stage: string) => `코로가 ${stage} 장치 앞에서 차례를 기다리고 있다`,
     sceneSucceeded: '집이 배포할 곳에 도착했고 LIVE 표지가 붙었다',
     sceneNotLive: '집이 배포할 곳에 도착해 있다. 지금은 다른 배포가 서비스 중이다',
-    sceneFailover: { alarm: '온프레미스 서버와 집의 불이 꺼졌고 코로가 놀라고 있다', recovered: 'LIVE 표지가 구름 위 AWS의 집으로 옮겨 갔고, 코로가 구름 위에서 기뻐하고 있다' },
+    sceneFailover: {
+      alarm: '온프레미스 서버와 집의 불이 꺼졌고 코로가 놀라고 있다',
+      announce: '비행기가 와서 집과 코로를 태우고 있다',
+      moving: '비행기가 집과 코로를 싣고 구름 위 AWS로 날아가고 있다',
+      recovered: '집이 구름 위 AWS에 내려앉아 LIVE 표지가 붙었고, 코로가 기뻐하고 있다',
+    },
+    // 자동 전환(#349) 때 코로가 하는 말
+    failoverTalk: { alarm: '온프레미스에 문제가 생겼어요!', announce: 'AWS로 자동 전환하겠습니다', moving: 'AWS로 자동 전환하겠습니다', recovered: 'AWS 장애 복구 완료!' },
     sceneFailed: '코로가 길 위에 멈춰서 당황하고 있다',
     sceneStopped: '코로가 길 위에 멈춰 있다',
     workNote: '작업 노트',

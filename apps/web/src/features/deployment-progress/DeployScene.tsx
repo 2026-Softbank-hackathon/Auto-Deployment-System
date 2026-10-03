@@ -84,7 +84,12 @@ function houseSpot(stage: number, onGround: boolean, moving: boolean): Spot {
 }
 
 /** 코로의 중심 좌표 (viewBox 1200×500 기준). 생각 풍선을 같은 자리에 띄우는 데도 쓴다. */
-export function koroSpot(view: DeploymentStatusView, target: SceneTarget, story: DeployStory | null = null): Spot {
+export function koroSpot(view: DeploymentStatusView, target: SceneTarget, story: DeployStory | null = null, failover: FailoverPhase | null = null): Spot {
+  // 자동 전환: 놀라는 동안은 제자리 → 비행기에 타고 → 구름 위
+  if (failover !== null && target === 'onprem') {
+    if (failover === 'announce' || failover === 'moving') return onFailoverPlane(failover).koro;
+    if (failover === 'recovered') return skySpots[5];
+  }
   if (view.stage === null) return STOPPED_SPOT;
   const stage = Math.min(view.stage, railStageCount);
   if (isMoving(story)) {
@@ -162,7 +167,35 @@ const FLOOR_HEIGHT = 26;
 
 function place([x, y]: Spot): CSSProperties { return { transform: `translate(${x}px, ${y}px)` }; }
 
-export type FailoverPhase = 'alarm' | 'recovered';
+/** 비행기 그림 (바닥 중심이 원점). 날고 있으면 바람 줄을 그린다 */
+function PlaneBody({ flying }: { flying: boolean }) {
+  return <>
+    {flying && <path className="jr-plane__wind" d="M-150 -52 H-118 M-164 -36 H-124 M-150 -20 H-118" />}
+    <path className="jr-plane__tail" d="M-100 -60 L-122 -96 H-92 L-70 -64 Z" />
+    <path className="jr-plane__body" d={`M-104 -${PLANE_TOP} H78 Q112 -${PLANE_TOP} 112 -39 Q112 -14 78 -14 H-70 Q-104 -14 -104 -${PLANE_TOP} Z`} />
+    <path className="jr-plane__wing" d="M-26 -30 H44 L22 -6 H-46 Z" />
+    {[-60, -30, 0].map((x) => <circle key={x} className="jr-plane__window" cx={x} cy="-46" r="6" />)}
+    <path className="jr-line jr-line--thick" d="M-40 -14 V-4 M50 -14 V-4" />
+    <circle className="jr-wheel" cx="-40" cy="-5" r="6" /><circle className="jr-wheel" cx="50" cy="-5" r="6" />
+    <path className="jr-plane__prop" d="M116 -66 V-12" />
+  </>;
+}
+
+/**
+ * 자동 전환(#349) 장면의 순서:
+ *   alarm     온프레미스 쪽 불이 꺼지고 코로가 놀란다 (빨간 느낌표)
+ *   announce  비행기가 와서 집과 코로를 태운다
+ *   moving    비행기가 집과 코로를 싣고 구름(AWS)으로 날아간다
+ *   recovered 집이 구름 위에 내려앉아 LIVE 가 되고 코로가 기뻐한다
+ */
+export type FailoverPhase = 'alarm' | 'announce' | 'moving' | 'recovered';
+/** 자동 전환 때 비행기의 바닥 중심: 온프레미스 집터에서 태우는 곳 → 구름 옆까지 날아온 곳 → 떠나는 곳 */
+const FAILOVER_PLANE: Record<Exclude<FailoverPhase, 'alarm'>, Spot> = { announce: [1000, GROUND], moving: [820, 250], recovered: [1320, 240] };
+/** 비행기에 실린 집의 바닥 중심 · 코로의 중심 */
+function onFailoverPlane(phase: 'announce' | 'moving'): { house: Spot; koro: Spot } {
+  const [x, y] = FAILOVER_PLANE[phase];
+  return { house: [x - 38, y - PLANE_TOP], koro: [x + 55, y - PLANE_TOP - KORO_SIZE / 2] };
+}
 
 interface DeploySceneProps {
   view: DeploymentStatusView;
@@ -179,9 +212,7 @@ interface DeploySceneProps {
   notLive?: boolean;
   /**
    * 이 화면을 보고 있는 동안, 이 온프레미스 배포가 서비스하던 것이 AWS 대기 배포로 자동 전환됐다 (#349).
-   *   alarm     — 온프레미스 쪽 불이 꺼지고 코로가 놀란다 (빨간 느낌표)
-   *   recovered — LIVE 표지가 구름 위 AWS 집으로 옮겨 가고 코로가 구름으로 올라가 기뻐한다
-   * 이미 일어난 일의 재현이다 — 서버는 이유나 진행 상태를 주지 않으므로 글자로 원인을 말하지 않는다.
+   * 화면은 전환이 끝난 뒤에 알게 되므로 이미 일어난 일을 순서대로 다시 보여 주는 것이다 (FailoverPhase).
    */
   failover?: FailoverPhase | null;
 }
@@ -194,7 +225,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const succeeded = view.outcome === 'success';
   const stopped = stage === null;
   const dozing = rolling && idle?.dozing === true;
-  const mood: KoroMood = failover === 'alarm' ? 'flustered' : view.outcome === 'failed' ? 'flustered' : succeeded ? 'happy' : !rolling ? 'sleepy' : idle?.mood ?? 'normal';
+  const mood: KoroMood = failover === 'alarm' ? 'flustered' : failover === 'announce' ? 'curious' : failover === 'moving' ? 'normal' : view.outcome === 'failed' ? 'flustered' : succeeded ? 'happy' : !rolling ? 'sleepy' : idle?.mood ?? 'normal';
   const working = (index: number) => rolling && stage === index;
   const reached = (index: number) => stage !== null && stage >= index;
 
@@ -219,7 +250,9 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   // 환경 전환: 집은 옛 환경의 집 자리에서 출발한다(배포 단계 전에는 옛 집에 겹쳐 있으므로 숨긴다).
   const moving = isMoving(story) && reached(1);
   const parachuting = moving && onGround && stage === 3;
-  const house: Spot = moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround, moving);
+  const house: Spot = failedOver && (failover === 'announce' || failover === 'moving') ? onFailoverPlane(failover).house
+    : failedOver && failover === 'recovered' ? CLOUD_SLOT
+      : moving && stage !== null && stage <= 2 ? oldSlot : parachuting ? PARACHUTE_AIR : houseSpot(stage ?? 0, onGround, moving);
 
   const stageName = stage !== null && stage < railStageCount ? t.stages[railStages[stage]] : '';
   const label = view.outcome === 'failed' ? t.run.sceneFailed
@@ -228,26 +261,25 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
           : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
   const prevLabel = prev && !succeeded && !(inPlace && arrived) ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
-  const fullLabel = failedOver ? t.run.sceneFailover[failover === 'recovered' ? 'recovered' : 'alarm']
+  const fullLabel = failedOver && failover !== null ? t.run.sceneFailover[failover]
     : ir !== null && stage !== null && stage >= 1 && !succeeded ? `${prevLabel} · ${t.run.sceneIr[ir]}` : prevLabel;
 
   const standbyOnCloud = prev !== null && !prevOnGround;
-  const standbySlot: Spot = standbyOnCloud ? oldSlot : CLOUD_SLOT;
-  const standbyTop = standbySlot[1] - HOUSE_HEIGHT * (standbyOnCloud ? oldScale : 1) - 14;
-  // 코로: 놀라는 동안은 제자리(서버 옆), 전환이 끝나면 구름 위로 올라간다
-  const [cx, cy] = failedOver && failover === 'recovered' ? skySpots[5] : koroSpot(view, target, story);
+  const [cx, cy] = koroSpot(view, target, story, failedOver ? failover : null);
 
   const handingOff = onGround && !moving && (stage === 2 || stage === 3);
   const box = sceneBox(target, story, ir, failedOver);
+  const riding = failedOver && (failover === 'announce' || failover === 'moving');
   // IR 출처 도장: 새로 만들었으면 NEW(AI가 채웠으면 NEW · AI), 이전 배포 것을 복사했으면 COPY. 분석이 끝난 뒤에만 찍는다.
   const irStamp = ir !== null && reached(1) ? (ir === 'copied' ? 'COPY' : ir === 'ai' ? 'NEW · AI' : 'NEW') : null;
   const irStandX = box.left + IR_STAND_X;
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
-  const liveAt: Spot | null = failedOver ? (failover === 'recovered' ? [standbySlot[0], standbyTop] : [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14]) : succeeded && notLive ? null : succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
+  // 자동 전환: 놀라는 동안은 아직 온프레미스 집 위, 비행기로 옮기는 동안은 떼고, 구름에 내려앉으면 그 집 위에 붙인다
+  const liveAt: Spot | null = failedOver ? (riding ? null : [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14]) : succeeded && notLive ? null : succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
-  return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
+  return <svg className={`deploy-scene is-${view.outcome} ${failedOver ? 'is-failover' : ''}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
     <line className="scene-floor" x1={box.left + 20} y1={GROUND} x2="1180" y2={GROUND} />
 
     {/* 배포할 곳 — AWS: 구름 위 세계 · 온프레미스: 내 서버 옆 자리. 환경 전환이면 둘 다 그린다(집터는 이번에 갈 곳에만) */}
@@ -276,12 +308,10 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 지금까지 서비스하던 버전. 성공해도 불은 켜져 있다(실제로 계속 떠 있다). AWS 제자리 교체만 새 집이 도착하면 사라진다 */}
-    {prev && oldShown && <g className="jr-old-house" style={{ transform: `translate(${oldSlot[0]}px, ${oldSlot[1]}px) scale(${oldScale})` }}>
+    {prev && oldShown && !(failedOver && standbyOnCloud && failover === 'recovered') && <g className="jr-old-house" style={{ transform: `translate(${oldSlot[0]}px, ${oldSlot[1]}px) scale(${oldScale})` }}>
       <House floors={FLOORS} roofed windows="on" tag={prev.label} />
     </g>}
 
-    {/* 자동 전환: 구름 위에 옛 집이 없으면, 전환해 간 AWS 배포를 집으로 그린다 (같은 이미지인지는 화면이 확인할 수 없어 이름표는 없다) */}
-    {failedOver && !standbyOnCloud && <g style={place(CLOUD_SLOT)}><House floors={FLOORS} roofed windows="on" tag={null} /></g>}
 
     {/* 0 · 설계도 — 올린 소스(ZIP)를 읽어 배포 명세(IR)를 그린다 */}
     {!reused && <g className="jr-zip">
@@ -331,14 +361,12 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     {/* 2 · 탈것 준비 — AWS: 조립하는 비행기 */}
     {!onGround && <g className={`jr-plane ${stage === 2 || stage === 3 ? 'is-shown' : ''} ${working(2) ? 'is-building' : ''} ${stage === 3 ? 'is-flying' : ''}`}
       style={place(stage !== null && stage >= 4 ? [1320, 240] : stage === 3 ? planeAir(moving) : PLANE_GROUND)}>
-      {stage === 3 && <path className="jr-plane__wind" d="M-150 -52 H-118 M-164 -36 H-124 M-150 -20 H-118" />}
-      <path className="jr-plane__tail" d="M-100 -60 L-122 -96 H-92 L-70 -64 Z" />
-      <path className="jr-plane__body" d={`M-104 -${PLANE_TOP} H78 Q112 -${PLANE_TOP} 112 -39 Q112 -14 78 -14 H-70 Q-104 -14 -104 -${PLANE_TOP} Z`} />
-      <path className="jr-plane__wing" d="M-26 -30 H44 L22 -6 H-46 Z" />
-      {[-60, -30, 0].map((x) => <circle key={x} className="jr-plane__window" cx={x} cy="-46" r="6" />)}
-      <path className="jr-line jr-line--thick" d="M-40 -14 V-4 M50 -14 V-4" />
-      <circle className="jr-wheel" cx="-40" cy="-5" r="6" /><circle className="jr-wheel" cx="50" cy="-5" r="6" />
-      <path className="jr-plane__prop" d="M116 -66 V-12" />
+      <PlaneBody flying={stage === 3} />
+    </g>}
+    {/* 자동 전환: 비행기가 온프레미스 집터로 와서 집과 코로를 태우고 구름(AWS)으로 옮긴 뒤 떠난다 */}
+    {failedOver && <g className={`jr-plane ${riding ? 'is-shown' : ''} ${failover === 'moving' ? 'is-flying' : ''}`}
+      style={place(failover === 'alarm' || failover === null ? FAILOVER_PLANE.announce : FAILOVER_PLANE[failover])}>
+      <PlaneBody flying={failover === 'moving'} />
     </g>}
     {/* 온프레미스의 에이전트 로봇. 서버 옆에 대기하다가, 일을 넘겨받으면 집 옆으로 와서 집을 이고 서버 옆까지 알아서 옮긴다 */}
     {onGround && <g className={`jr-robot ${!moving && stage === 3 ? 'is-carrying' : ''} ${!moving && working(2) ? 'is-called' : ''}`}
@@ -356,12 +384,12 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 집 = 컨테이너 이미지. 한 번 지은 집이 그대로 배포할 곳까지 간다 */}
-    <g className={`jr-house ${moving && stage !== null && stage <= 2 ? 'is-hidden' : ''} ${failedOver ? 'is-dark' : ''}`} style={place(house)}>
+    <g className={`jr-house ${moving && stage !== null && stage <= 2 ? 'is-hidden' : ''} ${failedOver && (failover === 'alarm' || failover === 'announce') ? 'is-dark' : ''}`} style={place(house)}>
       {parachuting && <g className="jr-parachute">
         <path className="jr-line" d="M-58 -152 L-44 -80 M58 -152 L44 -80 M0 -176 V-108" />
         <path className="jr-parachute__canopy" d="M-62 -150 Q0 -232 62 -150 Q31 -166 0 -150 Q-31 -166 -62 -150 Z" />
       </g>}
-      <House floors={floors} total={total} roofed={roofed} windows={failedOver ? 'off' : arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
+      <House floors={floors} total={total} roofed={roofed} windows={failedOver ? (failover === 'recovered' ? 'on' : 'off') : arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
     </g>
 
     {liveAt && <g className="jr-live" style={place(liveAt)}>
@@ -374,7 +402,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         {/* 팔과 도구는 몸 뒤에, 안전모는 몸 앞에 그린다. 일하는 중이 아니거나 조는 동안에는 팔만 내린다 */}
         {/* 온프레미스(전환이 아닐 때)의 인프라 준비 · 배포: 코로는 로봇에게 넘겨주고 손을 흔든다 */}
-        <KoroProp stage={failover === 'alarm' ? null : succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
+        <KoroProp stage={failedOver && failover !== 'recovered' ? null : succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
         <Koro mood={mood} size={KORO_SIZE} />
         {/* 놀람: 빨간 느낌표가 머리 위에서 튄다 (자동 전환을 알아차린 순간에만) */}
         {failover === 'alarm' && <text className="scene-bang" x={KORO_SIZE - 4} y="6">!</text>}

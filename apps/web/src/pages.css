@@ -927,6 +927,16 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 /* 자동 전환: 온프레미스 쪽은 불이 꺼진 채 흐려지고, 코로 머리 위에 빨간 느낌표가 뜬다 */
 .jr-house { transition: opacity .6s ease-out; }
 .jr-house.is-dark { opacity: .55; }
+/* 자동 전환 장면은 비행기가 옮기는 모습이 보이도록 평소보다 천천히 움직인다 */
+.deploy-scene.is-failover .jr-house, .deploy-scene.is-failover .jr-plane { transition: transform 1.6s var(--ease-roll), opacity var(--dur-roll); }
+.deploy-scene.is-failover .scene-koro, .deploy-scene.is-failover .jr-live { transition: transform 1.6s var(--ease-roll); }
+.run-scene:has(.deploy-scene.is-failover) .koro-think { transition: left 1.6s var(--ease-roll), top 1.6s var(--ease-roll); }
+.koro-think.is-alert .koro-think__bubble { color: var(--brick-text); border-color: var(--brick); box-shadow: 0 3px 0 color-mix(in srgb, var(--brick) 30%, transparent); font-weight: 700; }
+/* 한 줄짜리 알림이라 꺾이지 않게 한다 */
+.koro-think.is-alert .koro-think__bubble, .koro-think.is-done .koro-think__bubble { white-space: nowrap; max-width: none; }
+.koro-think.is-alert .koro-think__dot { border-color: var(--brick); }
+.koro-think.is-done .koro-think__bubble { color: var(--moss-text); border-color: var(--moss); box-shadow: 0 3px 0 color-mix(in srgb, var(--moss) 30%, transparent); font-weight: 700; }
+.koro-think.is-done .koro-think__dot { border-color: var(--moss); }
 .scene-bang { fill: var(--brick); font-family: var(--font-display); font-size: 40px; font-weight: 700; }
 .jr-parachute__canopy { fill: var(--koro-tint); stroke: var(--koro); stroke-width: 3; stroke-linejoin: round; }
 .jr-warehouse__door { fill: var(--ink); }

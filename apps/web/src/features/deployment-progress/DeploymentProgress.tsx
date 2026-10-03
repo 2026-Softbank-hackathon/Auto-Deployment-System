@@ -11,7 +11,7 @@ import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { DeployScene, houseFloors, irBoardSpot, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { DeployScene, houseFloors, irBoardSpot, koroSpot, SCENE_SIZE, sceneBox, sceneTarget, type FailoverPhase } from './DeployScene';
 import { deployStory, previousLive, readReusedFrom, irOriginOf, type IrOrigin } from './deploy-story';
 import { isAwsStaticSiteProfile, koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
@@ -98,6 +98,8 @@ function useNow(active: boolean): number {
 }
 
 const noop = () => {};
+/** 자동 전환을 알아차린 뒤 코로가 놀라 있는 시간. 그 뒤 LIVE 표지가 구름으로 옮겨 간다 */
+const FAILOVER_ALARM_MS = 1800;
 
 function StageChips({ view, currentElapsed, skipped = 0 }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null; /** 앞에서부터 건너뛴 단계 수 — 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않는다 */ skipped?: number }) {
   const { t } = useI18n();
@@ -238,6 +240,19 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   // 이 화면을 보고 있는 동안 전환되면 여기서도 알리고, 이 배포가 더는 서비스 중이 아니면 LIVE 로 표시하지 않는다.
   const { live: projectLive, liveSwitch, dismissLiveSwitch } = useProjectLive(projectId ?? '', projectId !== null, noop, { deployments: false });
   const notLive = currentStatus === 'succeeded' && projectLive != null && projectLive.deploymentId !== deploymentId;
+  // 이 배포(온프레미스)가 서비스하던 것이 AWS 로 자동 전환되면, 위에 따로 띄우지 않고 배포 장면 안에서 보여 준다:
+  // 온프레미스 불이 꺼지고 코로가 놀람(alarm) → 잠시 뒤 LIVE 표지가 구름으로 옮겨 가고 코로가 기뻐함(recovered).
+  // 움직임 줄이기 설정에서는 곧바로 마지막 모습으로 간다.
+  const failoverHere = liveSwitch !== null && liveSwitch.fromDeploymentId === deploymentId;
+  const [failoverPhase, setFailoverPhase] = useState<FailoverPhase | null>(null);
+  useEffect(() => {
+    if (!failoverHere) { setFailoverPhase(null); return; }
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (reduced) { setFailoverPhase('recovered'); playRef.current('check'); return; }
+    setFailoverPhase('alarm');
+    const timer = window.setTimeout(() => { setFailoverPhase('recovered'); playRef.current('check'); }, FAILOVER_ALARM_MS);
+    return () => window.clearTimeout(timer);
+  }, [failoverHere]);
   const statusView = deploymentStatusView(currentStatus ?? 'received');
   // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
   const view = pendingGate && approvalError === null && !waitingForEnv ? { ...statusView, waiting: null } : statusView;
@@ -302,7 +317,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story, irOrigin) : null;
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
-  const box = sceneBox(target, story, irOrigin);
+  const box = sceneBox(target, story, irOrigin, target === 'onprem' && failoverPhase !== null);
   const irSpot = irBoardSpot(target, story, irOrigin);
   const [koroX, koroY] = koroSpot(view, target, story);
   // 환경 전환(AWS → 온프레미스)의 배포 단계: 코로 오른쪽 위로 집이 낙하산을 타고 내려오므로 풍선은 왼쪽으로 펼친다.
@@ -372,7 +387,6 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     {/* 이 배포가 속한 앱의 배포 내역으로 돌아가는 길 (앱을 알 때만) */}
     {projectId && <a className="project-detail__back run-back" href={`/projects/${encodeURIComponent(projectId)}`} onClick={(event) => followAppLink(event, onNavigate)}>
       ← {t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</a>}
-    <LiveSwitchNotice liveSwitch={liveSwitch} onDismiss={dismissLiveSwitch} />
     <section className={`run-stage is-${view.outcome}`} aria-labelledby="run-title">
       <div className="run-head" aria-live="polite">
         <div className="run-head__title">
@@ -415,7 +429,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} notLive={notLive} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} notLive={notLive} failover={target === 'onprem' ? failoverPhase : null} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
@@ -429,6 +443,9 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
           {irSpot && analysisDone && <IrPeek deploymentId={deploymentId} origin={irOrigin} status={currentStatus}
             style={{ '--ir-x': `${((irSpot[0] - box.left) / box.width) * 100}%`, '--ir-y': `${((irSpot[1] - box.top) / box.height) * 100}%` } as CSSProperties} />}
         </figure>
+
+        {/* 자동 전환 안내(글자). 장면은 위의 배포 장면이 보여 주므로 여기서는 글자만 */}
+        <LiveSwitchNotice liveSwitch={liveSwitch} onDismiss={dismissLiveSwitch} scene={false} />
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 

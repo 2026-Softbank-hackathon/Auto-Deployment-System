@@ -121,8 +121,8 @@ export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const
  * 가로 범위도 줄인다: 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않으므로 설계도와 집 짓는 곳을 그리지 않는다.
  * (같은 환경 재배포 · 롤백은 창고부터, 환경 전환은 탈것을 준비하는 곳부터 보여 준다.)
  */
-export function sceneBox(target: SceneTarget, story: DeployStory | null = null, ir: IrOrigin | null = null): { left: number; top: number; width: number; height: number } {
-  const sky = target !== 'onprem' || (story?.prev != null && story.prev.target === 'aws');
+export function sceneBox(target: SceneTarget, story: DeployStory | null = null, ir: IrOrigin | null = null, /** 하늘(구름)까지 꼭 보여야 할 때 — 자동 전환 장면 */ needSky = false): { left: number; top: number; width: number; height: number } {
+  const sky = needSky || target !== 'onprem' || (story?.prev != null && story.prev.target === 'aws');
   // 복사한 IR을 쓰는 배포는 잘라 낸 장면 왼쪽에 "복사한 IR" 판을 세울 자리를 남긴다.
   const left = !story?.reused ? 0 : (isMoving(story) ? 580 : 360) - (ir === 'copied' ? IR_STAND_ROOM : 0);
   return { left, width: SCENE_SIZE.width - left, ...(sky ? { top: 0, height: SCENE_SIZE.height } : { top: 190, height: SCENE_SIZE.height - 190 }) };
@@ -162,6 +162,8 @@ const FLOOR_HEIGHT = 26;
 
 function place([x, y]: Spot): CSSProperties { return { transform: `translate(${x}px, ${y}px)` }; }
 
+export type FailoverPhase = 'alarm' | 'recovered';
+
 interface DeploySceneProps {
   view: DeploymentStatusView;
   target?: SceneTarget;
@@ -175,9 +177,16 @@ interface DeploySceneProps {
   ir?: IrOrigin | null;
   /** 성공한 배포지만 지금 서비스 중이 아니다 (그 뒤 다른 배포가 서비스 중 — 재배포 · 롤백 · 자동 전환 #349). LIVE 표지를 붙이지 않는다 */
   notLive?: boolean;
+  /**
+   * 이 화면을 보고 있는 동안, 이 온프레미스 배포가 서비스하던 것이 AWS 대기 배포로 자동 전환됐다 (#349).
+   *   alarm     — 온프레미스 쪽 불이 꺼지고 코로가 놀란다 (빨간 느낌표)
+   *   recovered — LIVE 표지가 구름 위 AWS 집으로 옮겨 가고 코로가 구름으로 올라가 기뻐한다
+   * 이미 일어난 일의 재현이다 — 서버는 이유나 진행 상태를 주지 않으므로 글자로 원인을 말하지 않는다.
+   */
+  failover?: FailoverPhase | null;
 }
 
-export function DeployScene({ view, target = null, idle = null, stepSeconds = 0, story = null, ir = null, notLive = false }: DeploySceneProps) {
+export function DeployScene({ view, target = null, idle = null, stepSeconds = 0, story = null, ir = null, notLive = false, failover = null }: DeploySceneProps) {
   const { t } = useI18n();
   const stage = view.stage;
   const onGround = target === 'onprem';
@@ -185,7 +194,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const succeeded = view.outcome === 'success';
   const stopped = stage === null;
   const dozing = rolling && idle?.dozing === true;
-  const mood: KoroMood = view.outcome === 'failed' ? 'flustered' : succeeded ? 'happy' : !rolling ? 'sleepy' : idle?.mood ?? 'normal';
+  const mood: KoroMood = failover === 'alarm' ? 'flustered' : view.outcome === 'failed' ? 'flustered' : succeeded ? 'happy' : !rolling ? 'sleepy' : idle?.mood ?? 'normal';
   const working = (index: number) => rolling && stage === index;
   const reached = (index: number) => stage !== null && stage >= index;
 
@@ -197,7 +206,9 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   // 지금까지 서비스하던 버전: 그 버전이 있는 도착점의 옆자리에 서 있다. 환경을 모르면 이번 배포와 같은 곳으로 본다.
   const prev = story?.prev ?? null;
   const prevOnGround = prev ? (prev.target === null ? onGround : prev.target === 'onprem') : onGround;
-  const showCloud = !onGround || (prev !== null && !prevOnGround);
+  // 자동 전환: 구름(AWS)이 꼭 보여야 한다. 구름 위에 옛 집(전환 전의 AWS 배포)이 없으면 대기 중인 집을 하나 그린다.
+  const failedOver = failover !== null && onGround;
+  const showCloud = !onGround || (prev !== null && !prevOnGround) || failedOver;
   const showLot = onGround || (prev !== null && prevOnGround);
   const arrived = reached(4);
   // AWS의 같은 환경 배포는 제자리 교체다: 옛 집이 집터에 서 있다가 새 집이 도착하면 자리를 넘겨준다.
@@ -217,18 +228,23 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
           : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
   const prevLabel = prev && !succeeded && !(inPlace && arrived) ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
-  const fullLabel = ir !== null && stage !== null && stage >= 1 && !succeeded ? `${prevLabel} · ${t.run.sceneIr[ir]}` : prevLabel;
+  const fullLabel = failedOver ? t.run.sceneFailover[failover === 'recovered' ? 'recovered' : 'alarm']
+    : ir !== null && stage !== null && stage >= 1 && !succeeded ? `${prevLabel} · ${t.run.sceneIr[ir]}` : prevLabel;
 
-  const [cx, cy] = koroSpot(view, target, story);
+  const standbyOnCloud = prev !== null && !prevOnGround;
+  const standbySlot: Spot = standbyOnCloud ? oldSlot : CLOUD_SLOT;
+  const standbyTop = standbySlot[1] - HOUSE_HEIGHT * (standbyOnCloud ? oldScale : 1) - 14;
+  // 코로: 놀라는 동안은 제자리(서버 옆), 전환이 끝나면 구름 위로 올라간다
+  const [cx, cy] = failedOver && failover === 'recovered' ? skySpots[5] : koroSpot(view, target, story);
 
   const handingOff = onGround && !moving && (stage === 2 || stage === 3);
-  const box = sceneBox(target, story, ir);
+  const box = sceneBox(target, story, ir, failedOver);
   // IR 출처 도장: 새로 만들었으면 NEW(AI가 채웠으면 NEW · AI), 이전 배포 것을 복사했으면 COPY. 분석이 끝난 뒤에만 찍는다.
   const irStamp = ir !== null && reached(1) ? (ir === 'copied' ? 'COPY' : ir === 'ai' ? 'NEW · AI' : 'NEW') : null;
   const irStandX = box.left + IR_STAND_X;
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
-  const liveAt: Spot | null = succeeded && notLive ? null : succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
+  const liveAt: Spot | null = failedOver ? (failover === 'recovered' ? [standbySlot[0], standbyTop] : [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14]) : succeeded && notLive ? null : succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
   return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>
@@ -239,7 +255,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <rect className="jr-paper" x="1132" y="330" width="50" height="110" rx="5" />
       {[352, 374, 396, 418].map((y) => <g key={y}>
         <path className="jr-line" d={`M1140 ${y} H1162`} />
-        <circle className={`jr-led ${(onGround && arrived) || (prev !== null && prevOnGround && !succeeded) ? 'is-on' : ''}`} cx="1172" cy={y} r="3" />
+        <circle className={`jr-led ${!failedOver && ((onGround && arrived) || (prev !== null && prevOnGround && !succeeded)) ? 'is-on' : ''}`} cx="1172" cy={y} r="3" />
       </g>)}
       <text className="jr-sign" x="1157" y="322" textAnchor="middle">ON-PREM</text>
       {onGround && <rect className={`jr-pad ${padClass}`} x={LOT_SLOT[0] - 47} y={GROUND - 6} width="94" height="6" rx="2" />}
@@ -263,6 +279,9 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     {prev && oldShown && <g className="jr-old-house" style={{ transform: `translate(${oldSlot[0]}px, ${oldSlot[1]}px) scale(${oldScale})` }}>
       <House floors={FLOORS} roofed windows="on" tag={prev.label} />
     </g>}
+
+    {/* 자동 전환: 구름 위에 옛 집이 없으면, 전환해 간 AWS 배포를 집으로 그린다 (같은 이미지인지는 화면이 확인할 수 없어 이름표는 없다) */}
+    {failedOver && !standbyOnCloud && <g style={place(CLOUD_SLOT)}><House floors={FLOORS} roofed windows="on" tag={null} /></g>}
 
     {/* 0 · 설계도 — 올린 소스(ZIP)를 읽어 배포 명세(IR)를 그린다 */}
     {!reused && <g className="jr-zip">
@@ -337,12 +356,12 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
     </g>}
 
     {/* 집 = 컨테이너 이미지. 한 번 지은 집이 그대로 배포할 곳까지 간다 */}
-    <g className={`jr-house ${moving && stage !== null && stage <= 2 ? 'is-hidden' : ''}`} style={place(house)}>
+    <g className={`jr-house ${moving && stage !== null && stage <= 2 ? 'is-hidden' : ''} ${failedOver ? 'is-dark' : ''}`} style={place(house)}>
       {parachuting && <g className="jr-parachute">
         <path className="jr-line" d="M-58 -152 L-44 -80 M58 -152 L44 -80 M0 -176 V-108" />
         <path className="jr-parachute__canopy" d="M-62 -150 Q0 -232 62 -150 Q31 -166 0 -150 Q-31 -166 -62 -150 Z" />
       </g>}
-      <House floors={floors} total={total} roofed={roofed} windows={arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
+      <House floors={floors} total={total} roofed={roofed} windows={failedOver ? 'off' : arrived ? (succeeded ? 'on' : 'checking') : 'off'} tag={story ? story.label : null} />
     </g>
 
     {liveAt && <g className="jr-live" style={place(liveAt)}>
@@ -355,8 +374,10 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <g className={rolling && !dozing ? 'scene-koro__bob' : undefined}>
         {/* 팔과 도구는 몸 뒤에, 안전모는 몸 앞에 그린다. 일하는 중이 아니거나 조는 동안에는 팔만 내린다 */}
         {/* 온프레미스(전환이 아닐 때)의 인프라 준비 · 배포: 코로는 로봇에게 넘겨주고 손을 흔든다 */}
-        <KoroProp stage={succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
+        <KoroProp stage={failover === 'alarm' ? null : succeeded ? 5 : !rolling || dozing || (moving && stage === 1) ? null : handingOff ? 3 : stage} carrying={reused && !moving} />
         <Koro mood={mood} size={KORO_SIZE} />
+        {/* 놀람: 빨간 느낌표가 머리 위에서 튄다 (자동 전환을 알아차린 순간에만) */}
+        {failover === 'alarm' && <text className="scene-bang" x={KORO_SIZE - 4} y="6">!</text>}
         {rolling && !dozing && ((stage === 1 && !reused) || (stage === 2 && !handingOff)) && <KoroHat />}
       </g>
       {dozing && <g className="scene-zzz" aria-hidden="true"><text x={KORO_SIZE - 4} y="4">z</text><text x={KORO_SIZE + 8} y="-10">z</text></g>}

@@ -632,6 +632,7 @@ export const ja: Messages = {
     sceneQueued: (stage) => `コロが${stage}の装置の前で順番を待っている`,
     sceneSucceeded: '家がデプロイ先に到着し、LIVE の印が付いた',
     sceneNotLive: '家はデプロイ先に到着している。今は別のデプロイがサービス中',
+    sceneFailover: { alarm: 'オンプレミスのサーバーと家の明かりが消え、コロが驚いている', recovered: 'LIVE の印が雲の上の AWS の家へ移り、コロが雲の上で喜んでいる' },
     sceneFailed: 'コロが道の途中で止まって慌てている',
     sceneStopped: 'コロが道の途中で止まっている',
     workNote: '作業ノート',

@@ -924,6 +924,10 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-roof { fill: var(--brass); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
 .jr-sign--small { font-size: 12px; }
 .jr-house.is-hidden { opacity: 0; }
+/* 자동 전환: 온프레미스 쪽은 불이 꺼진 채 흐려지고, 코로 머리 위에 빨간 느낌표가 뜬다 */
+.jr-house { transition: opacity .6s ease-out; }
+.jr-house.is-dark { opacity: .55; }
+.scene-bang { fill: var(--brick); font-family: var(--font-display); font-size: 40px; font-weight: 700; }
 .jr-parachute__canopy { fill: var(--koro-tint); stroke: var(--koro); stroke-width: 3; stroke-linejoin: round; }
 .jr-warehouse__door { fill: var(--ink); }
 /* 이미지 이름표: 같은 이름표 = 같은 이미지 */
@@ -964,6 +968,7 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .koro-prop--ticks .koro-prop__tick:nth-child(2) { animation-delay: .5s; }
   .koro-prop--ticks .koro-prop__tick:nth-child(3) { animation-delay: 1s; }
   .jr-easel.is-working .jr-draft { stroke-dasharray: 120; animation: draft-draw 2.2s ease-in-out infinite; }
+  .scene-bang { transform-box: fill-box; transform-origin: 50% 100%; animation: bang-pop .5s var(--ease-roll) 3 both; }
   /* 복사해 온 IR 판은 왼쪽에서 미끄러져 들어오고, 출처 도장은 찍히듯 나타난다 */
   .jr-ir-copy__body { animation: ir-slide .7s var(--ease-roll) both; }
   .jr-stamp rect, .jr-stamp text { transform-box: fill-box; transform-origin: 50% 50%; animation: stamp-pop .45s var(--ease-roll) .5s both; }
@@ -1097,3 +1102,5 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 
 @keyframes ir-slide { from { opacity: 0; transform: translateX(-46px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes stamp-pop { from { opacity: 0; transform: scale(1.8); } to { opacity: 1; transform: scale(1); } }
+
+@keyframes bang-pop { 0% { transform: scale(.3) translateY(6px); opacity: 0; } 55% { transform: scale(1.3) translateY(-6px); opacity: 1; } 100% { transform: scale(1) translateY(0); opacity: 1; } }

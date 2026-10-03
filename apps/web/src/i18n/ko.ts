@@ -641,6 +641,7 @@ export const ko = {
     sceneQueued: (stage: string) => `코로가 ${stage} 장치 앞에서 차례를 기다리고 있다`,
     sceneSucceeded: '집이 배포할 곳에 도착했고 LIVE 표지가 붙었다',
     sceneNotLive: '집이 배포할 곳에 도착해 있다. 지금은 다른 배포가 서비스 중이다',
+    sceneFailover: { alarm: '온프레미스 서버와 집의 불이 꺼졌고 코로가 놀라고 있다', recovered: 'LIVE 표지가 구름 위 AWS의 집으로 옮겨 갔고, 코로가 구름 위에서 기뻐하고 있다' },
     sceneFailed: '코로가 길 위에 멈춰서 당황하고 있다',
     sceneStopped: '코로가 길 위에 멈춰 있다',
     workNote: '작업 노트',

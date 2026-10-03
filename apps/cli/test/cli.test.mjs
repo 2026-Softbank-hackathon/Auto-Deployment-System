@@ -77,3 +77,23 @@ test("출력 — 한글은 두 칸, 메시지는 응답 필드로 채운다", ()
   assert.equal(displayWidth("앱abc"), 5);
   assert.equal(fillMessage("배포 {deploymentId} · {missing}", { deploymentId: "9" }), "배포 9 · -");
 });
+
+test("배포 지켜보기 — 서버가 잠깐 502 · 연결 끊김이어도 다시 붙어 끝까지 따라간다", async () => {
+  const { followDeployment } = await import("../src/follow.mjs");
+  process.env.CAMELLIA_TOKEN = "t";
+  const responses = [
+    () => new Response(JSON.stringify({ status: "deploying" }), { status: 200 }),
+    () => new Response("bad gateway", { status: 502 }),
+    () => { throw new TypeError("fetch failed"); },
+    () => new Response(JSON.stringify({ status: "succeeded", publicUrl: "https://x" }), { status: 200 }),
+  ];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => responses.shift()();
+  try {
+    const spec = { status: "/deployments/{id}", approvals: "/deployments/{id}/approvals", intervalMs: 1, autoApprove: {}, ask: {}, succeeded: ["succeeded"], failed: ["failed"], labels: {} };
+    assert.equal(await followDeployment(spec, "1", { json: true }), 0);
+    assert.equal(responses.length, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

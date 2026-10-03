@@ -1,10 +1,12 @@
 import { baseUrl, token } from "./config.mjs";
 
 export class CliError extends Error {
-  constructor(message, exitCode = 1, code = null) {
+  constructor(message, exitCode = 1, code = null, { transient = false } = {}) {
     super(message);
     this.exitCode = exitCode;
     this.code = code;
+    /** 서버 재시작 · 네트워크처럼 잠시 뒤 다시 하면 될 수 있는 오류 */
+    this.transient = transient;
   }
 }
 
@@ -36,12 +38,12 @@ export async function api(path, { method = "GET", body, form, raw = false, auth 
       method, headers, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
   } catch (error) {
-    throw new CliError(`Cannot reach the server (${baseUrl()}): ${error?.cause?.message ?? error?.message ?? error}`);
+    throw new CliError(`Cannot reach the server (${baseUrl()}): ${error?.cause?.message ?? error?.message ?? error}`, 1, null, { transient: true });
   }
   if (response.status === 401) throw new CliError("Your login expired or is invalid. Run `camellia login` again.", 2);
   if (!response.ok) {
     const parsed = describe(response.status, await response.json().catch(() => null));
-    throw new CliError(parsed.message, 1, parsed.code);
+    throw new CliError(parsed.message, 1, parsed.code, { transient: response.status >= 502 && response.status <= 504 });
   }
   if (raw) return response;
   if (response.status === 204) return null;

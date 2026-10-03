@@ -58,6 +58,8 @@ import deploymentAiUsageRoutes from "./routes/deployment-ai-usage.js";
 import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
 import authRoutes from "./routes/auth.js";
+import credentialsRoutes from "./routes/credentials.js";
+import { verifyAwsCredentialsWithSts, type AwsCredentialVerifier } from "./services/aws-credential-verifier.js";
 import { SessionService } from "./services/session-service.js";
 import {
   AgentJobService,
@@ -96,6 +98,8 @@ export interface BuildServerOptions {
   cloudflareZoneId?: string;
   /** ECR client factory (테스트용 override). */
   awsEcrRegistryFactory?: AwsEcrRegistryFactory;
+  /** AWS 키 확인 (#209). 기본은 STS GetCallerIdentity — 테스트는 바꿔 끼운다. */
+  verifyAwsCredentials?: AwsCredentialVerifier;
 }
 
 export async function buildServer(opts: BuildServerOptions) {
@@ -300,6 +304,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(environmentsRoutes, {
       prefix: "/environments",
       environmentService,
+    });
+
+    v1.register(credentialsRoutes, {
+      prefix: "/credentials",
+      verifyAwsCredentials: opts.verifyAwsCredentials ?? verifyAwsCredentialsWithSts,
     });
 
     v1.register(agentsRoutes, {

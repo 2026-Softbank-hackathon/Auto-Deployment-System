@@ -135,8 +135,16 @@ export const ko = {
       region: '리전',
       note: '키는 서버에 암호화해 저장하고, 이 브라우저에는 남기지 않아요. 한 번 등록하면 모든 앱에서 다시 묻지 않아요.',
       save: 'AWS 계정 등록',
-      saving: '등록하고 있어요…',
+      saving: '키를 확인하고 등록하고 있어요…',
       saveError: 'AWS 계정을 등록하지 못했어요.',
+      /** AWS가 키를 거절한 사유 (#209) — 이때는 저장하지 않는다 */
+      rejected: {
+        INVALID_ACCESS_KEY: '없는 Access Key ID예요. 키를 다시 확인해 주세요.',
+        SIGNATURE_MISMATCH: 'Secret Access Key가 Access Key ID와 맞지 않아요.',
+        EXPIRED: '만료된 키예요. 새 키를 발급해 주세요.',
+        REJECTED: 'AWS가 이 키를 받아 주지 않았어요.',
+      },
+      verifyUnavailable: 'AWS에 키를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
       cancel: '취소',
     },
     button: '배포하기',

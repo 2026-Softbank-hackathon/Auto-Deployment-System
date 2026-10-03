@@ -16,7 +16,7 @@ import type { AuditLogService } from "../services/audit-log-service.js";
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 /** D-50: 시크릿 필드 패턴. 매칭되는 키는 "***" 로 교체 */
-const SECRET_KEY_PATTERN = /^(password|value|accessKey.*|secretKey.*|token.*)$/i;
+const SECRET_KEY_PATTERN = /^(password|value|accessKey.*|secretKey.*|secretAccessKey|token.*)$/i;
 
 /** request body 에서 시크릿 필드를 마스킹한 안전한 복사본 반환 */
 export function redactSecrets(obj: unknown, depth = 0): unknown {

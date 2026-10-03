@@ -20,7 +20,7 @@ test("인자 — 위치 인자 · --k v · --k=v · 값 없는 전역 플래그"
 test("경로 — resolver 객체는 대표 필드, 점 경로는 하위 필드", () => {
   assert.equal(renderPath("/projects/{app}/env", { app }), "/projects/7/env");
   assert.equal(renderPath("/deployments/{app.live.deploymentId}/redeploy", { app }), "/deployments/42/redeploy");
-  assert.throws(() => renderPath("/deployments/{app.latest.deploymentId}", { app }), /app\.latest\.deploymentId 값이 없어요/);
+  assert.throws(() => renderPath("/deployments/{app.latest.deploymentId}", { app }), /no value for app\.latest\.deploymentId/);
 });
 
 test("쿼리 — 값 없는 항목은 뺀다", () => {

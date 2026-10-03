@@ -20,7 +20,7 @@ async function loadManifest() {
   } catch (error) {
     const cached = loadCachedManifest();
     if (cached && !(error instanceof CliError && error.exitCode === 2)) {
-      console.error(`(서버에서 명령 목록을 받지 못해 저장해 둔 목록을 써요: ${error.message})`);
+      console.error(`(Could not fetch the command list; using the cached one: ${error.message})`);
       return cached;
     }
     throw error;
@@ -40,12 +40,12 @@ function usageOf(command) {
 }
 
 function printHelp(manifest) {
-  console.log(`camellia ${VERSION} — camellia 배포 플랫폼 CLI (${baseUrl()})\n`);
-  console.log("사용법: camellia <명령> [인자] [--플래그]\n");
+  console.log(`camellia ${VERSION} — CLI for the camellia deploy platform (${baseUrl()})\n`);
+  console.log("Usage: camellia <command> [args] [--flags]\n");
   const builtins = [
-    ["login [--url <주소>] [--token <토큰>]", "콘솔 계정으로 로그인 (토큰만 저장)"],
-    ["logout", "저장한 토큰 지우기"],
-    ["whoami", "연결된 서버 · 로그인 상태"],
+    ["login [--url <url>] [--token <token>]", "Log in with your console account (stores a token only)"],
+    ["logout", "Remove the stored token"],
+    ["whoami", "Show the server and login status"],
   ];
   const rows = [
     ...builtins,
@@ -56,8 +56,8 @@ function printHelp(manifest) {
     const gap = Math.max(2, width - displayWidth(usage) + 2);
     console.log(`  ${usage}${" ".repeat(gap)}${description}`);
   }
-  console.log("\n공통: --json (응답 그대로) · --yes (확인 생략) · --help");
-  if (!manifest) console.log("\n로그인하면 서버가 주는 명령(앱 · 배포 · 로그 등)이 여기에 보여요.");
+  console.log("\nGlobal flags: --json (raw response), --yes (skip confirmation), --help");
+  if (!manifest) console.log("\nLog in to see the commands provided by the server (apps, deploy, logs, ...).");
 }
 
 /** 입력한 단어로 가장 긴 이름이 맞는 명령을 고른다 ("env set" 이 "env" 보다 먼저) */
@@ -74,7 +74,7 @@ const resolverCache = new Map();
 
 async function resolveValue(manifest, resolverName, input) {
   const resolver = manifest.resolvers[resolverName];
-  if (!resolver) throw new CliError(`알 수 없는 resolver: ${resolverName}`);
+  if (!resolver) throw new CliError(`Unknown resolver: ${resolverName}`);
   if (!resolverCache.has(resolverName)) resolverCache.set(resolverName, pick(await api(resolver.list), resolver.items) ?? []);
   const items = resolverCache.get(resolverName);
   if (input === undefined) {
@@ -84,19 +84,19 @@ async function resolveValue(manifest, resolverName, input) {
   const text = String(input);
   const found = items.find((item) => resolver.match.some((field) => String(item[field] ?? "") === text))
     ?? items.find((item) => resolver.match.some((field) => String(item[field] ?? "").toLowerCase() === text.toLowerCase()));
-  if (!found) throw new CliError(`${resolver.label} '${text}' 을(를) 찾지 못했어요. ${resolver.hint}`);
+  if (!found) throw new CliError(`${resolver.label} '${text}' not found. ${resolver.hint}`);
   return found;
 }
 
 function readSource(path) {
   const full = resolvePath(path);
-  if (!existsSync(full)) throw new CliError(`${path} 이(가) 없어요`);
+  if (!existsSync(full)) throw new CliError(`${path} does not exist`);
   if (statSync(full).isDirectory()) {
     const { buffer, fileCount } = zipDirectory(full);
-    console.error(`  ${basename(full)} 폴더를 묶었어요 (파일 ${fileCount}개, ${(buffer.length / 1024).toFixed(0)} KB)`);
+    console.error(`  Packed ${basename(full)} (${fileCount} files, ${(buffer.length / 1024).toFixed(0)} KB)`);
     return { buffer, filename: `${basename(full) || "source"}.zip` };
   }
-  if (!full.toLowerCase().endsWith(".zip")) throw new CliError("소스는 폴더나 .zip 파일이어야 해요");
+  if (!full.toLowerCase().endsWith(".zip")) throw new CliError("Source must be a folder or a .zip file");
   return { buffer: readFileSync(full), filename: basename(full) };
 }
 
@@ -105,16 +105,16 @@ async function buildContext(manifest, command, positionals, flags) {
   const context = {};
   for (const arg of command.args) {
     let value = arg.positional !== undefined ? positionals[arg.positional] : flags[arg.flag];
-    if (value === true && arg.type !== "boolean") throw new CliError(`--${arg.flag} 에 값이 필요해요`);
+    if (value === true && arg.type !== "boolean") throw new CliError(`--${arg.flag} needs a value`);
     if (value === undefined && arg.required) {
-      throw new CliError(`${arg.positional !== undefined ? `<${arg.name}>` : `--${arg.flag}`} 이(가) 필요해요\n  사용법: camellia ${usageOf(command)}`);
+      throw new CliError(`${arg.positional !== undefined ? `<${arg.name}>` : `--${arg.flag}`} is required\n  Usage: camellia ${usageOf(command)}`);
     }
     if (value !== undefined && arg.enum && !arg.enum.includes(String(value))) {
-      throw new CliError(`${arg.flag ? `--${arg.flag}` : arg.name} 은(는) ${arg.enum.join(" | ")} 중 하나예요`);
+      throw new CliError(`${arg.flag ? `--${arg.flag}` : arg.name} must be one of ${arg.enum.join(" | ")}`);
     }
     if (value !== undefined && arg.type === "number") {
       const number = Number(value);
-      if (!Number.isFinite(number)) throw new CliError(`${arg.name} 은(는) 숫자여야 해요`);
+      if (!Number.isFinite(number)) throw new CliError(`${arg.name} must be a number`);
       value = number;
     }
     if (value !== undefined && arg.type === "boolean") value = value === true || value === "true";
@@ -141,15 +141,15 @@ function multipartForm(body) {
 async function runCommand(manifest, command, positionals, flags) {
   const context = await buildContext(manifest, command, positionals, flags);
   if (command.confirm && !flags.yes) {
-    const ok = await confirm(`${command.confirm} 계속할까요?`);
-    if (!ok) throw new CliError("취소했어요. 확인 없이 하려면 --yes 를 붙이세요.");
+    const ok = await confirm(`${command.confirm} Continue?`);
+    if (!ok) throw new CliError("Cancelled. Add --yes to skip the confirmation.");
   }
 
   let path;
   try {
     path = renderPath(command.request.path, context) + renderQuery(command.request.query, context);
   } catch (error) {
-    throw new CliError(`요청을 만들 수 없어요: ${error.message}`);
+    throw new CliError(`Cannot build the request: ${error.message}`);
   }
   const body = command.request.body ? renderBody(command.request.body, context) : undefined;
   const options = { method: command.request.method };
@@ -169,7 +169,7 @@ async function runCommand(manifest, command, positionals, flags) {
 
   if (command.follow?.deployment) {
     const id = pick(result, command.follow.deployment);
-    if (id === undefined || id === null) throw new CliError("응답에 배포 ID 가 없어요");
+    if (id === undefined || id === null) throw new CliError("The response has no deployment ID");
     return followDeployment(manifest.followers.deployment, String(id), { yes: Boolean(flags.yes), json: Boolean(flags.json) });
   }
   return 0;
@@ -179,12 +179,12 @@ async function login(flags) {
   const url = typeof flags.url === "string" ? flags.url.replace(/\/+$/, "") : (loadConfig().baseUrl || DEFAULT_BASE_URL);
   if (typeof flags.token === "string") {
     saveConfig({ baseUrl: url, token: flags.token });
-    console.log(`토큰을 저장했어요 (${url})`);
+    console.log(`Token saved (${url})`);
     return 0;
   }
-  console.log(`${url} 콘솔 계정으로 로그인해요. 비밀번호는 저장하지 않고, 30일짜리 토큰만 저장해요.`);
-  const user = typeof flags.user === "string" ? flags.user : (await ask("아이디: ")).trim();
-  const password = process.env.CAMELLIA_PASSWORD ?? (await ask("비밀번호: ", { hidden: true }));
+  console.log(`Log in to ${url} with your console account. The password is not stored; only a 30-day token is.`);
+  const user = typeof flags.user === "string" ? flags.user : (await ask("Username: ")).trim();
+  const password = process.env.CAMELLIA_PASSWORD ?? (await ask("Password: ", { hidden: true }));
   let response;
   try {
     response = await fetch(`${url}/api/v1/cli/token`, {
@@ -192,13 +192,13 @@ async function login(flags) {
       headers: { authorization: `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`, accept: "application/json" },
     });
   } catch (error) {
-    throw new CliError(`서버에 연결하지 못했어요 (${url}): ${error?.cause?.message ?? error?.message ?? error}`);
+    throw new CliError(`Cannot reach the server (${url}): ${error?.cause?.message ?? error?.message ?? error}`);
   }
-  if (response.status === 401) throw new CliError("아이디나 비밀번호가 맞지 않아요.", 2);
-  if (!response.ok) throw new CliError(`로그인하지 못했어요 (HTTP ${response.status})`);
+  if (response.status === 401) throw new CliError("Wrong username or password.", 2);
+  if (!response.ok) throw new CliError(`Login failed (HTTP ${response.status})`);
   const session = await response.json();
   saveConfig({ baseUrl: url, token: session.token, expiresAt: session.expiresAt });
-  console.log(`로그인했어요. 토큰 만료: ${session.expiresAt}`);
+  console.log(`Logged in. Token expires at ${session.expiresAt}`);
   return 0;
 }
 
@@ -210,11 +210,11 @@ export async function main(argv) {
   if (flags.version) { console.log(VERSION); return 0; }
   const [first] = positionals;
   if (first === "login") return login(flags);
-  if (first === "logout") { clearConfig(); console.log("토큰을 지웠어요."); return 0; }
+  if (first === "logout") { clearConfig(); console.log("Token removed."); return 0; }
   if (first === "whoami") {
     const config = loadConfig();
-    console.log(`서버: ${baseUrl()}`);
-    console.log(token() ? `로그인됨${config.expiresAt ? ` (토큰 만료 ${config.expiresAt})` : ""}` : "로그인 안 됨 — camellia login");
+    console.log(`Server: ${baseUrl()}`);
+    console.log(token() ? `Logged in${config.expiresAt ? ` (token expires ${config.expiresAt})` : ""}` : "Not logged in. Run camellia login.");
     return 0;
   }
 
@@ -226,10 +226,10 @@ export async function main(argv) {
   if (!first || first === "help" || flags.help && !matchCommand(manifest, positionals)) { printHelp(manifest); return 0; }
 
   const command = matchCommand(manifest, positionals);
-  if (!command) throw new CliError(`알 수 없는 명령이에요: ${positionals.join(" ")}\n  camellia help 로 명령 목록을 보세요.`);
+  if (!command) throw new CliError(`Unknown command: ${positionals.join(" ")}\n  Run camellia help to list commands.`);
   if (flags.help) {
     console.log(`camellia ${usageOf(command)}\n\n${command.description}\n`);
-    for (const arg of command.args) console.log(`  ${arg.flag ? `--${arg.flag}` : `<${arg.name}>`}  ${arg.description}${arg.required ? " (필수)" : ""}`);
+    for (const arg of command.args) console.log(`  ${arg.flag ? `--${arg.flag}` : `<${arg.name}>`}  ${arg.description}${arg.required ? " (required)" : ""}`);
     return 0;
   }
   return runCommand(manifest, command, positionals.slice(command.name.split(" ").length), flags);

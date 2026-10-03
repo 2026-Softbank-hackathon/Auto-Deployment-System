@@ -15,7 +15,7 @@ function describe(status, body) {
     const hint = typeof error.hint === "string" && error.hint ? `\n  ${error.hint}` : "";
     return { message: `${error.message}${error.code ? ` (${error.code})` : ""}${hint}`, code: error.code ?? null };
   }
-  return { message: `요청이 실패했어요 (HTTP ${status})`, code: null };
+  return { message: `Request failed (HTTP ${status})`, code: null };
 }
 
 /**
@@ -26,7 +26,7 @@ export async function api(path, { method = "GET", body, form, raw = false, auth 
   const headers = { accept: "application/json" };
   if (auth) {
     const value = token();
-    if (!value) throw new CliError("로그인이 필요해요. camellia login 을 먼저 실행하세요.", 2);
+    if (!value) throw new CliError("Login required. Run `camellia login` first.", 2);
     headers.authorization = `Bearer ${value}`;
   }
   if (body !== undefined) headers["content-type"] = "application/json";
@@ -36,9 +36,9 @@ export async function api(path, { method = "GET", body, form, raw = false, auth 
       method, headers, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
   } catch (error) {
-    throw new CliError(`서버에 연결하지 못했어요 (${baseUrl()}): ${error?.cause?.message ?? error?.message ?? error}`);
+    throw new CliError(`Cannot reach the server (${baseUrl()}): ${error?.cause?.message ?? error?.message ?? error}`);
   }
-  if (response.status === 401) throw new CliError("인증이 만료됐거나 올바르지 않아요. camellia login 으로 다시 로그인하세요.", 2);
+  if (response.status === 401) throw new CliError("Your login expired or is invalid. Run `camellia login` again.", 2);
   if (!response.ok) {
     const parsed = describe(response.status, await response.json().catch(() => null));
     throw new CliError(parsed.message, 1, parsed.code);

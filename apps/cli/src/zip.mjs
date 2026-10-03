@@ -40,7 +40,7 @@ function dosTime(date) {
 /** 폴더를 zip 한 덩어리로 (deflate). 해커톤 앱 규모라 zip64 는 쓰지 않는다 */
 export function zipDirectory(root) {
   const files = listFiles(root).sort();
-  if (files.length === 0) throw new Error(`${root} 에 올릴 파일이 없어요`);
+  if (files.length === 0) throw new Error(`No files to upload in ${root}`);
   const locals = [];
   const centrals = [];
   let offset = 0;

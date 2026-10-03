@@ -121,6 +121,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.43)(lightningcss@1.33.0)
 
+  apps/cli: {}
+
   apps/onprem-agent:
     dependencies:
       '@camellia/adapters':

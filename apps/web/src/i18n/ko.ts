@@ -9,6 +9,8 @@ export const ko = {
     language: '언어',
     sound: { label: '사운드', on: '켬', off: '끔' },
   },
+  /** 서비스 이름 (사이드바 · 브라우저 탭 제목) */
+  brand: { name: '코로의 이사' },
   nav: { label: '메인 메뉴', dashboard: '대시보드', deploy: '간단 배포!', connections: '연결', ops: '운영' },
   stages: { source: '소스 업로드', analyze: 'AI 분석', build: '빌드', provision: '인프라 준비', deploy: '배포', verify: '검증', done: '완료' },
   gadgets: { source: '출발대', analyze: '도미노', build: '깔때기', provision: '나선', deploy: '도약대', verify: '저울', done: '컵' },

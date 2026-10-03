@@ -7,18 +7,15 @@
 }
 .sidebar__brand { display: flex; flex-direction: column; gap: 10px; }
 .sidebar__brand-row { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
-.sidebar__name { font-family: var(--font-display); font-size: 26px; line-height: 1; }
+.sidebar__name { font-family: var(--font-display); font-size: 24px; line-height: 1.1; white-space: nowrap; }
 .sidebar__version {
+  white-space: nowrap;
   padding: 2px 6px; border-radius: 3px; background: var(--ink); color: var(--on-ink);
   font-family: var(--font-mono); font-size: 10px; font-weight: 600; line-height: 1.4;
 }
-.sidebar__tagline { font-size: 12px; line-height: 1.4; letter-spacing: .02em; color: var(--ink-soft); }
+.sidebar__tagline { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 12px; line-height: 1.4; letter-spacing: .02em; color: var(--ink-soft); }
 
-.brand-mark { flex-shrink: 0; }
-.brand-mark__base { fill: var(--ink-deep); }
-.brand-mark__cap { fill: var(--ink); }
-.brand-mark__marble { fill: var(--koro); }
-.brand-mark__shine { fill: var(--surface); opacity: .5; }
+.brand-mark { flex-shrink: 0; display: block; border-radius: 9px; }
 
 .sidebar__rail { display: flex; flex-direction: column; gap: 4px; --rail-x: 11px; --rail-start: 20px; --rail-end: 20px; }
 .sidebar__link {

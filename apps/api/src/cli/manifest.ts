@@ -87,19 +87,19 @@ export interface CliManifest {
   followers: { deployment: CliDeploymentFollower };
 }
 
-const APP_ARG: CliArg = { name: "app", positional: 0, type: "string", required: true, resolver: "app", description: "앱 이름 · 주소(subdomain) · ID" };
-const DEPLOYMENT_ARG: CliArg = { name: "deployment", positional: 0, type: "string", required: true, description: "배포 ID" };
+const APP_ARG: CliArg = { name: "app", positional: 0, type: "string", required: true, resolver: "app", description: "App name, subdomain, or ID" };
+const DEPLOYMENT_ARG: CliArg = { name: "deployment", positional: 0, type: "string", required: true, description: "Deployment ID" };
 
 export const CLI_MANIFEST: CliManifest = {
   version: 1,
   resolvers: {
     app: {
       list: "/projects?limit=100", items: "items", match: ["name", "subdomain", "id"], value: "id",
-      label: "앱", hint: "camellia apps list 로 이름을 확인하세요.",
+      label: "App", hint: "Run camellia apps list to see app names.",
     },
     connection: {
       list: "/environments", items: "", match: ["name", "id"], value: "id",
-      label: "연결", hint: "camellia connections list 로 이름을 확인하세요.",
+      label: "Connection", hint: "Run camellia connections list to see connection names.",
       defaultWhere: { type: "aws", isDefault: true },
     },
   },
@@ -112,178 +112,178 @@ export const CLI_MANIFEST: CliManifest = {
       ask: {
         awaiting_patch_approval: {
           gate: "patch",
-          question: "SQLite 를 PostgreSQL 로 바꾸는 코드 수정안을 적용할까요?",
+          question: "Apply the suggested code change that moves SQLite to PostgreSQL?",
           detail: "/deployments/{id}/patch",
         },
       },
       succeeded: ["succeeded"],
       failed: ["failed", "cancelled", "rejected"],
       labels: {
-        received: "접수", analyzing: "소스 분석", awaiting_patch_approval: "코드 수정안 확인",
-        awaiting_target_confirmation: "배포 대상 확인", queued: "대기", building: "이미지 빌드",
-        planning: "인프라 계획", awaiting_plan_approval: "인프라 계획 확인", provisioning: "인프라 준비",
-        deploying: "배포", verifying: "검증", succeeded: "성공", failed: "실패", cancelled: "취소",
-        rejected: "거절", rollback: "되돌리는 중",
+        received: "Received", analyzing: "Analyzing source", awaiting_patch_approval: "Waiting for code change approval",
+        awaiting_target_confirmation: "Confirming target", queued: "Queued", building: "Building image",
+        planning: "Planning infrastructure", awaiting_plan_approval: "Approving plan", provisioning: "Provisioning infrastructure",
+        deploying: "Deploying", verifying: "Verifying", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled",
+        rejected: "Rejected", rollback: "Rolling back",
       },
     },
   },
   commands: [
     {
-      name: "apps list", description: "앱 목록", args: [],
+      name: "apps list", description: "List apps", args: [],
       request: { method: "GET", path: "/projects", query: { limit: "100" } },
       output: {
         kind: "table", items: "items", columns: [
-          { key: "id", label: "ID" }, { key: "name", label: "이름" },
-          { key: "live.environmentType", label: "서비스 중" }, { key: "latest.status", label: "최근 배포" },
-          { key: "publicUrl", label: "주소" },
+          { key: "id", label: "ID" }, { key: "name", label: "NAME" },
+          { key: "live.environmentType", label: "LIVE ON" }, { key: "latest.status", label: "LATEST" },
+          { key: "publicUrl", label: "URL" },
         ],
       },
     },
     {
-      name: "apps get", description: "앱 상세", args: [APP_ARG],
+      name: "apps get", description: "Show an app", args: [APP_ARG],
       request: { method: "GET", path: "/projects/{app}" },
       output: {
         kind: "object", fields: [
-          { key: "id", label: "ID" }, { key: "name", label: "이름" }, { key: "publicUrl", label: "주소" },
-          { key: "deployMode", label: "배포 형태" }, { key: "live.deploymentId", label: "서비스 중인 배포" },
-          { key: "live.environmentName", label: "서비스 중인 연결" }, { key: "latest.deploymentId", label: "최근 배포" },
-          { key: "latest.status", label: "최근 배포 상태" },
+          { key: "id", label: "ID" }, { key: "name", label: "Name" }, { key: "publicUrl", label: "URL" },
+          { key: "deployMode", label: "Mode" }, { key: "live.deploymentId", label: "Live deployment" },
+          { key: "live.environmentName", label: "Live on" }, { key: "latest.deploymentId", label: "Latest deployment" },
+          { key: "latest.status", label: "Latest status" },
         ],
       },
     },
     {
-      name: "apps create", description: "앱 만들기",
+      name: "apps create", description: "Create an app",
       args: [
-        { name: "name", positional: 0, type: "string", required: true, description: "앱 이름" },
-        { name: "subdomain", flag: "subdomain", type: "string", description: "앱 주소 앞부분 (없으면 service-{ID})" },
+        { name: "name", positional: 0, type: "string", required: true, description: "App name" },
+        { name: "subdomain", flag: "subdomain", type: "string", description: "Subdomain for the app URL (default service-{ID})" },
       ],
       request: { method: "POST", path: "/projects", body: { name: "$name", subdomain: "$subdomain" } },
-      output: { kind: "message", text: "앱 {name} 을(를) 만들었어요. ID {id} · {publicUrl}" },
+      output: { kind: "message", text: "Created app {name} (ID {id}) at {publicUrl}" },
     },
     {
-      name: "apps address", description: "앱 주소 바꾸기",
-      args: [APP_ARG, { name: "subdomain", positional: 1, type: "string", required: true, description: "새 주소 앞부분" }],
+      name: "apps address", description: "Change the app URL",
+      args: [APP_ARG, { name: "subdomain", positional: 1, type: "string", required: true, description: "New subdomain" }],
       request: { method: "PATCH", path: "/projects/{app}/subdomain", body: { subdomain: "$subdomain" } },
-      output: { kind: "message", text: "주소를 바꾸고 있어요. 새 주소: {publicUrl}" },
+      output: { kind: "message", text: "Changing the URL. New URL: {publicUrl}" },
     },
     {
-      name: "apps delete", description: "앱 삭제 (만든 인프라 · 주소까지 정리)", args: [APP_ARG],
+      name: "apps delete", description: "Delete an app with its infrastructure and URL", args: [APP_ARG],
       request: { method: "DELETE", path: "/projects/{app}" },
-      output: { kind: "message", text: "앱 삭제를 시작했어요. 상태: {deletion.status}" },
-      confirm: "앱과 앱이 만든 인프라 · 주소를 모두 지웁니다.",
+      output: { kind: "message", text: "Deleting the app. Status: {deletion.status}" },
+      confirm: "This deletes the app, its infrastructure and its URL.",
     },
     {
-      name: "connections list", description: "배포할 곳(연결) 목록", args: [],
+      name: "connections list", description: "List deploy targets (connections)", args: [],
       request: { method: "GET", path: "/environments" },
       output: {
         kind: "table", items: "", columns: [
-          { key: "id", label: "ID" }, { key: "name", label: "이름" }, { key: "type", label: "종류" },
-          { key: "isDefault", label: "기본" }, { key: "agentOnline", label: "Agent 온라인" },
+          { key: "id", label: "ID" }, { key: "name", label: "NAME" }, { key: "type", label: "TYPE" },
+          { key: "isDefault", label: "DEFAULT" }, { key: "agentOnline", label: "AGENT ONLINE" },
         ],
       },
     },
     {
-      name: "deploy", description: "폴더나 zip 을 올려 배포하고 끝날 때까지 지켜보기",
+      name: "deploy", description: "Upload a folder or zip, deploy it and watch until it finishes",
       args: [
         APP_ARG,
-        { name: "source", positional: 1, type: "source", required: true, description: "소스 폴더 또는 .zip" },
-        { name: "to", flag: "to", type: "string", resolver: "connection", description: "배포할 연결 (없으면 기본 AWS 연결)" },
-        { name: "mode", flag: "mode", type: "string", enum: ["container", "serverless"], description: "배포 형태 (없으면 앱에 저장된 형태)" },
+        { name: "source", positional: 1, type: "source", required: true, description: "Source folder or .zip" },
+        { name: "to", flag: "to", type: "string", resolver: "connection", description: "Connection to deploy to (default: the default AWS connection)" },
+        { name: "mode", flag: "mode", type: "string", enum: ["container", "serverless"], description: "Deploy mode (default: the mode saved on the app)" },
       ],
       request: {
         method: "POST", path: "/deployments", multipart: true,
         body: { source: "$source", project_id: "{app}", environment_id: "{to}", mode: "$mode" },
       },
-      output: { kind: "message", text: "배포 {deploymentId} 를 시작했어요." },
+      output: { kind: "message", text: "Started deployment {deploymentId}." },
       follow: { deployment: "deploymentId" },
     },
     {
-      name: "switch", description: "서비스 중인 버전을 다른 연결로 옮기기 (빌드 없이 같은 이미지)",
-      args: [APP_ARG, { name: "to", flag: "to", type: "string", required: true, resolver: "connection", description: "옮겨 갈 연결" }],
+      name: "switch", description: "Move the live version to another connection (same image, no rebuild)",
+      args: [APP_ARG, { name: "to", flag: "to", type: "string", required: true, resolver: "connection", description: "Connection to move to" }],
       request: { method: "POST", path: "/deployments/{app.live.deploymentId}/redeploy", body: { targetEnvironmentId: "{to}" } },
-      output: { kind: "message", text: "배포 {deploymentId} 로 옮기고 있어요." },
+      output: { kind: "message", text: "Moving with deployment {deploymentId}." },
       follow: { deployment: "deploymentId" },
     },
     {
-      name: "redeploy", description: "이전 배포의 이미지로 다시 배포 (롤백에도 씀)",
-      args: [DEPLOYMENT_ARG, { name: "to", flag: "to", type: "string", resolver: "connection", description: "다른 연결로 배포할 때" }],
+      name: "redeploy", description: "Redeploy the image of a past deployment (also for rollback)",
+      args: [DEPLOYMENT_ARG, { name: "to", flag: "to", type: "string", resolver: "connection", description: "Deploy to another connection" }],
       request: { method: "POST", path: "/deployments/{deployment}/redeploy", body: { targetEnvironmentId: "{to}" } },
-      output: { kind: "message", text: "배포 {deploymentId} 를 시작했어요." },
+      output: { kind: "message", text: "Started deployment {deploymentId}." },
       follow: { deployment: "deploymentId" },
     },
     {
-      name: "deployments", description: "앱의 배포 내역",
-      args: [APP_ARG, { name: "limit", flag: "limit", type: "number", description: "최대 개수 (기본 20)" }],
+      name: "deployments", description: "List deployments of an app",
+      args: [APP_ARG, { name: "limit", flag: "limit", type: "number", description: "Max rows (default 20)" }],
       request: { method: "GET", path: "/projects/{app}/deployments", query: { limit: "{limit}" } },
       output: {
         kind: "table", items: "items", columns: [
-          { key: "id", label: "ID" }, { key: "status", label: "상태" }, { key: "environmentName", label: "연결" },
-          { key: "targetProfile", label: "프로필" }, { key: "isLive", label: "서비스 중" }, { key: "createdAt", label: "시각" },
+          { key: "id", label: "ID" }, { key: "status", label: "STATUS" }, { key: "environmentName", label: "CONNECTION" },
+          { key: "targetProfile", label: "PROFILE" }, { key: "isLive", label: "LIVE" }, { key: "createdAt", label: "CREATED" },
         ],
       },
     },
     {
-      name: "status", description: "배포 상태", args: [DEPLOYMENT_ARG],
+      name: "status", description: "Show a deployment", args: [DEPLOYMENT_ARG],
       request: { method: "GET", path: "/deployments/{deployment}" },
       output: {
         kind: "object", fields: [
-          { key: "id", label: "ID" }, { key: "status", label: "상태" }, { key: "targetProfile", label: "프로필" },
-          { key: "publicUrl", label: "주소" }, { key: "error", label: "오류" }, { key: "createdAt", label: "시작" },
-          { key: "succeededAt", label: "성공" }, { key: "failedAt", label: "실패" },
+          { key: "id", label: "ID" }, { key: "status", label: "Status" }, { key: "targetProfile", label: "Profile" },
+          { key: "publicUrl", label: "URL" }, { key: "error", label: "Error" }, { key: "createdAt", label: "Created" },
+          { key: "succeededAt", label: "Succeeded" }, { key: "failedAt", label: "Failed" },
         ],
       },
     },
     {
-      name: "logs", description: "배포 단계 로그",
+      name: "logs", description: "Show the log of a deployment step",
       args: [
         DEPLOYMENT_ARG,
-        { name: "step", flag: "step", type: "string", enum: ["analyze", "build", "provision", "verify"], description: "단계 (기본 provision)" },
-        { name: "tail", flag: "tail", type: "number", description: "마지막 N줄" },
+        { name: "step", flag: "step", type: "string", enum: ["analyze", "build", "provision", "verify"], description: "Step (default provision)" },
+        { name: "tail", flag: "tail", type: "number", description: "Last N lines" },
       ],
       request: { method: "GET", path: "/deployments/{deployment}/logs", query: { step: "{step}", tail: "{tail}" } },
       // 로그 줄 끝의 화면 번역용 꼬리표(#307)는 터미널에서 뺀다
       output: { kind: "text", stripPattern: "\\s*#i18n\\{.*\\}\\s*$" },
     },
     {
-      name: "diagnosis", description: "실패한 배포의 AI 진단", args: [DEPLOYMENT_ARG],
+      name: "diagnosis", description: "AI diagnosis of a failed deployment", args: [DEPLOYMENT_ARG],
       request: { method: "GET", path: "/deployments/{deployment}/diagnosis" },
-      output: { kind: "object", fields: [{ key: "failedStep", label: "실패 단계" }, { key: "summary", label: "원인" }, { key: "generatedAt", label: "진단 시각" }] },
+      output: { kind: "object", fields: [{ key: "failedStep", label: "Failed step" }, { key: "summary", label: "Cause" }, { key: "generatedAt", label: "Diagnosed at" }] },
     },
     {
-      name: "cost", description: "월 예상 인프라 비용", args: [DEPLOYMENT_ARG],
+      name: "cost", description: "Estimated monthly infrastructure cost", args: [DEPLOYMENT_ARG],
       request: { method: "GET", path: "/deployments/{deployment}/cost-estimate" },
       output: {
         kind: "table", items: "estimate.items", columns: [
-          { key: "key", label: "항목" }, { key: "monthlyUsd", label: "월 USD" }, { key: "usageBased", label: "쓰는 만큼" },
+          { key: "key", label: "ITEM" }, { key: "monthlyUsd", label: "USD/MONTH" }, { key: "usageBased", label: "USAGE-BASED" },
         ],
       },
     },
     {
-      name: "cancel", description: "진행 중인 배포 취소", args: [DEPLOYMENT_ARG],
+      name: "cancel", description: "Cancel a running deployment", args: [DEPLOYMENT_ARG],
       request: { method: "POST", path: "/deployments/{deployment}/cancel" },
-      output: { kind: "message", text: "배포를 취소했어요." },
-      confirm: "진행 중인 배포를 멈춥니다.",
+      output: { kind: "message", text: "Deployment cancelled." },
+      confirm: "This stops the running deployment.",
     },
     {
-      name: "env list", description: "앱 환경변수 (값은 가려서 보여 줌)", args: [APP_ARG],
+      name: "env list", description: "List app environment variables (values hidden)", args: [APP_ARG],
       request: { method: "GET", path: "/projects/{app}/env" },
-      output: { kind: "table", items: "items", columns: [{ key: "name", label: "이름" }, { key: "updatedAt", label: "바꾼 시각" }] },
+      output: { kind: "table", items: "items", columns: [{ key: "name", label: "NAME" }, { key: "updatedAt", label: "UPDATED" }] },
     },
     {
-      name: "env set", description: "환경변수 넣기 (다음 배포부터 적용)",
+      name: "env set", description: "Set an environment variable (applies from the next deployment)",
       args: [
         APP_ARG,
-        { name: "key", positional: 1, type: "string", required: true, description: "이름" },
-        { name: "value", positional: 2, type: "string", required: true, description: "값" },
+        { name: "key", positional: 1, type: "string", required: true, description: "Name" },
+        { name: "value", positional: 2, type: "string", required: true, description: "Value" },
       ],
       request: { method: "PATCH", path: "/projects/{app}/env", body: { vars: { "{key}": "$value" } } },
-      output: { kind: "message", text: "환경변수를 저장했어요. 다음 배포부터 적용돼요." },
+      output: { kind: "message", text: "Saved. It applies from the next deployment." },
     },
     {
-      name: "env unset", description: "환경변수 지우기",
-      args: [APP_ARG, { name: "key", positional: 1, type: "string", required: true, description: "이름" }],
+      name: "env unset", description: "Remove an environment variable",
+      args: [APP_ARG, { name: "key", positional: 1, type: "string", required: true, description: "Name" }],
       request: { method: "PATCH", path: "/projects/{app}/env", body: { vars: { "{key}": null } } },
-      output: { kind: "message", text: "환경변수를 지웠어요." },
+      output: { kind: "message", text: "Removed." },
     },
   ],
 };

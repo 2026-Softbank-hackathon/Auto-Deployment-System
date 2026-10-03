@@ -27,7 +27,7 @@ export async function followDeployment(spec, id, { yes = false, json = false } =
   const startedAt = Date.now();
   const handled = new Set();
   let last = null;
-  if (!json) console.log(`배포 ${id} 진행을 지켜봐요 (Ctrl+C 로 멈춰도 배포는 계속돼요)`);
+  if (!json) console.log(`Watching deployment ${id} (Ctrl+C stops watching; the deployment keeps going)`);
   for (;;) {
     const deployment = await api(renderPath(spec.status, { id }));
     const status = deployment.status;
@@ -38,14 +38,14 @@ export async function followDeployment(spec, id, { yes = false, json = false } =
 
     if (spec.succeeded.includes(status)) {
       if (json) console.log(JSON.stringify(deployment, null, 2));
-      else console.log(`성공했어요. 주소: ${deployment.publicUrl ?? "-"}`);
+      else console.log(`Succeeded. URL: ${deployment.publicUrl ?? "-"}`);
       return 0;
     }
     if (spec.failed.includes(status)) {
       if (json) console.log(JSON.stringify(deployment, null, 2));
       else {
-        console.error(`배포가 ${spec.labels[status] ?? status} 상태로 끝났어요.${deployment.error ? ` 오류: ${deployment.error}` : ""}`);
-        console.error(`  원인 보기: camellia diagnosis ${id}  ·  로그: camellia logs ${id} --step build`);
+        console.error(`Deployment ended as ${spec.labels[status] ?? status}.${deployment.error ? ` Error: ${deployment.error}` : ""}`);
+        console.error(`  Diagnosis: camellia diagnosis ${id}   Logs: camellia logs ${id} --step build`);
       }
       return 3;
     }
@@ -56,12 +56,12 @@ export async function followDeployment(spec, id, { yes = false, json = false } =
       const askSpec = spec.ask[status];
       if (autoGate) {
         handled.add(key);
-        await decide(spec, id, autoGate, "approve", "CLI 자동 승인");
+        await decide(spec, id, autoGate, "approve", "auto-approved by CLI");
       } else if (askSpec) {
         handled.add(key);
         const approve = yes || (await confirm(`  ${askSpec.question}`));
-        await decide(spec, id, askSpec.gate, approve ? "approve" : "reject", approve ? "CLI 에서 승인" : "CLI 에서 거절");
-        if (!json) console.log(`  ${approve ? "승인했어요" : "적용하지 않고 원래 소스로 이어 가요"}`);
+        await decide(spec, id, askSpec.gate, approve ? "approve" : "reject", approve ? "approved in CLI" : "rejected in CLI");
+        if (!json) console.log(`  ${approve ? "Approved" : "Skipped; continuing with the original source"}`);
       }
     }
     await sleep(spec.intervalMs);

@@ -16,12 +16,12 @@ const pad = (text, width) => text + " ".repeat(Math.max(0, width - displayWidth(
 
 function cell(value) {
   if (value === undefined || value === null || value === "") return "-";
-  if (typeof value === "boolean") return value ? "예" : "아니오";
+  if (typeof value === "boolean") return value ? "yes" : "no";
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 export function printTable(rows, columns) {
-  if (!Array.isArray(rows) || rows.length === 0) { console.log("(없음)"); return; }
+  if (!Array.isArray(rows) || rows.length === 0) { console.log("(none)"); return; }
   const cells = rows.map((row) => columns.map((column) => cell(pick(row, column.key))));
   const widths = columns.map((column, index) => Math.max(displayWidth(column.label), ...cells.map((row) => displayWidth(row[index]))));
   console.log(columns.map((column, index) => pad(column.label, widths[index])).join("  ").trimEnd());
@@ -50,7 +50,7 @@ export function printResult(output, value) {
       break;
     case "text": {
       const text = typeof value === "string" ? value : "";
-      if (!text) { console.log("(로그 없음)"); break; }
+      if (!text) { console.log("(no log yet)"); break; }
       const pattern = output.stripPattern ? new RegExp(output.stripPattern) : null;
       console.log(text.split("\n").map((line) => (pattern ? line.replace(pattern, "") : line)).join("\n").trimEnd());
       break;

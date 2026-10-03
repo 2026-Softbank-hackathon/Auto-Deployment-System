@@ -35,7 +35,7 @@ export function renderString(template, context) {
 export function renderPath(template, context) {
   return template.replace(ANY, (_, expression) => {
     const value = lookup(context, expression);
-    if (value === undefined || value === null) throw new Error(`${expression} 값이 없어요`);
+    if (value === undefined || value === null) throw new Error(`no value for ${expression}`);
     return encodeURIComponent(String(value));
   });
 }

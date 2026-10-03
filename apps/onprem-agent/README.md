@@ -12,6 +12,7 @@
 - 동적 `localPort` 보고 뒤 받은 Named Tunnel session으로 `cloudflared` 실행
 - Tunnel Token을 `TUNNEL_TOKEN` 환경변수로만 전달하고 프로세스 준비·교체·정리
 - Intel Mac과 Apple Silicon 사전검사, macOS `LaunchAgent` 설치 기반
+- Windows x64(Docker Desktop) 설치 스크립트와 로그온 작업 기반 실행
 - `TunnelProvider` 인터페이스와 테스트 전용 `FakeTunnelProvider`
 - 등록·Heartbeat HTTP Client와 권한 제한 장기 Agent 인증정보 파일
 - Job claim·ECR credential·Tunnel 준비·결과 제출 HTTP Client
@@ -30,7 +31,7 @@ P0 데모는 일반 환경변수만 지원합니다. `secretNames`가 포함된 
 - `ONPREM_CONTROL_PLANE_URL`: HTTPS Control Plane origin. 로컬 개발에서는 loopback HTTP도 허용
 - `ONPREM_AGENT_REGISTRATION_TOKEN`: 서버가 발급한 단기 TTL의 1회용 토큰
 
-등록 명령은 토큰을 `POST /api/v1/agents/register`에 한 번 전달하고 발급된 장기 Agent 인증키를 기본 경로 `~/Library/Application Support/Camellia/onprem-agent/credentials.json`에 저장합니다. 디렉터리는 `700`, 파일은 `600` 권한을 강제하며 원자적으로 교체합니다. 이후 실행은 저장된 Control Plane URL과 인증키를 재사용하므로 등록 토큰이 필요하지 않습니다. 등록 토큰과 인증키는 LaunchAgent plist·명령 인자·구조화 로그에 기록하지 않습니다.
+등록 명령은 토큰을 `POST /api/v1/agents/register`에 한 번 전달하고 발급된 장기 Agent 인증키를 기본 경로 `~/Library/Application Support/Camellia/onprem-agent/credentials.json`(Windows는 `%LOCALAPPDATA%\Camellia\onprem-agent\credentials.json`)에 저장합니다. macOS에서는 디렉터리 `700`, 파일 `600` 권한을 강제하며 원자적으로 교체합니다. Windows에는 이 권한 비트가 없어 검사하지 않고, 사용자 본인만 접근할 수 있는 `%LOCALAPPDATA%`의 ACL에 맡깁니다. 이후 실행은 저장된 Control Plane URL과 인증키를 재사용하므로 등록 토큰이 필요하지 않습니다. 등록 토큰과 인증키는 LaunchAgent plist·명령 인자·구조화 로그에 기록하지 않습니다.
 
 설치된 Agent의 최초 등록은 다음처럼 실행합니다.
 
@@ -68,8 +69,8 @@ cloudflared --version
 
 ```bash
 curl -fsSL \
-  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.8/install-agent.sh \
-  | sh -s -- v0.1.8
+  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.9/install-agent.sh \
+  | sh -s -- v0.1.9
 ```
 
 로컬 build 결과를 직접 설치할 때는 `dist/main.js`와 `dist/launchd-cli.js`를 만든 뒤 bundle 내부 설치기를 실행합니다.
@@ -83,14 +84,48 @@ apps/onprem-agent/install/macos/install.sh
 
 현재 프로젝트의 애플리케이션 build 계약은 `linux/amd64` 단일 digest입니다. Apple Silicon의 Agent도 같은 digest를 유지하기 위해 Compose에 `platform: linux/amd64`를 명시하며, Docker Desktop의 amd64 에뮬레이션을 사용합니다. Agent 등록·Heartbeat·Job claim·ECR pull·Tunnel·Verify 흐름은 두 Mac 아키텍처에서 동일합니다.
 
+## Windows 설치
+
+Windows 10/11 x64에서 로그인한 사용자 세션으로 동작합니다. PowerShell에서 다음 명령이 동작해야 합니다. cloudflared는 `winget install --id Cloudflare.cloudflared`로 설치할 수 있습니다.
+
+```powershell
+docker info
+docker compose version
+cloudflared --version
+```
+
+버전을 고정한 설치기를 받아 실행합니다. 설치기는 Windows용 Release archive와 `.sha256`을 내려받아 버전 · 아키텍처 · checksum을 확인한 뒤 `%LOCALAPPDATA%\Camellia\onprem-agent`에 설치합니다.
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+Invoke-WebRequest -UseBasicParsing -OutFile "$env:TEMP\install-agent.ps1" `
+  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.9/install-agent.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\install-agent.ps1" v0.1.9
+```
+
+등록과 시작은 설치된 `camellia-onprem-agent.cmd` 하나로 합니다. 등록 토큰은 그 PowerShell 창의 환경변수로만 넘기고 등록 뒤 지웁니다.
+
+```powershell
+$env:ONPREM_CONTROL_PLANE_URL = 'https://server.example'
+$env:ONPREM_AGENT_REGISTRATION_TOKEN = '<one-time-token>'
+& "$env:LOCALAPPDATA\Camellia\onprem-agent\bin\camellia-onprem-agent.cmd" register
+Remove-Item Env:ONPREM_AGENT_REGISTRATION_TOKEN
+& "$env:LOCALAPPDATA\Camellia\onprem-agent\bin\camellia-onprem-agent.cmd" start
+```
+
+`start`는 macOS의 LaunchAgent 대신 현재 사용자의 로그온 작업(작업 스케줄러 `Camellia On-Prem Agent`)을 등록하고 바로 실행합니다. 관리자 권한은 필요 없습니다. 작업은 창 없이 Agent를 띄우고, Agent가 끝나면(로그온 직후 Docker Desktop이 아직 준비되지 않은 경우 등) 10초 뒤 다시 실행합니다. 로그는 `%LOCALAPPDATA%\Camellia\Logs\agent.log`, `agent-error.log`에 남습니다. `stop`, `restart`, `status`, `uninstall`도 같은 명령으로 실행합니다. `uninstall`은 장기 Key 파일을 지우고 Agent 폴더를 휴지통으로 옮기며 로그는 남깁니다.
+
+Windows용 스크립트는 ASCII로만 작성합니다. Windows PowerShell 5.1은 BOM이 없는 스크립트를 시스템 코드 페이지(cp949 · cp932)로 읽기 때문입니다.
+
 ## Agent Release 생성
 
 `package.json` 버전과 일치하는 `onprem-agent-vMAJOR.MINOR.PATCH` tag를 push하면 GitHub Actions가 Agent 테스트·타입체크·린트·build를 수행하고 다음 자산을 Release에 게시합니다.
 
 - `camellia-onprem-agent-vMAJOR.MINOR.PATCH-macos-x64.tar.gz`
 - `camellia-onprem-agent-vMAJOR.MINOR.PATCH-macos-arm64.tar.gz`
+- `camellia-onprem-agent-vMAJOR.MINOR.PATCH-windows-x64.zip`
 - archive별 `.sha256`
-- `install-agent.sh`
+- `install-agent.sh`, `install-agent.ps1`
 
 ## 검증
 

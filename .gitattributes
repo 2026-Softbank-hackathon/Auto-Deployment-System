@@ -3,3 +3,6 @@
 *.sh text eol=lf
 *.envsh text eol=lf
 *.tftpl text eol=lf
+# Windows Agent 설치 스크립트는 리눅스에서 패키징해도 CRLF 유지 (cmd 의 goto 레이블이 LF 에서 깨짐)
+apps/onprem-agent/install/windows/*.cmd text eol=crlf
+apps/onprem-agent/install/windows/*.ps1 text eol=crlf

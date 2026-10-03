@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileAgentCredentialStore } from "../src/credential-store.js";
 
+// Windows는 POSIX 권한 비트가 없어 권한 검사를 하지 않는다 (file-permissions.ts)
+const posix = process.platform !== "win32";
+
 describe("Agent 장기 인증정보 파일 저장소", () => {
   const roots: string[] = [];
 
@@ -26,7 +29,7 @@ describe("Agent 장기 인증정보 파일 저장소", () => {
     };
   }
 
-  it("디렉터리 700·파일 600으로 원자 저장하고 다시 읽는다", async () => {
+  it.runIf(posix)("디렉터리 700·파일 600으로 원자 저장하고 다시 읽는다", async () => {
     const { stateDirectory, store } = await createStore();
     const credential = {
       controlPlaneUrl: "https://control.camellia.example",
@@ -50,7 +53,7 @@ describe("Agent 장기 인증정보 파일 저장소", () => {
     await expect(store.load()).rejects.toThrow("디렉터리 권한");
   });
 
-  it("권한이 느슨하거나 형식이 잘못된 인증정보 파일을 거부하고 값을 오류에 노출하지 않는다", async () => {
+  it.runIf(posix)("권한이 느슨하거나 형식이 잘못된 인증정보 파일을 거부하고 값을 오류에 노출하지 않는다", async () => {
     const { stateDirectory, store } = await createStore();
     await store.save({
       controlPlaneUrl: "https://control.camellia.example",

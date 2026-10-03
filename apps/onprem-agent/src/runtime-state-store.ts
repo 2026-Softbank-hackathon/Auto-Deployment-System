@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { hasLoosePermissions } from "./file-permissions.js";
 
 export type PersistedRuntime = {
   jobId: string;
@@ -138,11 +139,11 @@ export class FileRuntimeStateStore implements RuntimeStateStore {
     if (
       !directoryInfo.isDirectory() ||
       directoryInfo.isSymbolicLink() ||
-      (directoryInfo.mode & 0o077) !== 0
+      hasLoosePermissions(directoryInfo.mode)
     ) {
       throw new Error("Agent 상태 디렉터리 권한은 700이어야 합니다.");
     }
-    if ((fileInfo.mode & 0o077) !== 0) {
+    if (hasLoosePermissions(fileInfo.mode)) {
       throw new Error("Agent 런타임 상태 파일 권한은 600이어야 합니다.");
     }
     try {

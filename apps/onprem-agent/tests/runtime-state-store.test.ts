@@ -7,6 +7,9 @@ import {
   type PersistedRuntime,
 } from "../src/runtime-state-store.js";
 
+// Windows는 POSIX 권한 비트가 없어 권한 검사를 하지 않는다 (file-permissions.ts)
+const posix = process.platform !== "win32";
+
 const runtime: PersistedRuntime = {
   jobId: "job-42",
   deploymentId: 42,
@@ -33,7 +36,7 @@ describe("Agent 런타임 상태 파일", () => {
     return { stateDirectory, store: new FileRuntimeStateStore(stateDirectory) };
   }
 
-  it("디렉터리 700·파일 600으로 원자 저장하고 배포별로 제거한다", async () => {
+  it.runIf(posix)("디렉터리 700·파일 600으로 원자 저장하고 배포별로 제거한다", async () => {
     const { stateDirectory, store } = await createStore();
 
     expect(await store.load()).toEqual([]);
@@ -51,7 +54,7 @@ describe("Agent 런타임 상태 파일", () => {
     });
   });
 
-  it("느슨한 권한이나 손상된 상태 파일을 거부한다", async () => {
+  it.runIf(posix)("느슨한 권한이나 손상된 상태 파일을 거부한다", async () => {
     const { stateDirectory, store } = await createStore();
     await store.save(runtime);
     const statePath = join(stateDirectory, "runtimes.json");

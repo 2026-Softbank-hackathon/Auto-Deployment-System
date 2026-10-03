@@ -39,6 +39,13 @@ const CLOUDFLARED_ENV_KEYS = [
   "LC_ALL",
   "SSL_CERT_FILE",
   "SSL_CERT_DIR",
+  // Windows: SystemRoot가 없으면 Go로 만든 cloudflared가 네트워크를 쓰지 못한다
+  "SystemRoot",
+  "USERPROFILE",
+  "LOCALAPPDATA",
+  "APPDATA",
+  "TEMP",
+  "TMP",
 ] as const;
 
 function createCloudflaredEnvironment(

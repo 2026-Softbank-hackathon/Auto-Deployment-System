@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 
 export type AgentConfig = {
   controlPlaneUrl?: string;
@@ -23,8 +23,24 @@ function positiveInteger(
   return value;
 }
 
+/** macOS는 ~/Library/Application Support, Windows는 %LOCALAPPDATA% 아래. 설치 스크립트도 같은 위치를 쓴다. */
+export function defaultStateDirectory(
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === "win32") {
+    return win32.join(
+      environment.LOCALAPPDATA ?? win32.join(homedir(), "AppData", "Local"),
+      "Camellia",
+      "onprem-agent",
+    );
+  }
+  return join(homedir(), "Library", "Application Support", "Camellia", "onprem-agent");
+}
+
 export function loadAgentConfig(
   environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): AgentConfig {
   const registrationToken = environment.ONPREM_AGENT_REGISTRATION_TOKEN;
   if (registrationToken !== undefined && registrationToken.length < 16) {
@@ -35,8 +51,7 @@ export function loadAgentConfig(
     controlPlaneUrl: environment.ONPREM_CONTROL_PLANE_URL,
     registrationToken,
     stateDirectory:
-      environment.ONPREM_AGENT_STATE_DIR ??
-      join(homedir(), "Library", "Application Support", "Camellia", "onprem-agent"),
+      environment.ONPREM_AGENT_STATE_DIR ?? defaultStateDirectory(environment, platform),
     pollIntervalMs: positiveInteger(
       environment,
       "ONPREM_AGENT_POLL_INTERVAL_MS",

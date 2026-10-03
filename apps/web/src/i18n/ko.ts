@@ -29,6 +29,7 @@ export const ko = {
   errors: {
     requestFailed: (status: number) => `요청을 완료하지 못했습니다. (${status})`,
     network: '서버에 연결하지 못했습니다. 네트워크나 API 서버 상태를 확인해 주세요.',
+    notFound: '찾지 못했습니다. 지워졌거나 주소가 잘못됐을 수 있어요. (404)',
     startFailed: '배포를 시작하지 못했습니다.',
     listFailed: '배포 이력을 불러오지 못했습니다.',
     statusFailed: '배포 상태를 불러오지 못했습니다.',
@@ -36,6 +37,8 @@ export const ko = {
     logsFailed: '로그를 불러오지 못했습니다.',
     analysisFailed: '분석 결과를 불러오지 못했습니다.',
     responseInvalid: '서버 응답 형식이 올바르지 않습니다.',
+    // 화면을 그리다 예외가 났을 때 본문 자리에 보여 주는 안내 (ErrorBoundary)
+    crashed: { title: '이 화면을 표시하지 못했어요.', copy: '잠시 후 다시 시도해 주세요. 계속되면 페이지를 새로 고쳐 주세요.', retry: '다시 시도', home: '대시보드로' },
   },
   /**
    * 서버 오류 코드(error.code)별 문구 (#147). 한국어 화면은 서버 설명이 더 자세하므로 서버 설명을 먼저 쓰고,

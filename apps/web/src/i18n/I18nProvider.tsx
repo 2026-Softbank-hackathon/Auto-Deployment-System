@@ -71,7 +71,12 @@ export function useI18n(): I18nContextValue { return useContext(I18nContext); }
  * 프론트가 만든 오류는 현재 언어로 바꾼다. 서버가 보낸 문구·응답 형식 오류 등은 원문 그대로 둔다.
  */
 export function errorMessage(error: unknown, t: Messages, fallback: string): string {
-  if (error instanceof DeploymentApiError) return t.errors.requestFailed(error.status);
+  if (error instanceof DeploymentApiError) {
+    if (error.status === 404) return t.errors.notFound;
+    // 502 · 503 · 504 는 프록시가 API 서버에 닿지 못한 것 — 숫자만 보여 주지 않고 연결 문제로 안내한다
+    if (error.status >= 502 && error.status <= 504) return `${t.errors.network} (${error.status})`;
+    return t.errors.requestFailed(error.status);
+  }
   if (error instanceof TypeError) return t.errors.network;
   if (error instanceof ResponseFormatError) return t.errors.responseInvalid;
   return error instanceof Error ? error.message : fallback;

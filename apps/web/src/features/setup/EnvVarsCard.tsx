@@ -75,7 +75,10 @@ export function EnvVarsCard({ projectId, awsRegion }: { projectId: string | null
     setPendingImport(null);
     if (!file) return;
     if (file.size > DOTENV_MAX_BYTES) { setImportError(true); return; }
-    const parsed = parseDotEnv(await file.text());
+    // 파일을 읽지 못하면(읽는 사이 지워짐 · 권한 없음) 가져오기 오류로 알린다
+    const text = await file.text().catch(() => null);
+    if (text === null) { setImportError(true); return; }
+    const parsed = parseDotEnv(text);
     if (Object.keys(parsed.vars).length === 0) { setImportError(true); return; }
     setPendingImport(parsed);
   }

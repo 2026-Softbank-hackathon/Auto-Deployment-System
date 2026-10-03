@@ -154,7 +154,7 @@ export const ja: Messages = {
     neverDeployed: 'まだデプロイしていません',
     liveSwitch: {
       title: 'サービスの実行環境が AWS に切り替わりました。', copy: '公開アドレスはそのまま維持されます。',
-      scene: (from: string, to: string) => `LIVE の印がオンプレミスサーバー横の家(${from})から、雲の上の AWS の家(${to})へ移った。オンプレミス側は明かりが消えている`,
+      scene: (from: string, to: string) => `オンプレミスサーバー横の家(${from})の明かりが消えてコロが驚き、LIVE の印を雲の上の AWS の家(${to})へ移した。今は AWS でサービス中`,
     },
     deletionDetail: '設定タブで確認',
     deletionLocked: '削除をリクエストしたアプリのため、再デプロイできません。',
@@ -288,6 +288,7 @@ export const ja: Messages = {
   },
   versions: {
     previous: '旧バージョン',
+    notServing: 'サービス外',
     unknownEnvironment: '環境情報なし',
     liveOn: (target) => `現在 ${target} で稼働中`,
     notLive: 'まだ稼働中のバージョンはありません。',
@@ -630,6 +631,7 @@ export const ja: Messages = {
     sceneWaiting: (stage) => `コロが${stage}の装置の前で確認を待っている`,
     sceneQueued: (stage) => `コロが${stage}の装置の前で順番を待っている`,
     sceneSucceeded: '家がデプロイ先に到着し、LIVE の印が付いた',
+    sceneNotLive: '家はデプロイ先に到着している。今は別のデプロイがサービス中',
     sceneFailed: 'コロが道の途中で止まって慌てている',
     sceneStopped: 'コロが道の途中で止まっている',
     workNote: '作業ノート',
@@ -760,6 +762,7 @@ export const ja: Messages = {
   },
   result: {
     titleDone: 'デプロイが完了しました',
+    notLiveNow: (deployment: string) => `今は${deployment}がサービス中です。`,
     titleCheck: 'デプロイ結果の確認',
     error: '結果を読み込めませんでした。',
     urlPending: 'このデプロイにはまだ公開URLがありません。準備ができるとここに表示されます。',

@@ -22,7 +22,8 @@ export interface LiveSwitch { fromDeploymentId: string; toDeploymentId: string }
  *  - 앱이 지워졌으면(404) onGone
  * 서버는 전환 이유나 진행 상태를 알려 주지 않으므로, 화면은 "바뀌었다"는 사실만 말한다.
  */
-export function useProjectLive(projectId: string, enabled: boolean, onGone: () => void) {
+export function useProjectLive(projectId: string, enabled: boolean, onGone: () => void, options: { /** false 면 배포 이력은 읽지 않는다 (진행 · 결과 화면은 live 만 본다) */ deployments?: boolean } = {}) {
+  const withDeployments = options.deployments !== false;
   const liveKey = `project-live:${projectId}`;
   const deploymentsKey = `project-deployments:${projectId}`;
   const [live, setLive] = useState<ProjectLiveDeployment | null | undefined>(() => readCache<ProjectLiveDeployment | null>(liveKey));
@@ -44,7 +45,7 @@ export function useProjectLive(projectId: string, enabled: boolean, onGone: () =
     busy.current = true;
     const mine = generation.current;
     try {
-      const [project, page] = await Promise.allSettled([getProject(projectId), listProjectDeployments(projectId, { limit: DEPLOYMENTS_SHOWN })]);
+      const [project, page] = await Promise.allSettled([getProject(projectId), withDeployments ? listProjectDeployments(projectId, { limit: DEPLOYMENTS_SHOWN }) : Promise.resolve(null)]);
       if (mine !== generation.current) return;
 
       if (project.status === 'fulfilled') {
@@ -62,6 +63,8 @@ export function useProjectLive(projectId: string, enabled: boolean, onGone: () =
       }
 
       if (page.status === 'fulfilled') {
+        // null = 배포 이력을 읽지 않는 쓰임
+        if (page.value === null) return;
         const next: DeploymentsSnapshot = { items: page.value.items, loadedAt: Date.now(), more: page.value.nextCursor !== null };
         writeCache(deploymentsKey, next);
         setDeployments(next);
@@ -72,7 +75,7 @@ export function useProjectLive(projectId: string, enabled: boolean, onGone: () =
     } finally {
       busy.current = false;
     }
-  }, [projectId, liveKey, deploymentsKey]);
+  }, [projectId, liveKey, deploymentsKey, withDeployments]);
 
   useEffect(() => {
     if (!enabled) return;

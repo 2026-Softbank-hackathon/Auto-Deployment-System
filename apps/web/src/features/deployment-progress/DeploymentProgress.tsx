@@ -17,6 +17,8 @@ import { isAwsStaticSiteProfile, koroIdle, koroLine, sceneCue, readAnalysisFacts
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
 import { IrPeek } from './IrPeek';
+import { LiveSwitchNotice } from '../project-live/LiveSwitchNotice';
+import { useProjectLive } from '../project-live/useProjectLive';
 import { FailureDetail } from './FailureDetail';
 import { failureKind, fixableByAwsKey, parseFailure } from './failure-reason';
 import { followAppLink, type Navigate } from '../../app/navigation';
@@ -94,6 +96,8 @@ function useNow(active: boolean): number {
   }, [active]);
   return now;
 }
+
+const noop = () => {};
 
 function StageChips({ view, currentElapsed, skipped = 0 }: { view: DeploymentStatusView; /** 지금 단계에서 흐른 시간 (서버가 단계 시작 시각을 줬을 때만) */ currentElapsed: string | null; /** 앞에서부터 건너뛴 단계 수 — 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않는다 */ skipped?: number }) {
   const { t } = useI18n();
@@ -230,6 +234,10 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   // SQLite → PostgreSQL 코드 수정안 (#277): 자동 승인하지 않고 사용자가 diff 를 보고 고른다
   const waitingForPatch = currentStatus === 'awaiting_patch_approval';
 
+  // 이 앱이 지금 어디서 서비스 중인지 지켜본다. 자동 전환(#349)은 새 배포 없이 live 만 바꾸므로,
+  // 이 화면을 보고 있는 동안 전환되면 여기서도 알리고, 이 배포가 더는 서비스 중이 아니면 LIVE 로 표시하지 않는다.
+  const { live: projectLive, liveSwitch, dismissLiveSwitch } = useProjectLive(projectId ?? '', projectId !== null, noop, { deployments: false });
+  const notLive = currentStatus === 'succeeded' && projectLive != null && projectLive.deploymentId !== deploymentId;
   const statusView = deploymentStatusView(currentStatus ?? 'received');
   // 승인은 자동으로 넘어가므로 "확인 대기"로 보여 주지 않는다. 자동 승인이 실패했을 때만 대기로 보여 준다.
   const view = pendingGate && approvalError === null && !waitingForEnv ? { ...statusView, waiting: null } : statusView;
@@ -364,12 +372,13 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
     {/* 이 배포가 속한 앱의 배포 내역으로 돌아가는 길 (앱을 알 때만) */}
     {projectId && <a className="project-detail__back run-back" href={`/projects/${encodeURIComponent(projectId)}`} onClick={(event) => followAppLink(event, onNavigate)}>
       ← {t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</a>}
+    <LiveSwitchNotice liveSwitch={liveSwitch} onDismiss={dismissLiveSwitch} />
     <section className={`run-stage is-${view.outcome}`} aria-labelledby="run-title">
       <div className="run-head" aria-live="polite">
         <div className="run-head__title">
-          <StatusTape tone={view.tone} className="run-tape">
+          <StatusTape tone={notLive ? 'waiting' : view.tone} className="run-tape">
             {view.outcome === 'active' && !view.waiting && <span className="run-tape__track" aria-hidden="true"><span className="run-tape__marble" /></span>}
-            {view.tape}
+            {notLive ? t.versions.notServing : view.tape}
           </StatusTape>
           <h1 id="run-title">{title}</h1>
           {elapsedText && <span className="run-head__elapsed" aria-label={`${t.run.elapsedLabel} ${elapsedText}`}>{elapsedText}</span>}
@@ -406,7 +415,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} notLive={notLive} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}

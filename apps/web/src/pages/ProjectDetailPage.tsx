@@ -15,7 +15,7 @@ import { DeleteAppCard } from '../features/project-delete/DeleteAppCard';
 import { AddressCard } from '../features/app-address/AddressCard';
 import { CostEstimate } from '../features/cost/CostEstimate';
 import { DEPLOYMENTS_SHOWN, useProjectLive, type DeploymentsSnapshot } from '../features/project-live/useProjectLive';
-import { LiveSwitchScene } from '../features/project-live/LiveSwitchScene';
+import { LiveSwitchNotice } from '../features/project-live/LiveSwitchNotice';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
 const tabs: ReadonlyArray<{ tab: ProjectTab; path: string }> = [
@@ -147,22 +147,8 @@ export function ProjectDetailPage({ projectId, tab, onNavigate }: { projectId: s
 
     {deletion && <DeletionBanner deletion={deletion} settingsPath={`${base}/settings`} onNavigate={onNavigate} />}
 
-    {/* 실행 환경이 온프레미스에서 AWS 로 바뀐 것을 확인했을 때 한 번 알린다 (#349).
-        서버는 이유나 진행 상태를 알려 주지 않으므로 바뀐 사실만 말한다. 알림 영역은 미리 그려 두어야 화면 낭독기가 읽는다 */}
-    {/* 장면과 알림을 한 덩어리로 묶는다. 장면은 알림 영역(role=status) 밖에 둔다 — 화면 낭독기는 제목 · 설명만 한 번 읽는다 */}
-    <div className="live-switch">
-    {liveSwitch && <LiveSwitchScene liveSwitch={liveSwitch} />}
-    <div className={`page-toast ${liveSwitch ? 'has-scene' : ''}`} role="status" aria-live="polite">
-      {liveSwitch && <div className="toast is-success">
-        <div className="toast__body">
-          <strong>{copy.liveSwitch.title}</strong>
-          <span>{copy.liveSwitch.copy}</span>
-        </div>
-        <span />
-        <button type="button" className="toast__close" aria-label={t.notify.close} onClick={dismissLiveSwitch}>×</button>
-      </div>}
-    </div>
-    </div>
+    {/* 실행 환경이 온프레미스에서 AWS 로 바뀐 것을 확인했을 때 한 번 알린다 (#349) */}
+    <LiveSwitchNotice liveSwitch={liveSwitch} onDismiss={dismissLiveSwitch} />
 
     <nav className="tabs" aria-label={copy.tabsLabel}>
       {tabs.map((item) => <a key={item.tab} href={`${base}${item.path}`} className="tabs__tab" aria-current={item.tab === tab ? 'page' : undefined}

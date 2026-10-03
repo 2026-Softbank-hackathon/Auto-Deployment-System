@@ -173,9 +173,11 @@ interface DeploySceneProps {
   story?: DeployStory | null;
   /** 이번 배포의 IR이 어디서 왔는지. 모르면 null (출처 도장을 찍지 않는다) */
   ir?: IrOrigin | null;
+  /** 성공한 배포지만 지금 서비스 중이 아니다 (그 뒤 다른 배포가 서비스 중 — 재배포 · 롤백 · 자동 전환 #349). LIVE 표지를 붙이지 않는다 */
+  notLive?: boolean;
 }
 
-export function DeployScene({ view, target = null, idle = null, stepSeconds = 0, story = null, ir = null }: DeploySceneProps) {
+export function DeployScene({ view, target = null, idle = null, stepSeconds = 0, story = null, ir = null, notLive = false }: DeploySceneProps) {
   const { t } = useI18n();
   const stage = view.stage;
   const onGround = target === 'onprem';
@@ -210,7 +212,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
 
   const stageName = stage !== null && stage < railStageCount ? t.stages[railStages[stage]] : '';
   const label = view.outcome === 'failed' ? t.run.sceneFailed
-    : succeeded ? t.run.sceneSucceeded
+    : succeeded ? (notLive ? t.run.sceneNotLive : t.run.sceneSucceeded)
       : view.outcome !== 'active' ? t.run.sceneStopped
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
           : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
@@ -226,7 +228,7 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
   const irStandX = box.left + IR_STAND_X;
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
-  const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
+  const liveAt: Spot | null = succeeded && notLive ? null : succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
   const padClass = working(2) ? 'is-building' : reached(3) ? 'is-ready' : '';
 
   return <svg className={`deploy-scene is-${view.outcome}`} viewBox={`${box.left} ${box.top} ${box.width} ${box.height}`} role="img" aria-label={fullLabel}>

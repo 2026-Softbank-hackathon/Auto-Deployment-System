@@ -501,14 +501,22 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .ls-number { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
 .ls-live rect, .ls-live path { fill: var(--moss); }
 .ls-live text { fill: var(--surface); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
-/* 마지막 모습 (움직임 줄이기 설정에서는 이것만 보인다): LIVE 는 구름 위 집에, 온프레미스 쪽은 불이 꺼진 채 */
+/* 마지막 모습 (움직임 줄이기 설정에서는 이것만 보인다): LIVE 는 구름 위 집에, 온프레미스 쪽은 불이 꺼진 채, 코로는 구름 위에서 웃는다 */
 .ls-live { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
 .ls-onprem { opacity: .55; }
+.ls-calm, .ls-runner { opacity: 0; }
+.ls-runner { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
+.ls-bang { fill: var(--brick); font-family: var(--font-display); font-size: 30px; font-weight: 700; }
+/* 재생 (약 5초, 한 번): 0 평소 → 1.2s 온프레미스 불이 꺼지고 코로가 놀람 → 2.6s 코로와 LIVE 가 구름으로 → 4.0s 내려앉음 */
 @media (prefers-reduced-motion: no-preference) {
-  .ls-live { animation: ls-fly 1.4s var(--ease-roll) 1.8s both; }
-  .ls-onprem { animation: ls-dim .8s ease-out 1s both; }
-  .ls-onprem .jr-window, .ls-onprem .jr-led { animation: ls-lights-off .8s ease-out 1s both; }
-  .ls-koro { animation: ls-appear .5s ease-out 3.2s both; }
+  .ls-onprem { animation: ls-dim .8s ease-out 1.2s both; }
+  .ls-onprem .jr-window, .ls-onprem .jr-led { animation: ls-lights-off .8s ease-out 1.2s both; }
+  .ls-calm { animation: ls-calm 1.3s linear both; }
+  .ls-runner { animation: ls-fly 1.4s var(--ease-roll) 2.6s both, ls-runner-life 4.3s linear both; }
+  .ls-runner__hop { animation: ls-hop .42s ease-out 1.2s 3 both; }
+  .ls-bang { transform-box: fill-box; transform-origin: 50% 100%; animation: ls-bang 4.3s linear both; }
+  .ls-live { animation: ls-fly 1.4s var(--ease-roll) 2.6s both; }
+  .ls-koro { animation: ls-appear .3s ease-out 4s both; }
 }
 @keyframes ls-fly {
   from { transform: translate(var(--ls-from-x), var(--ls-from-y)); }
@@ -518,6 +526,11 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 @keyframes ls-dim { from { opacity: 1; } to { opacity: .55; } }
 @keyframes ls-lights-off { from { fill: var(--moss); } to { fill: var(--line); } }
 @keyframes ls-appear { from { opacity: 0; } to { opacity: 1; } }
+/* 평소의 코로는 불이 꺼지는 순간(1.2s)까지 보이고, 놀란 코로가 그 자리를 이어받아 구름에 닿을 때(4.0s)까지 보인다 */
+@keyframes ls-calm { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ls-runner-life { 0%, 27% { opacity: 0; } 29%, 93% { opacity: 1; } 96%, 100% { opacity: 0; } }
+@keyframes ls-hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-16px); } }
+@keyframes ls-bang { 0%, 28% { opacity: 0; transform: scale(.4); } 31% { opacity: 1; transform: scale(1.25); } 34%, 58% { opacity: 1; transform: scale(1); } 62%, 100% { opacity: 0; transform: scale(1); } }
 .toast.is-failed { border-left-color: var(--brick-text); }
 .toast__body { display: grid; gap: 2px; min-width: 0; }
 .toast__body strong { color: var(--ink); }

@@ -15,7 +15,8 @@ import type { LiveSwitch } from './useProjectLive';
  * 그림은 배포 진행 장면(DeployScene)의 요소를 그대로 쓴다: 집 = 컨테이너 이미지, 구름 = AWS, 서버 = 온프레미스, LIVE 표지.
  * 두 집이 같은 이미지라는 것은 화면이 확인할 수 없으므로 이름표는 붙이지 않고, 서버가 알려 준 배포 번호만 적는다.
  *
- * 순서(약 4초, 한 번): LIVE 가 온프레미스 집 위 → 온프레미스 쪽 불이 꺼짐 → LIVE 가 구름 위 집으로 날아가 앉음 → 코로 등장.
+ * 순서(약 5초, 한 번): 코로가 온프레미스 집 옆에 있고 LIVE 는 그 집 위 → 온프레미스 쪽 불이 꺼지자 코로가 놀람(느낌표 · 펄쩍)
+ *   → 코로가 LIVE 표지와 함께 구름 위 집으로 건너감 → LIVE 가 내려앉고 코로가 웃음.
  * 움직임 줄이기 설정에서는 마지막 모습만 보여 준다. 반복하지 않는다.
  */
 const WIDTH = 760;
@@ -28,7 +29,11 @@ const AWS_HOUSE = [540, CLOUD_TOP] as const;
 /** 집 높이(3층 + 지붕) 위에 LIVE 표지를 띄우는 높이 */
 const LIVE_LIFT = 78 + 30 + 14;
 /** LIVE 표지가 구름 위 집에 내려앉는 시각 (CSS 의 ls-fly 와 맞춘다) */
-const LANDING_MS = 3200;
+const LANDING_MS = 4000;
+const KORO_SIZE = 56;
+/** 코로의 왼쪽 위 좌표: 온프레미스 집 옆 → 구름 위 집 옆 */
+const KORO_ONPREM = [236, GROUND - KORO_SIZE] as const;
+const KORO_AWS = [616, CLOUD_TOP - KORO_SIZE] as const;
 
 export function LiveSwitchScene({ liveSwitch }: { liveSwitch: LiveSwitch }) {
   const { t } = useI18n();
@@ -49,6 +54,11 @@ export function LiveSwitchScene({ liveSwitch }: { liveSwitch: LiveSwitch }) {
   const liveStyle = {
     '--ls-from-x': `${ONPREM_HOUSE[0]}px`, '--ls-from-y': `${ONPREM_HOUSE[1] - LIVE_LIFT}px`,
     '--ls-to-x': `${AWS_HOUSE[0]}px`, '--ls-to-y': `${AWS_HOUSE[1] - LIVE_LIFT}px`,
+  } as CSSProperties;
+
+  const runnerStyle = {
+    '--ls-from-x': `${KORO_ONPREM[0]}px`, '--ls-from-y': `${KORO_ONPREM[1]}px`,
+    '--ls-to-x': `${KORO_AWS[0]}px`, '--ls-to-y': `${KORO_AWS[1]}px`,
   } as CSSProperties;
 
   return <svg className="live-switch-scene" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={t.projects.liveSwitch.scene(from, to)}>
@@ -87,7 +97,16 @@ export function LiveSwitchScene({ liveSwitch }: { liveSwitch: LiveSwitch }) {
       <text x="0" y="-5" textAnchor="middle">LIVE</text>
     </g>
 
-    {/* 코로: 전환이 끝난 구름 옆에서 */}
-    <g className="ls-koro"><Koro mood="happy" size={56} x={616} y={CLOUD_TOP - 56} /></g>
+    {/* 코로 ① 평소처럼 온프레미스 집 옆에 서 있다 (불이 꺼지기 전까지) */}
+    <g className="ls-calm"><Koro mood="normal" size={KORO_SIZE} x={KORO_ONPREM[0]} y={KORO_ONPREM[1]} /></g>
+    {/* 코로 ② 불이 꺼지자 놀라서 펄쩍 뛰고, LIVE 표지와 함께 구름으로 건너간다 */}
+    <g className="ls-runner" style={runnerStyle}>
+      <g className="ls-runner__hop">
+        <Koro mood="flustered" size={KORO_SIZE} x={0} y={0} />
+        <text className="ls-bang" x={KORO_SIZE + 2} y="6">!</text>
+      </g>
+    </g>
+    {/* 코로 ③ 전환이 끝난 구름 위에서 웃는다 (마지막 모습) */}
+    <g className="ls-koro"><Koro mood="happy" size={KORO_SIZE} x={KORO_AWS[0]} y={KORO_AWS[1]} /></g>
   </svg>;
 }

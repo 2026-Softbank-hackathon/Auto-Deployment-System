@@ -3,6 +3,8 @@ import { getDeploymentStatus, getProject, SERVERLESS_PROFILE, type DeploymentSta
 import { DeployKeycap } from '../../components/ui/DeployKeycap';
 import { Keycap } from '../../components/ui/Keycap';
 import { Confetti } from './Confetti';
+import { LiveSwitchNotice } from '../project-live/LiveSwitchNotice';
+import { useProjectLive } from '../project-live/useProjectLive';
 import { RedeployButton } from './RedeployButton';
 import { StageTimeline } from './StageTimeline';
 import { Koro, type KoroMood } from '../../components/ui/Koro';
@@ -26,6 +28,8 @@ function targetLabel(profile: string | null, labels: { aws: string; onprem: stri
  * 배포 결과 화면. 성공하면 공개 주소를 가장 크게 보여 주고, 서버가 준 사실(배포한 곳 · 걸린 시간 · 완료 시각)만 덧붙인다.
  * 아직 진행 중이거나 실패한 배포는 진행 화면으로 돌려보낸다.
  */
+const noop = () => {};
+
 export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRedeployed, onOpenProject }: { deploymentId: string; onBack: () => void; onNewDeployment: () => void; /** 이 배포가 속한 앱의 배포 내역으로 간다 */ onOpenProject?: (projectId: string) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed: (deploymentId: string) => void }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
@@ -50,6 +54,8 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
     getProject(projectId).then((project) => { if (active) setProjectName(project.name); }, () => { /* 이름은 없어도 결과 화면은 동작한다 */ });
     return () => { active = false; };
   }, [projectId]);
+  // 자동 전환(#349)을 이 화면에서도 알리고, 이 배포가 더는 서비스 중이 아니면 LIVE 로 표시하지 않는다.
+  const { live: projectLive, liveSwitch, dismissLiveSwitch } = useProjectLive(projectId ?? '', projectId !== null, noop, { deployments: false });
 
   if (error !== null) return <section className="result-card is-unknown">
     <h1>{t.result.titleCheck}</h1>
@@ -91,12 +97,16 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
     try { await navigator.clipboard.writeText(targetUrl); setCopied(true); } catch { setCopied(false); }
   }
 
-  return <section className="result-card is-success" aria-labelledby="result-title">
+  // 성공한 배포지만 지금은 다른 배포가 서비스 중일 수 있다 (재배포 · 롤백 · 자동 전환). 서버의 project.live 로 판단한다.
+  const notLive = projectLive != null && projectLive.deploymentId !== deploymentId;
+  return <><LiveSwitchNotice liveSwitch={liveSwitch} onDismiss={dismissLiveSwitch} />
+  <section className="result-card is-success" aria-labelledby="result-title">
     <Confetti celebrationKey={deploymentId} />
     <Koro mood="happy" size={72} />
-    <StatusTape tone="success">{view.tape}</StatusTape>
+    <StatusTape tone={notLive ? 'waiting' : 'success'}>{notLive ? t.versions.notServing : view.tape}</StatusTape>
     <h1 id="result-title">{t.result.titleDone}</h1>
     {meta}
+    {notLive && <p className="result-card__meta">{t.result.notLiveNow(t.dashboard.deploymentNo(projectLive.deploymentId))}</p>}
 
     {targetUrl
       ? <div className="result-url">
@@ -123,5 +133,5 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       {projectId && onOpenProject && <Keycap variant="secondary" onClick={() => onOpenProject(projectId)}>{t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</Keycap>}
       <Keycap variant="ghost" onClick={onBack}>{t.result.back}</Keycap>
     </div>
-  </section>;
+  </section></>;
 }

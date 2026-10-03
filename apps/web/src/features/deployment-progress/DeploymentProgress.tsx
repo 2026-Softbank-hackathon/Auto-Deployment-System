@@ -24,7 +24,6 @@ import { RedeployButton } from './RedeployButton';
 import { FailureDiagnosis } from './FailureDiagnosis';
 import { CancelDeployment } from './CancelDeployment';
 import { HealthProgress } from './HealthProgress';
-import { CostEstimate } from '../cost/CostEstimate';
 import { PatchApproval } from '../approvals/PatchApproval';
 
 type ErrorState = { cause: unknown; fallback: 'statusFailed' | 'logsFailed' } | null;
@@ -406,9 +405,6 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </figure>
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
-
-        {/* 월 예상 비용 (#327) — 분석으로 프로필 · IR 이 정해지면 나타나고, 상태가 바뀔 때 다시 받는다 */}
-        <CostEstimate deploymentId={deploymentId} profileKey={`${text(status?.targetProfile) ?? ''}|${currentStatus ?? ''}`} />
 
         {view.outcome === 'active' && <CancelDeployment deploymentId={deploymentId} onCancelled={() => void refresh()} />}
 

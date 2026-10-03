@@ -29,11 +29,11 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const { t } = useI18n();
   return <aside className="sidebar">
     <div className="sidebar__brand">
-      <div className="sidebar__brand-row">
+      <a href="/" className="sidebar__brand-row" aria-label={t.nav.dashboard} onClick={(event) => followAppLink(event, onNavigate)}>
         <BrandMark />
         <span className="sidebar__name">camellia</span>
         <span className="sidebar__version">v0.4.0</span>
-      </div>
+      </a>
       <span className="sidebar__tagline">One Action, Infinite Clouds</span>
     </div>
     <nav aria-label={t.nav.label}>

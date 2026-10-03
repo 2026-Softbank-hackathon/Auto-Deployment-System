@@ -167,6 +167,7 @@ function makeWaiter(
   snapshots: Snapshot[],
   options: {
     timeoutMs?: number;
+    appliedSince?: Date;
   } = {},
 ) {
   const aws = fakeAws(snapshots);
@@ -191,6 +192,7 @@ function makeWaiter(
     clusterName: "cam-x",
     serviceName: "cam-x",
     expectedTaskDefinition: NEW_TD,
+    ...(options.appliedSince ? { appliedSince: options.appliedSince } : {}),
     log: vi.fn(async (line: LogText) => {
       lines.push(renderLogText(line));
     }),
@@ -267,6 +269,44 @@ describe("EcsRolloutWaiter (#253)", () => {
     // 예전 태스크(같은 task definition)는 새 배포의 태스크로 세지 않고, 타깃 그룹에서 뺀다
     expect(aws.deregistered).toEqual(["10.0.1.20"]);
     expect(lines.at(-1)).toContain("롤아웃 완료");
+  });
+
+  it("바로 앞 배포가 아직 정리 중(IN_PROGRESS)이어도 이번 apply 전에 만들어진 배포면 새 배포를 강제한다 (#350)", async () => {
+    const forcedAt = new Date("2026-10-03T00:00:00Z");
+    const forcedTask = newTask({ taskArn: "arn:aws:ecs:ap-northeast-2:123456789012:task/cam-x/forced1", createdAt: new Date("2026-10-03T00:00:05Z"), ip: "10.0.2.30" });
+    const { waiter, input, aws } = makeWaiter([
+      // 앞 배포의 태스크가 이미 healthy 지만 ECS 는 아직 IN_PROGRESS (이전 태스크 정리 중)
+      {
+        deployments: [newDeployment({ runningCount: 1 })],
+        tasks: [newTask()],
+        targets: [{ ip: "10.0.1.20", state: "healthy" }],
+      },
+      {
+        deployments: [newDeployment({ id: "ecs-svc/forced", createdAt: forcedAt, runningCount: 1 }), newDeployment({ status: "ACTIVE", runningCount: 1 })],
+        tasks: [newTask(), forcedTask],
+        targets: [{ ip: "10.0.1.20", state: "healthy" }, { ip: "10.0.2.30", state: "healthy" }],
+      },
+    ], { appliedSince: new Date("2026-10-02T00:05:00Z") });
+
+    await waiter.wait(input);
+
+    expect(aws.forced).toHaveLength(1);
+    // 앞 배포의 태스크로 끝내지 않고, 강제한 배포의 새 태스크가 healthy 가 된 뒤 이전 태스크를 뺀다
+    expect(aws.deregistered).toEqual(["10.0.1.20"]);
+  });
+
+  it("이번 apply 가 만든 배포(apply 시작 뒤 생성)는 강제하지 않는다", async () => {
+    const { waiter, input, aws } = makeWaiter([
+      {
+        deployments: [newDeployment({ runningCount: 1 }), oldDeployment()],
+        tasks: [newTask(), oldTask],
+        targets: [{ ip: "10.0.0.10", state: "healthy" }, { ip: "10.0.1.20", state: "healthy" }],
+      },
+    ], { appliedSince: new Date("2026-10-01T23:59:50Z") });
+
+    await waiter.wait(input);
+
+    expect(aws.forced).toHaveLength(0);
   });
 
   it("강제한 뒤의 배포가 COMPLETED 면 끝낸다 (다시 강제하지 않는다)", async () => {

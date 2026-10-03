@@ -10,8 +10,9 @@
  *
  * 완료: 이번 task definition의 배포가 rolloutState COMPLETED, 또는 그 배포의 running 수가 desired 에
  *       닿고 그 태스크들이 모두 타깃 그룹에서 healthy.
- * 같은 이미지로 롤백 · 재배포해 apply 가 task definition 을 바꾸지 않았으면(첫 확인부터 COMPLETED)
- * 새 배포를 강제해 새 태스크를 띄운다 — 사용자는 재배포를 눌렀는데 이전 컨테이너가 그대로면 헷갈린다.
+ * 같은 이미지로 롤백 · 재배포해 apply 가 task definition 을 바꾸지 않았으면(첫 확인부터 COMPLETED,
+ * 또는 이번 apply 전에 만들어진 배포) 새 배포를 강제해 새 태스크를 띄운다 — 사용자는 재배포를 눌렀는데
+ * 이전 컨테이너가 그대로면 헷갈린다. 바로 앞 배포가 아직 정리 중(IN_PROGRESS)이어도 마찬가지다 (#350).
  * 실패: 배포 rolloutState FAILED(회로 차단기 롤백) · 새 태스크 중지(stoppedReason) · 제한 시간.
  * Provision 이 쓰는 자격 증명(대상 연결의 AWS 키)을 그대로 쓴다.
  */
@@ -59,6 +60,8 @@ export type EcsRolloutInput = {
   serviceName: string;
   /** 이번 Terraform apply가 생성한 정확한 task definition ARN */
   expectedTaskDefinition: string;
+  /** 이번 apply 를 시작한 시각. 이보다 먼저 만들어진 ECS 배포는 이번 apply 가 만든 것이 아니다 (재시도로 apply 를 건너뛰면 없음) */
+  appliedSince?: Date;
   log: (line: LogText) => Promise<void>;
 };
 
@@ -185,7 +188,10 @@ export class EcsRolloutWaiter {
         );
       }
 
-      if (deployment.rolloutState === "COMPLETED" && firstPoll) {
+      const createdBeforeApply = Boolean(
+        input.appliedSince && deployment.createdAt && deployment.createdAt.getTime() < input.appliedSince.getTime(),
+      );
+      if (firstPoll && (deployment.rolloutState === "COMPLETED" || createdBeforeApply)) {
         // apply 가 task definition 을 바꾸지 않았다 (같은 이미지). 새 배포를 강제해 새 태스크로 바꾼다
         firstPoll = false;
         const updated = (await ecs.send(

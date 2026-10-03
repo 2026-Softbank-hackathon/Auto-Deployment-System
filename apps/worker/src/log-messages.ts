@@ -82,6 +82,8 @@ export const LOG_MESSAGES = {
   "ecs.healthChecking": "타깃 등록, 헬스체크 진행 중 ({healthy}/{desired} 통과)",
   "ecs.doneDeployment": "롤아웃 완료 ({seconds}초) — ECS 배포 완료",
   "ecs.doneHealthy": "롤아웃 완료 ({seconds}초) — 새 태스크가 타깃 그룹에서 healthy",
+  "ecs.oldTargetsRemoved": "이전 태스크 {count}개를 타깃 그룹에서 뺐어요 — 지금부터 새 버전만 응답",
+  "ecs.oldTargetsKept": "이전 태스크를 타깃 그룹에서 빼지 못했어요 (ECS 가 곧 내림): {reason}",
   "ecs.waiting": "롤아웃 대기 중 ({seconds}초 경과)",
 
   // Lambda 롤아웃

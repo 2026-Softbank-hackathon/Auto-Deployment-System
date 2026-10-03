@@ -6,16 +6,17 @@ import { Keycap } from '../../components/ui/Keycap';
 import { StatusTape } from '../../components/ui/StatusTape';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 import type { Messages } from '../../i18n/ko';
-import { localizeLogLine, localizeLogText } from '../../i18n/log-lines';
+import { localizeLogLine, localizeLogText, readLogTag } from '../../i18n/log-lines';
 import { DeploymentAnalysis } from '../analysis/DeploymentAnalysis';
 import { displayProjectName, elapsed, hostOf, safeHttpUrl } from '../dashboard/format';
 import { deploymentStatusView, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
 import { useSound } from '../sound/SoundProvider';
-import { DeployScene, houseFloors, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
-import { deployStory, previousLive, readReusedFrom } from './deploy-story';
+import { DeployScene, houseFloors, irBoardSpot, koroSpot, SCENE_SIZE, sceneBox, sceneTarget } from './DeployScene';
+import { deployStory, previousLive, readReusedFrom, irOriginOf, type IrOrigin } from './deploy-story';
 import { isAwsStaticSiteProfile, koroIdle, koroLine, sceneCue, readAnalysisFacts, type AnalysisFacts } from './koro-talk';
 import { PreDeployPanel, type DetectedPort, type PreDeployReview } from './PreDeployPanel';
 import { clearReview, reviewRequested } from './review-flag';
+import { IrPeek } from './IrPeek';
 import { FailureDetail } from './FailureDetail';
 import { failureKind, fixableByAwsKey, parseFailure } from './failure-reason';
 import { followAppLink, type Navigate } from '../../app/navigation';
@@ -272,20 +273,29 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const rolling = view.outcome === 'active' && !view.waiting && !waitingForEnv;
   // 분석이 끝난 뒤(빌드 단계부터) 분석 결과를 받아 코로가 말할 사실로 쓴다. 못 받아도 일반 문장으로 말한다.
   const [facts, setFacts] = useState<AnalysisFacts | null>(null);
+  // 이번 배포의 IR이 새로 만든 것인지 복사한 것인지 (서버의 IR source 와 분석 로그로 판단). 모르면 null
+  const [irOrigin, setIrOrigin] = useState<IrOrigin | null>(null);
   const analysisDone = view.stage !== null && view.stage >= 1;
   useEffect(() => {
     if (!analysisDone) return;
     let active = true;
     getDeploymentAnalysisReport(deploymentId).then((report) => { if (active) setFacts(readAnalysisFacts(report.services)); }, () => { /* 분석 결과가 없어도 진행 화면은 동작한다 */ });
+    void Promise.allSettled([getDeploymentIr(deploymentId), getDeploymentLogs(deploymentId, 'analyze')]).then(([ir, log]) => {
+      if (!active || ir.status !== 'fulfilled') return;
+      const source = typeof ir.value.source === 'string' ? ir.value.source : null;
+      const tagKeys = log.status !== 'fulfilled' ? [] : log.value === null ? null : log.value.split('\n').flatMap((line) => { const tag = readLogTag(line); return tag ? [tag.key] : []; });
+      setIrOrigin(irOriginOf(source, tagKeys));
+    });
     return () => { active = false; };
   }, [deploymentId, analysisDone]);
   const target = sceneTarget(text(status?.targetProfile));
   // 정적 사이트: AWS 는 프로필로(서버 없이 S3), 온프레미스는 분석 결과로 안다 (#275)
   const staticSite = isAwsStaticSiteProfile(text(status?.targetProfile)) || facts?.staticSite === true;
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
-  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story) : null;
+  const talk = rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story, irOrigin) : null;
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
-  const box = sceneBox(target, story);
+  const box = sceneBox(target, story, irOrigin);
+  const irSpot = irBoardSpot(target, story, irOrigin);
   const [koroX, koroY] = koroSpot(view, target, story);
   // 환경 전환(AWS → 온프레미스)의 배포 단계: 코로 오른쪽 위로 집이 낙하산을 타고 내려오므로 풍선은 왼쪽으로 펼친다.
   const parachuting = target === 'onprem' && view.stage === 3 && story?.kind === 'switch' && story.reused && story.prev !== null;
@@ -396,7 +406,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </div>}
 
         <figure className={`run-scene ${talk ? 'has-talk' : ''}`} style={box.left > 0 ? { maxWidth: `${Math.round((box.width / SCENE_SIZE.width) * 1100)}px` } : undefined}>
-          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} />
+          <DeployScene view={view} target={target} idle={rolling ? koroIdle(stepSeconds) : null} stepSeconds={stepSeconds} story={story} ir={irOrigin} />
           {/* 코로의 생각 풍선: 지금 단계에서 무슨 일이 일어나는지 쉬운 말로. 코로 머리에 붙어서 같이 움직인다(작은 방울 두 개로 이어진다).
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
@@ -405,6 +415,10 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}
+          {/* IR 보기: 장면의 IR 판 오른쪽 위에 붙는 말풍선. 누르면 이번 배포가 실제로 쓰는 IR을 창으로 본다.
+              IR이 만들어진 뒤(분석이 끝난 뒤)에만, IR 판이 그려진 장면에서만 보인다 */}
+          {irSpot && analysisDone && <IrPeek deploymentId={deploymentId} origin={irOrigin} status={currentStatus}
+            style={{ '--ir-x': `${((irSpot[0] - box.left) / box.width) * 100}%`, '--ir-y': `${((irSpot[1] - box.top) / box.height) * 100}%` } as CSSProperties} />}
         </figure>
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />

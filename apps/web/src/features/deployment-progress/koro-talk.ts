@@ -3,7 +3,7 @@ import type { KoroMood } from '../../components/ui/Koro';
 import type { Messages } from '../../i18n/ko';
 import type { SoundName } from '../sound/sound-engine';
 import type { SceneTarget } from './DeployScene';
-import type { DeployStory } from './deploy-story';
+import type { DeployStory, IrOrigin } from './deploy-story';
 
 /**
  * 기다리는 동안 코로가 하는 말과 몸짓.
@@ -34,12 +34,22 @@ export function isAwsStaticSiteProfile(profile: string | null): boolean {
 const LINE_SECONDS = 7;
 
 /** 지금 단계에서 코로가 할 말. 단계에서 흐른 시간에 따라 차례로 돌아간다. */
-export function koroLine(stage: number, stepSeconds: number, facts: AnalysisFacts | null, target: SceneTarget, t: Messages, story: DeployStory | null = null): string | null {
+export function koroLine(stage: number, stepSeconds: number, facts: AnalysisFacts | null, target: SceneTarget, t: Messages, story: DeployStory | null = null, ir: IrOrigin | null = null): string | null {
   const talk = t.run.talk;
-  const lines = storyLines(stage, story, talk, target).concat(stageLines(stage, facts, target, talk, story?.reused === true));
+  const lines = irLines(stage, ir, story, talk).concat(storyLines(stage, story, talk, target), stageLines(stage, facts, target, talk, story?.reused === true));
   if (!lines.length) return null;
   // 전에 만든 이미지를 다시 쓰는 배포(롤백 · 재배포 · 환경 전환)는 "새 버전"이 아니다 (#322).
   return lines[Math.floor(Math.max(0, stepSeconds) / LINE_SECONDS) % lines.length].replaceAll('{v}', story?.reused ? talk.versionSame : talk.versionNew);
+}
+
+/**
+ * IR(배포 명세)이 어디서 왔는지 — 분석 바로 다음 단계(빌드)에서 먼저 말한다.
+ * 복사한 IR이면 왜 분석을 건너뛰는지, 새로 만든 IR이면 방금 만들었다는 것을 알린다.
+ */
+function irLines(stage: number, ir: IrOrigin | null, story: DeployStory | null, talk: Messages['run']['talk']): string[] {
+  if (stage !== 1 || ir === null) return [];
+  if (ir === 'copied') return [story?.kind === 'rollback' ? talk.irCopiedRollback : story?.kind === 'switch' ? talk.irCopiedSwitch : talk.irCopied];
+  return ir === 'ai' ? [talk.irCreated, talk.irAi] : [talk.irCreated];
 }
 
 /** 재배포 · 롤백 · 환경 전환일 때 먼저 하는 말 */

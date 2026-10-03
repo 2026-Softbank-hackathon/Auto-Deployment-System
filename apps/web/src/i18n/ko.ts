@@ -614,6 +614,22 @@ export const ko = {
     sceneLanding: '코로가 서버 옆에 집이 내려앉을 자리를 만들고 있다',
     sceneParachute: '집이 낙하산을 타고 구름에서 서버 옆으로 내려오고 있다',
     sceneReuse: '코로가 창고에서 전에 지은 집을 꺼내고 있다',
+    sceneIr: { created: '배포 명세(IR)는 이번에 새로 만들었다', ai: '배포 명세(IR)는 이번에 새로 만들었고 빈칸은 AI가 채웠다', copied: '배포 명세(IR)는 이전 배포의 것을 복사했다' },
+    // 진행 탭의 "IR 보기"
+    ir: {
+      toggle: 'IR 보기',
+      title: '이번 배포의 IR (배포 명세)',
+      close: '닫기',
+      loading: 'IR을 불러오고 있어요…',
+      missing: '아직 IR이 없어요. 분석이 끝나면 볼 수 있어요.',
+      failed: 'IR을 불러오지 못했어요.',
+      badge: { created: 'NEW', ai: 'NEW · AI', copied: 'COPY' },
+      origin: {
+        created: '이번 배포에서 소스를 분석해 새로 만든 IR이에요.',
+        ai: '이번 배포에서 새로 만든 IR이에요. 규칙으로 못 찾은 칸은 AI가 채웠어요.',
+        copied: '이전 배포의 IR을 그대로 복사한 것이에요. 분석을 다시 하지 않았어요.',
+      },
+    },
     scenePrev: (label: string) => `지금은 이전 버전(${label})이 서비스 중이다`,
     sceneActive: (stage: string) => `코로가 ${stage} 장치를 지나고 있다`,
     sceneWaiting: (stage: string) => `코로가 ${stage} 장치 앞에서 확인을 기다리고 있다`,
@@ -626,6 +642,11 @@ export const ko = {
     // 기다리는 동안 코로가 하는 말. 단계마다 차례로 돌아간다. 분석 결과(스택 · 포트)는 서버가 준 값만 넣는다.
     talk: {
       update: '지금 버전과 바꿀 새 버전을 짓고 있어요',
+      irCreated: '분석한 내용으로 배포 명세(IR)를 새로 만들었어요',
+      irAi: '규칙으로 못 찾은 칸은 AI가 채웠어요',
+      irCopied: '분석은 건너뛰어요. 이전 배포의 배포 명세(IR)를 그대로 복사해 써요',
+      irCopiedRollback: '되돌릴 배포의 배포 명세(IR)를 그대로 복사해 와요',
+      irCopiedSwitch: '배포 명세(IR)는 그대로 복사해요. 배포할 곳(프로필)만 바꿔요',
       reuse: '전에 만든 이미지를 그대로 써요. 다시 만들지 않아요',
       reuseSwitch: '같은 이미지예요. 장소만 바꿔요',
       rollback: (label: string) => `이전 버전(${label})으로 되돌리고 있어요`,

@@ -468,7 +468,7 @@ export const ja: Messages = {
   dashboard: {
     title: 'マイアプリ',
     description: 'アプリごとに、いまどこで公開中か、最近のデプロイがどうなったかをひと目で確認できます。',
-    newDeploy: '新しくデプロイする',
+    newDeploy: '新規デプロイ',
     appsLoading: 'アプリ一覧を読み込んでいます…',
     appsLoadError: 'アプリ一覧を読み込めませんでした。',
     loading: 'デプロイ履歴を読み込んでいます…',
@@ -490,7 +490,8 @@ export const ja: Messages = {
     appsPagerLabel: 'アプリ一覧のページ',
     where: { aws: 'AWSで公開中', onprem: 'オンプレミスで公開中', unknown: '公開中', notLive: '公開されていません', never: '未デプロイ' },
     noPublicUrl: '公開URLはまだありません。',
-    copyUrl: 'URLをコピー',
+    // 주소 바로 옆 버튼이라 짧게 쓴다 (길면 카드 안에서 아랫줄로 내려간다)
+    copyUrl: 'コピー',
     neverDeployed: 'まだデプロイしていません。「このアプリでデプロイ」から始めましょう。',
     latestLabel: '最近のデプロイ',
     appDetail: '詳細',
@@ -761,7 +762,7 @@ export const ja: Messages = {
     approveFailed: 'デプロイ先を確定できませんでした。',
     approveLocked: '同じ環境で進行中のデプロイがあります。そのデプロイが終わってから再試行してください。',
     approveRetry: '再試行',
-    newDeploy: '新しくデプロイする',
+    newDeploy: '新規デプロイ',
   },
   activeBanner: {
     label: '進行中のデプロイ',
@@ -778,7 +779,7 @@ export const ja: Messages = {
     runningTitle: 'デプロイはまだ進行中です',
     runningCopy: 'まだ完了していません。進行状況の画面で現在の段階を確認できます。',
     back: '進行状況を見る',
-    newDeploy: '新しくデプロイする',
+    newDeploy: '新規デプロイ',
     loading: 'デプロイ結果を読み込んでいます…',
     failedCopy: 'このデプロイは最後まで進みませんでした。原因は進行状況の画面で確認できます。',
     copyUrl: 'URLをコピー',

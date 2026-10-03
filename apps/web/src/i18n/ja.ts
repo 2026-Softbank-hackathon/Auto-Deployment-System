@@ -28,6 +28,7 @@ export const ja: Messages = {
   errors: {
     requestFailed: (status) => `リクエストを完了できませんでした。(${status})`,
     network: 'サーバーに接続できませんでした。ネットワークまたはAPIサーバーの状態を確認してください。',
+    notFound: '見つかりませんでした。削除されたか、アドレスが間違っている可能性があります。(404)',
     startFailed: 'デプロイを開始できませんでした。',
     listFailed: 'デプロイ履歴を読み込めませんでした。',
     statusFailed: 'デプロイ状態を読み込めませんでした。',
@@ -35,6 +36,7 @@ export const ja: Messages = {
     logsFailed: 'ログを読み込めませんでした。',
     analysisFailed: '分析結果を読み込めませんでした。',
     responseInvalid: 'サーバーの応答形式が正しくありません。',
+    crashed: { title: 'この画面を表示できませんでした。', copy: 'しばらくしてからもう一度お試しください。続く場合はページを再読み込みしてください。', retry: 'もう一度試す', home: 'ダッシュボードへ' },
   },
   apiErrors: {
     VALIDATION_ERROR: 'リクエストの値が正しくありません。入力内容を確認してください。',

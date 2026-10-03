@@ -39,6 +39,10 @@ const autoApprovalGates: Record<string, ApprovalGate> = { awaiting_target_confir
 /** 지켜보던 배포가 성공했을 때, 결과 화면으로 넘어가기 전 코로가 컵에 착지하는 모습을 보여 주는 시간 */
 const SUCCESS_LANDING_MS = 1400;
 
+/** 끝나지 않은 배포의 상태를 다시 받는 간격 — 실시간 연결이 끊겼을 때의 대비 */
+const STATUS_POLL_MS = 5000;
+const FINISHED_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'rejected']);
+
 function text(value: unknown): string | null { return typeof value === 'string' && value.trim() ? value : null; }
 /** 화면 상태는 배포 status만 기준으로 한다. currentStep.name은 단계 로그 이름(analyze·verify 등)이라 status와 값 체계가 다르다. */
 function deploymentStatus(status: DeploymentStatusResponse | null): string | null { return text(status?.status); }
@@ -176,6 +180,16 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   }, [projectId]);
 
   const currentStatus = deploymentStatus(status);
+
+  // 실시간 연결(SSE)은 플랫폼 API 가 재시작되는 동안 502 를 받으면 브라우저가 다시 잇지 않는다.
+  // 끝나지 않은 배포는 몇 초마다 상태를 다시 받아, 연결이 끊겨도 화면이 멈추지 않게 한다 (실패는 다음 차례에 다시 시도).
+  useEffect(() => {
+    if (!currentStatus || FINISHED_STATUSES.has(currentStatus)) return;
+    const timer = window.setInterval(() => {
+      void getDeploymentStatus(deploymentId).then(setStatus, () => undefined);
+    }, STATUS_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [deploymentId, currentStatus]);
 
   // 원클릭: 승인 대기 상태가 되면 사용자 입력 없이 바로 승인한다 (대상 확인 → target, 배포 계획 → plan).
   // 다른 탭이나 서버가 먼저 승인했으면(APPROVAL_GATE_NOT_PENDING) 정상으로 본다. 실패하면 멈춘 채 다시 시도 버튼을 보여 준다.

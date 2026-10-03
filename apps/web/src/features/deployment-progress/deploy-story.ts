@@ -25,6 +25,31 @@ export interface DeployStory {
   label: string;
 }
 
+/**
+ * 이번 배포의 IR(배포 명세)이 어디서 왔는지 — 장면과 코로의 말, "IR 보기"에 쓴다.
+ *   created 이번 배포에서 분석해 새로 만들었다 (규칙 감지)
+ *   ai      새로 만들었고, 규칙으로 못 채운 칸을 AI가 채웠다
+ *   copied  이전 배포(또는 같은 소스의 이전 분석)의 IR을 그대로 복사해 쓴다 — 재배포 · 롤백 · 환경 전환 · 분석 캐시
+ */
+export type IrOrigin = 'created' | 'ai' | 'copied';
+
+/**
+ * IR 출처 판단. 서버가 남긴 사실만 쓴다:
+ *   1) IR의 source (ir_versions.source — analyzer · ai_filled · analyzer_cache)
+ *   2) source 가 그 뒤 단계에서 덮였으면(profile_sync · user_edited) 분석 로그의 문구 키로 판단한다.
+ *      재배포는 분석을 하지 않으므로 분석 로그 자체가 없다.
+ * 어느 쪽으로도 알 수 없으면 null (화면은 출처를 말하지 않는다).
+ */
+export function irOriginOf(source: string | null, analyzeTagKeys: readonly string[] | null): IrOrigin | null {
+  if (source === 'analyzer_cache') return 'copied';
+  if (source === 'ai_filled') return 'ai';
+  if (source === 'analyzer') return 'created';
+  if (analyzeTagKeys === null) return source === 'profile_sync' ? 'copied' : null;
+  if (analyzeTagKeys.includes('analyze.cacheReuse')) return 'copied';
+  if (analyzeTagKeys.includes('analyze.doneValid') || analyzeTagKeys.includes('analyze.doneInvalid')) return 'created';
+  return null;
+}
+
 /** 빌드 로그 한 줄에서 재사용한 원본 배포 번호를 읽는다. 해당 줄이 아니면 null (키가 붙기 전 로그는 한국어 문구로) */
 export function readReusedFrom(line: string): string | null {
   const tag = readLogTag(line);

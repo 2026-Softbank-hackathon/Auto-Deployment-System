@@ -8,7 +8,7 @@ import { CommandBlock } from '../setup/CommandBlock';
 const AGENT_BIN = '"$HOME/Library/Application Support/Camellia/onprem-agent/bin';
 const WINDOWS_AGENT = '"$env:LOCALAPPDATA\\Camellia\\onprem-agent\\bin\\camellia-onprem-agent.cmd"';
 /** 설치기가 Mac 아키텍처(Intel x86_64 · Apple Silicon arm64)를 감지해 맞는 Release 파일을 받는다. 버전을 올릴 때는 여기 한 곳만 바꾼다. */
-const AGENT_VERSION = 'v0.1.9';
+const AGENT_VERSION = 'v0.1.10';
 const RELEASE_URL = `https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-${AGENT_VERSION}`;
 
 type AgentOs = 'macos' | 'windows';

@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { Koro, type KoroMood } from '../../components/ui/Koro';
 import { useI18n } from '../../i18n/I18nProvider';
 import { railStageCount, railStages, type DeploymentStatusView } from '../deployment-status/status-view';
-import type { DeployStory } from './deploy-story';
+import type { DeployStory, IrOrigin } from './deploy-story';
 import { KoroHat, KoroProp } from './KoroProp';
 
 /**
@@ -99,6 +99,20 @@ export function koroSpot(view: DeploymentStatusView, target: SceneTarget, story:
 function isMoving(story: DeployStory | null): boolean {
   return story !== null && story.kind === 'switch' && story.reused && story.prev !== null;
 }
+/** 복사한 IR 판을 세우는 데 쓰는 가로 폭 (잘라 낸 장면의 왼쪽 끝) */
+const IR_STAND_ROOM = 110;
+/**
+ * 장면에 그려진 IR 판의 오른쪽 위 모서리 (IR 보기 말풍선을 붙이는 자리). IR 판이 없으면 null.
+ *   - 설계도 판(큰 판): 이미지를 새로 짓는 배포에 그린다
+ *   - 복사한 IR 판(작은 판): 이미지를 재사용하면서 IR을 복사한 배포에 그린다
+ */
+export function irBoardSpot(target: SceneTarget, story: DeployStory | null, ir: IrOrigin | null): Spot | null {
+  if (!story?.reused) return [235, 270];
+  if (ir !== 'copied') return null;
+  return [sceneBox(target, story, ir).left + IR_STAND_X + 42, GROUND - 92];
+}
+/** 잘라 낸 장면의 왼쪽 끝에서 복사한 IR 판의 중심까지 */
+const IR_STAND_X = 58;
 /** 낙하산으로 내려오는 중인 집의 바닥 중심 */
 const PARACHUTE_AIR: Spot = [1035, 310];
 export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const;
@@ -107,9 +121,10 @@ export const SCENE_SIZE = { width: 1200, height: 500, koro: KORO_SIZE } as const
  * 가로 범위도 줄인다: 이미지를 재사용하는 배포는 분석 · 빌드를 하지 않으므로 설계도와 집 짓는 곳을 그리지 않는다.
  * (같은 환경 재배포 · 롤백은 창고부터, 환경 전환은 탈것을 준비하는 곳부터 보여 준다.)
  */
-export function sceneBox(target: SceneTarget, story: DeployStory | null = null): { left: number; top: number; width: number; height: number } {
+export function sceneBox(target: SceneTarget, story: DeployStory | null = null, ir: IrOrigin | null = null): { left: number; top: number; width: number; height: number } {
   const sky = target !== 'onprem' || (story?.prev != null && story.prev.target === 'aws');
-  const left = !story?.reused ? 0 : isMoving(story) ? 580 : 360;
+  // 복사한 IR을 쓰는 배포는 잘라 낸 장면 왼쪽에 "복사한 IR" 판을 세울 자리를 남긴다.
+  const left = !story?.reused ? 0 : (isMoving(story) ? 580 : 360) - (ir === 'copied' ? IR_STAND_ROOM : 0);
   return { left, width: SCENE_SIZE.width - left, ...(sky ? { top: 0, height: SCENE_SIZE.height } : { top: 190, height: SCENE_SIZE.height - 190 }) };
 }
 
@@ -156,9 +171,11 @@ interface DeploySceneProps {
   stepSeconds?: number;
   /** 재배포 · 롤백 · 환경 전환 정보. 없으면 처음 배포처럼 그린다 */
   story?: DeployStory | null;
+  /** 이번 배포의 IR이 어디서 왔는지. 모르면 null (출처 도장을 찍지 않는다) */
+  ir?: IrOrigin | null;
 }
 
-export function DeployScene({ view, target = null, idle = null, stepSeconds = 0, story = null }: DeploySceneProps) {
+export function DeployScene({ view, target = null, idle = null, stepSeconds = 0, story = null, ir = null }: DeploySceneProps) {
   const { t } = useI18n();
   const stage = view.stage;
   const onGround = target === 'onprem';
@@ -197,12 +214,16 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       : view.outcome !== 'active' ? t.run.sceneStopped
         : view.waiting === 'approval' ? t.run.sceneWaiting(stageName) : view.waiting === 'queue' ? t.run.sceneQueued(stageName)
           : (stage === 1 && moving ? t.run.sceneMove : moving && onGround && stage === 2 ? t.run.sceneLanding : parachuting ? t.run.sceneParachute : stage === 1 && reused ? t.run.sceneReuse : stage !== null ? (onGround ? t.run.sceneWorkOnprem : t.run.sceneWork)[stage] : undefined) ?? t.run.sceneActive(stageName);
-  const fullLabel = prev && !succeeded && !(inPlace && arrived) ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
+  const prevLabel = prev && !succeeded && !(inPlace && arrived) ? `${label} · ${t.run.scenePrev(prev.label)}` : label;
+  const fullLabel = ir !== null && stage !== null && stage >= 1 && !succeeded ? `${prevLabel} · ${t.run.sceneIr[ir]}` : prevLabel;
 
   const [cx, cy] = koroSpot(view, target, story);
 
   const handingOff = onGround && !moving && (stage === 2 || stage === 3);
-  const box = sceneBox(target, story);
+  const box = sceneBox(target, story, ir);
+  // IR 출처 도장: 새로 만들었으면 NEW(AI가 채웠으면 NEW · AI), 이전 배포 것을 복사했으면 COPY. 분석이 끝난 뒤에만 찍는다.
+  const irStamp = ir !== null && reached(1) ? (ir === 'copied' ? 'COPY' : ir === 'ai' ? 'NEW · AI' : 'NEW') : null;
+  const irStandX = box.left + IR_STAND_X;
   // LIVE 표지: 성공하기 전에는 지금까지 서비스하던 집 위에, 성공하면 새 집 위로 옮겨 간다.
   // 제자리 교체(AWS 같은 환경)는 새 집이 도착한 순간부터 새 버전이 서비스하므로 그때 표지를 옮긴다.
   const liveAt: Spot | null = succeeded || (inPlace && arrived) ? [house[0], house[1] - (total * FLOOR_HEIGHT + 30) - 14] : prev ? [oldSlot[0], oldSlot[1] - HOUSE_HEIGHT * oldScale - 14] : null;
@@ -254,7 +275,24 @@ export function DeployScene({ view, target = null, idle = null, stepSeconds = 0,
       <path className="jr-draft" d="M110 322 H196" />
       <path className="jr-draft" d="M110 340 H212" />
       <path className="jr-draft" d="M110 358 H170" />
+      {irStamp && <g className={`jr-stamp ${ir === 'copied' ? 'is-copy' : 'is-new'}`} transform="translate(196 286)">
+        <rect x={-(irStamp.length * 4 + 8)} y="-11" width={irStamp.length * 8 + 16} height="20" rx="4" />
+        <text x="0" y="4" textAnchor="middle">{irStamp}</text>
+      </g>}
     </g>}
+    {/* 이미지를 재사용하는 배포(재배포 · 롤백 · 환경 전환)는 분석을 하지 않고 이전 배포의 IR을 그대로 복사해 쓴다.
+        설계도 자리는 잘라 냈으므로, 복사해 온 IR을 작은 판으로 왼쪽 끝에 세운다 */}
+    {reused && ir === 'copied' && <g className="jr-ir-copy" style={place([irStandX, GROUND])}><g className="jr-ir-copy__body">
+      <path className="jr-line" d="M-22 -30 L-30 0 M22 -30 L30 0" />
+      <rect className="jr-paper" x="-42" y="-92" width="84" height="62" rx="5" />
+      <text className="jr-board-title" x="-33" y="-75">IR</text>
+      <path className="jr-draft" d="M-32 -62 H32" />
+      <path className="jr-draft" d="M-32 -48 H16" />
+      <g className="jr-stamp is-copy" transform="translate(14 -76)">
+        <rect x="-24" y="-11" width="48" height="20" rx="4" />
+        <text x="0" y="4" textAnchor="middle">COPY</text>
+      </g>
+    </g></g>}
 
     {/* 1 · 집 짓는 곳 — 터와 비계 */}
     {!moving && <rect className="jr-pad is-ready" x="476" y={GROUND - 6} width="88" height="6" rx="2" />}

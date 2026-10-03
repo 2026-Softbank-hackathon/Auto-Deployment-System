@@ -858,6 +858,26 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-draft { fill: none; stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
 .jr-easel.is-working .jr-draft { stroke: var(--koro); }
 .jr-easel.is-done .jr-draft { stroke: var(--brass); }
+/* IR 출처 도장: NEW = 이번에 새로 만든 IR · COPY = 이전 배포의 IR을 복사 */
+.jr-stamp rect { stroke: none; }
+.jr-stamp.is-new rect { fill: var(--moss); }
+.jr-stamp.is-copy rect { fill: var(--koro); }
+.jr-stamp text { fill: var(--on-ink); font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+.jr-ir-copy .jr-draft { stroke: var(--koro); }
+/* IR 보기: 장면의 IR 판 오른쪽 위에 붙는 말풍선 버튼 (판의 오른쪽 위 모서리에서 위 · 왼쪽으로 펼친다) + 창 */
+.ir-bubble { position: absolute; left: var(--ir-x); top: var(--ir-y); transform: translate(-100%, calc(-100% - 9px)); padding: 4px 11px; font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; color: var(--koro-text); background: var(--surface); border: 2px solid var(--koro); border-radius: 14px; box-shadow: 0 2px 0 var(--koro-tint); cursor: pointer; }
+.ir-bubble::after { content: ""; position: absolute; right: 12px; bottom: -7px; width: 10px; height: 10px; background: var(--surface); border-right: 2px solid var(--koro); border-bottom: 2px solid var(--koro); transform: rotate(45deg); }
+.ir-bubble:hover { background: var(--koro-tint); }
+.ir-bubble:hover::after { background: var(--koro-tint); }
+.ir-bubble:focus-visible { outline: 3px solid var(--koro); outline-offset: 3px; }
+.ir-dialog { width: min(640px, calc(100vw - 32px)); }
+.ir-dialog .picker-dialog__body { max-height: min(640px, calc(100vh - 48px)); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.ir-dialog__json { margin: 0; overflow: auto; text-align: left; padding: 14px 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.55; color: var(--ink); background: var(--paper-sunken); border-radius: var(--radius-input); }
+.picker-dialog p.ir-peek__origin { margin: 0; color: var(--ink); font-size: 14px; }
+.ir-peek__badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--on-ink); vertical-align: 1px; }
+.ir-peek__badge.is-created, .ir-peek__badge.is-ai { background: var(--moss); }
+.ir-peek__badge.is-copied { background: var(--koro); }
+@media (max-width: 760px) { .ir-bubble { padding: 2px 8px; font-size: 11px; transform: translate(-100%, calc(-100% - 7px)); } }
 .jr-wheel { fill: var(--ink); }
 .jr-door { fill: var(--brass); stroke: var(--ink); stroke-width: 2; }
 .jr-window { fill: var(--line); stroke: var(--ink); stroke-width: 2; }
@@ -905,6 +925,9 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .koro-prop--ticks .koro-prop__tick:nth-child(2) { animation-delay: .5s; }
   .koro-prop--ticks .koro-prop__tick:nth-child(3) { animation-delay: 1s; }
   .jr-easel.is-working .jr-draft { stroke-dasharray: 120; animation: draft-draw 2.2s ease-in-out infinite; }
+  /* 복사해 온 IR 판은 왼쪽에서 미끄러져 들어오고, 출처 도장은 찍히듯 나타난다 */
+  .jr-ir-copy__body { animation: ir-slide .7s var(--ease-roll) both; }
+  .jr-stamp rect, .jr-stamp text { transform-box: fill-box; transform-origin: 50% 50%; animation: stamp-pop .45s var(--ease-roll) .5s both; }
   .jr-easel.is-working .jr-draft:nth-of-type(2) { animation-delay: .3s; }
   .jr-easel.is-working .jr-draft:nth-of-type(3) { animation-delay: .6s; }
   .jr-easel.is-working .jr-draft:nth-of-type(4) { animation-delay: .9s; }
@@ -1032,3 +1055,6 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .ops-card { padding: 18px 16px; }
   .ops-stat__value { font-size: 22px; }
 }
+
+@keyframes ir-slide { from { opacity: 0; transform: translateX(-46px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes stamp-pop { from { opacity: 0; transform: scale(1.8); } to { opacity: 1; transform: scale(1); } }

@@ -4,6 +4,9 @@ import { renderPath } from "./template.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** 플랫폼이 다시 배포되는 동안(502 · 연결 끊김) 기다려 주는 최대 시간 */
+const OUTAGE_LIMIT_MS = 5 * 60_000;
+
 function elapsed(startedAt) {
   const seconds = Math.floor((Date.now() - startedAt) / 1000);
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -27,9 +30,27 @@ export async function followDeployment(spec, id, { yes = false, json = false } =
   const startedAt = Date.now();
   const handled = new Set();
   let last = null;
+  let outageSince = null;
   if (!json) console.log(`Watching deployment ${id} (Ctrl+C stops watching; the deployment keeps going)`);
   for (;;) {
-    const deployment = await api(renderPath(spec.status, { id }));
+    let deployment;
+    try {
+      deployment = await api(renderPath(spec.status, { id }));
+    } catch (error) {
+      // 플랫폼이 잠깐 내려가도 배포는 서버에서 계속된다 — 다시 붙을 때까지 기다린다
+      if (!(error instanceof CliError && error.transient)) throw error;
+      if (outageSince === null) {
+        outageSince = Date.now();
+        if (!json) console.log(`  [${elapsed(startedAt)}] Server unavailable, retrying... (${error.message.split("\n")[0]})`);
+      }
+      if (Date.now() - outageSince > OUTAGE_LIMIT_MS) throw error;
+      await sleep(spec.intervalMs * 2);
+      continue;
+    }
+    if (outageSince !== null) {
+      outageSince = null;
+      if (!json) console.log(`  [${elapsed(startedAt)}] Server is back`);
+    }
     const status = deployment.status;
     if (status !== last) {
       if (!json) console.log(`  [${elapsed(startedAt)}] ${spec.labels[status] ?? status} (${status})`);

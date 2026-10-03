@@ -3,7 +3,7 @@ import {
   DescribeTasksCommand,
   ListTasksCommand,
 } from "@aws-sdk/client-ecs";
-import { DescribeTargetHealthCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { DeregisterTargetsCommand, DescribeTargetHealthCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { describe, expect, it, vi } from "vitest";
 import { EcsRolloutError, EcsRolloutWaiter } from "../src/ecs-rollout.js";
 import { renderLogText, type LogText } from "../src/log-messages.js";
@@ -134,6 +134,7 @@ function fakeAws(snapshots: Snapshot[]) {
     }
     throw new Error(`unexpected ECS command ${String(command)}`);
   });
+  const deregistered: (string | undefined)[] = [];
   const elbSend = vi.fn(async (command: unknown) => {
     if (command instanceof DescribeTargetHealthCommand) {
       expect(command.input.TargetGroupArn).toBe(TG);
@@ -144,9 +145,14 @@ function fakeAws(snapshots: Snapshot[]) {
         })),
       };
     }
+    if (command instanceof DeregisterTargetsCommand) {
+      expect(command.input.TargetGroupArn).toBe(TG);
+      deregistered.push(...(command.input.Targets ?? []).map((target) => target.Id));
+      return {};
+    }
     throw new Error(`unexpected ELB command ${String(command)}`);
   });
-  return { ecsSend, elbSend, polls: () => index + 1 };
+  return { ecsSend, elbSend, polls: () => index + 1, deregistered };
 }
 
 function makeWaiter(
@@ -222,6 +228,9 @@ describe("EcsRolloutWaiter (#253)", () => {
     expect(lines.some((line) => line.includes("타깃 등록"))).toBe(true);
     expect(lines.some((line) => line.includes("헬스체크 통과 (1/1)"))).toBe(true);
     expect(lines.at(-1)).toContain("롤아웃 완료");
+    // 이전 태스크 타깃은 빼서 성공 뒤에 이전 버전이 섞여 응답하지 않게 한다
+    expect(aws.deregistered).toEqual(["10.0.0.10"]);
+    expect(lines.some((line) => line.includes("이전 태스크 1개를 타깃 그룹에서 뺐어요"))).toBe(true);
     // 같은 상태는 다시 쓰지 않는다
     expect(new Set(lines).size).toBe(lines.length);
   });

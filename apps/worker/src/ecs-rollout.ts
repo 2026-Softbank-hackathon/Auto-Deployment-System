@@ -4,7 +4,8 @@
  * Terraform apply 뒤 ECS 롤아웃이 끝날 때까지 기다린다 (#253).
  * aws-ecs-basic 프로필은 wait_for_steady_state 를 끄고, 대신 워커가 2초마다 ECS 를 확인한다.
  * 이전 태스크 드레이닝 · 정지까지 기다리던 Terraform 과 달리, 새 태스크가 타깃 그룹에서
- * healthy 가 되면 바로 끝낸다 (그 시점부터 ALB 가 새 버전으로 보낸다). 순서는 그대로
+ * healthy 가 되면 바로 끝낸다. ALB 는 ECS 가 이전 태스크를 내릴 때까지(1~2분) 양쪽으로 보내므로,
+ * 끝내기 전에 이전 태스크 타깃을 직접 빼서 그 시점부터 새 버전만 받게 한다. 순서는 그대로
  * "롤아웃 완료 → 최종 검증(Verify)".
  *
  * 완료: 이번 task definition의 배포가 rolloutState COMPLETED, 또는 그 배포의 running 수가 desired 에
@@ -23,6 +24,7 @@ import {
   type Task,
 } from "@aws-sdk/client-ecs";
 import {
+  DeregisterTargetsCommand,
   DescribeTargetHealthCommand,
   ElasticLoadBalancingV2Client,
   type TargetHealthDescription,
@@ -226,6 +228,23 @@ export class EcsRolloutWaiter {
       }
 
       if (targetGroupArn && desired > 0 && runningCount >= desired && healthy >= desired) {
+        // 이전 태스크 타깃을 뺀다 — 안 빼면 "성공" 뒤에도 1~2분 동안 이전 버전이 섞여 응답한다.
+        // 빼지 못해도 배포는 성공이다 (ECS 가 곧 이전 태스크를 내린다).
+        const ownIps = new Set(running.map((task) => taskIp(task)).filter((ip): ip is string => Boolean(ip)));
+        const stale = targets.filter((target) =>
+          target.Target?.Id && !ownIps.has(target.Target.Id)
+          && target.TargetHealth?.State !== "draining" && target.TargetHealth?.State !== "unused");
+        if (stale.length > 0) {
+          try {
+            await elb.send(new DeregisterTargetsCommand({
+              TargetGroupArn: targetGroupArn,
+              Targets: stale.map((target) => ({ Id: target.Target!.Id!, ...(target.Target?.Port ? { Port: target.Target.Port } : {}) })),
+            }));
+            await input.log(logMessage("ecs.oldTargetsRemoved", { count: stale.length }));
+          } catch (error) {
+            await input.log(logMessage("ecs.oldTargetsKept", { reason: error instanceof Error ? error.message : String(error) }));
+          }
+        }
         await input.log(logMessage("ecs.doneHealthy", { seconds: elapsed() }));
         return;
       }

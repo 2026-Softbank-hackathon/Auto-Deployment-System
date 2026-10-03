@@ -71,6 +71,8 @@ export const logLinesKo = {
   'ecs.healthChecking': '타깃 등록, 헬스체크 진행 중 ({healthy}/{desired} 통과)',
   'ecs.doneDeployment': '롤아웃 완료 ({seconds}초) — ECS 배포 완료',
   'ecs.doneHealthy': '롤아웃 완료 ({seconds}초) — 새 태스크가 타깃 그룹에서 healthy',
+  'ecs.oldTargetsRemoved': '이전 태스크 {count}개를 타깃 그룹에서 뺐어요 — 지금부터 새 버전만 응답',
+  'ecs.oldTargetsKept': '이전 태스크를 타깃 그룹에서 빼지 못했어요 (ECS 가 곧 내림): {reason}',
   'ecs.waiting': '롤아웃 대기 중 ({seconds}초 경과)',
 
   'lambda.start': 'Lambda 갱신 확인 시작 (함수 {function}:{alias}, {interval}초 간격)',
@@ -153,6 +155,8 @@ export const logLinesJa: Record<LogLineKey, string> = {
   'ecs.healthChecking': 'ターゲット登録済み、ヘルスチェック中 ({healthy}/{desired} 合格)',
   'ecs.doneDeployment': 'ロールアウト完了 ({seconds}秒) — ECS デプロイ完了',
   'ecs.doneHealthy': 'ロールアウト完了 ({seconds}秒) — 新しいタスクがターゲットグループで healthy',
+  'ecs.oldTargetsRemoved': '以前のタスク {count} 個をターゲットグループから外しました — 以降は新しいバージョンのみ応答',
+  'ecs.oldTargetsKept': '以前のタスクをターゲットグループから外せませんでした (ECS がまもなく停止): {reason}',
   'ecs.waiting': 'ロールアウト待機中 ({seconds}秒経過)',
 
   'lambda.start': 'Lambda の更新確認開始 (関数 {function}:{alias}、{interval}秒間隔)',

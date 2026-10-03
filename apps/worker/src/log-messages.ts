@@ -82,6 +82,7 @@ export const LOG_MESSAGES = {
   "ecs.healthChecking": "타깃 등록, 헬스체크 진행 중 ({healthy}/{desired} 통과)",
   "ecs.doneDeployment": "롤아웃 완료 ({seconds}초) — ECS 배포 완료",
   "ecs.doneHealthy": "롤아웃 완료 ({seconds}초) — 새 태스크가 타깃 그룹에서 healthy",
+  "ecs.forcedNewDeployment": "이미지가 그대로라 바뀐 설정이 없어요 — 새 태스크로 다시 띄웁니다",
   "ecs.oldTargetsRemoved": "이전 태스크 {count}개를 타깃 그룹에서 뺐어요 — 지금부터 새 버전만 응답",
   "ecs.oldTargetsKept": "이전 태스크를 타깃 그룹에서 빼지 못했어요 (ECS 가 곧 내림): {reason}",
   "ecs.waiting": "롤아웃 대기 중 ({seconds}초 경과)",

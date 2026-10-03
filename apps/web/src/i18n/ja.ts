@@ -151,6 +151,8 @@ export const ja: Messages = {
     loading: 'プロジェクトを読み込んでいます…',
     loadError: 'プロジェクトを読み込めませんでした。',
     neverDeployed: 'まだデプロイしていません',
+    deletionDetail: '設定タブで確認',
+    deletionLocked: '削除をリクエストしたアプリのため、再デプロイできません。',
     olderHidden: (shown: number) => `最新の ${shown} 件のみ表示しています。それより古いデプロイはこの一覧に出ません。`,
     deploy: 'このプロジェクトでデプロイ',
     searchPlaceholder: 'デプロイ番号、URL',

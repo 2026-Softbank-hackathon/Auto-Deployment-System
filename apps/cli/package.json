@@ -1,0 +1,20 @@
+{
+  "name": "@camellia/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "camellia 배포 플랫폼 CLI — 명령 목록은 서버(GET /api/v1/cli/manifest)에서 받는다",
+  "type": "module",
+  "bin": {
+    "camellia": "bin/camellia.mjs"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test test/cli.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

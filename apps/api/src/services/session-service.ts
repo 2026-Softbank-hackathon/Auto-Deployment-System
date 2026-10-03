@@ -28,8 +28,16 @@ export class SessionService {
       );
     }
 
-    const userId = stableUserId(apiKey);
-    const { exp, expiresAt } = sessionExpiresAt(this.ttlSec);
+    return this.issue(this.ttlSec);
+  }
+
+  /**
+   * CLI 로그인용 장기 토큰 (UI-02). 이미 인증된 요청(콘솔 로그인 · API Key)만 부를 수 있어 API Key 를 다시 받지 않는다.
+   * 사용자는 비밀번호 대신 이 토큰만 자기 PC 에 둔다.
+   */
+  issue(ttlSec: number): SessionResponse {
+    const userId = stableUserId(this.apiKey);
+    const { exp, expiresAt } = sessionExpiresAt(ttlSec);
     const token = signSessionToken({ sub: userId, exp }, sessionSigningKey(this.apiKey));
 
     return { token, expiresAt, userId };

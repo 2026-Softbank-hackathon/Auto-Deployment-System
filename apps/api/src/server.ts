@@ -61,6 +61,7 @@ import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
 import authRoutes from "./routes/auth.js";
 import credentialsRoutes from "./routes/credentials.js";
+import cliRoutes from "./routes/cli.js";
 import { verifyAwsCredentialsWithSts, type AwsCredentialVerifier } from "./services/aws-credential-verifier.js";
 import { SessionService } from "./services/session-service.js";
 import {
@@ -312,6 +313,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(environmentsRoutes, {
       prefix: "/environments",
       environmentService,
+    });
+
+    v1.register(cliRoutes, {
+      prefix: "/cli",
+      sessionService,
     });
 
     v1.register(credentialsRoutes, {

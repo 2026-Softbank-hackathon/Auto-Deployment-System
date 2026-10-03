@@ -741,6 +741,27 @@ export const ko = {
     factFinished: '완료 시각',
     targets: { aws: 'AWS', onprem: '온프레미스' },
   },
+  /** 월 예상 인프라 비용 (#327) */
+  cost: {
+    title: '월 예상 비용',
+    total: (usd: string) => `약 $${usd}`,
+    free: '클라우드 비용 없음',
+    details: '항목 보기',
+    usageBased: '쓰는 만큼',
+    note: (region: string) => `${region} 온디맨드 단가로 계산한 추정치예요. 트래픽 · 데이터 전송 · 로그 비용은 빠져 있어요.`,
+    onpremNote: '우리 서버에서 실행해서 클라우드 요금이 나가지 않아요.',
+    items: {
+      fargate_compute: '컨테이너 실행 (ECS Fargate)',
+      load_balancer: '로드 밸런서 (ALB)',
+      public_ipv4: '공인 IP 주소',
+      rds_instance: 'PostgreSQL 데이터베이스 (RDS)',
+      rds_storage: '데이터베이스 저장 공간',
+      rds_secret: 'DB 비밀번호 보관 (Secrets Manager)',
+      lambda_requests: '서버리스 실행 (Lambda)',
+      s3_storage: '정적 파일 저장 (S3)',
+      own_server: '온프레미스 서버',
+    } as Record<string, string>,
+  },
   /** 운영 화면 (#308) — 사용자 앱이 아니라 플랫폼 자체의 상태 */
   ops: {
     title: '플랫폼 운영',

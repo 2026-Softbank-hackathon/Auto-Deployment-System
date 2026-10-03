@@ -68,6 +68,15 @@
 .technical-details summary { cursor: pointer; font-weight: 500; }
 .technical-details summary:hover { color: var(--ink); }
 .technical-details button { margin: 16px 0; }
+/* 월 예상 비용 (#327) */
+.cost-estimate { font-size: 14px; }
+.cost-estimate summary { display: flex; align-items: baseline; gap: 6px 10px; flex-wrap: wrap; }
+.cost-estimate summary strong { color: var(--ink); }
+.cost-estimate__toggle { font-size: 12px; text-decoration: underline; }
+.cost-estimate__items { list-style: none; padding: 0; margin: 10px 0 6px; display: grid; gap: 4px; max-width: 420px; }
+.cost-estimate__items li { display: flex; justify-content: space-between; gap: 12px; }
+.cost-estimate__items li span:last-child { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+.cost-estimate__note { margin: 0; font-size: 12px; }
 .step-log { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .step-log strong { color: var(--ink); font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; }
 .technical-details pre {

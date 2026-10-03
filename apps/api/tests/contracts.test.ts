@@ -20,6 +20,7 @@ import {
   AnalysisReportSchema,
   CreateDeploymentResponseSchema,
   CreateEnvironmentResponseSchema,
+  DeploymentCostEstimateSchema,
   DeploymentEventSchema,
   DeploymentHealthSchema,
   DeploymentSchema,
@@ -714,6 +715,29 @@ describe("deployments 응답 계약", () => {
 
     expect(res.statusCode).toBe(200);
     expectContract(AiUsageSchema, res.json());
+  });
+
+  it("GET /deployments/:id/cost-estimate (#327)", async () => {
+    pool.on(/SELECT target_profile FROM deployments/, () => ({ rows: [{ target_profile: "aws-ecs-basic" }] }));
+    pool.on(/SELECT ir_json FROM ir_versions/, () => ({
+      rows: [{ ir_json: { ...IR, resources: { db: { type: "postgres" } } } }],
+    }));
+
+    const res = await call("GET", "/api/v1/deployments/42/cost-estimate");
+
+    expect(res.statusCode).toBe(200);
+    expectContract(DeploymentCostEstimateSchema, res.json());
+    expect(res.json().estimate.items.map((item: { key: string }) => item.key)).toContain("rds_instance");
+  });
+
+  it("GET /deployments/:id/cost-estimate — 프로필이 아직 없으면 estimate null", async () => {
+    pool.on(/SELECT target_profile FROM deployments/, () => ({ rows: [{ target_profile: null }] }));
+
+    const res = await call("GET", "/api/v1/deployments/42/cost-estimate");
+
+    expect(res.statusCode).toBe(200);
+    expectContract(DeploymentCostEstimateSchema, res.json());
+    expect(res.json().estimate).toBeNull();
   });
 });
 

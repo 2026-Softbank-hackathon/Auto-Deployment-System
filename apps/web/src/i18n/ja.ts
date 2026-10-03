@@ -732,6 +732,27 @@ export const ja: Messages = {
     factFinished: '完了時刻',
     targets: { aws: 'AWS', onprem: 'オンプレミス' },
   },
+  /** 月額の概算インフラ費用 (#327) */
+  cost: {
+    title: '月額の概算費用',
+    total: (usd) => `約 $${usd}`,
+    free: 'クラウド費用なし',
+    details: '内訳を見る',
+    usageBased: '従量',
+    note: (region) => `${region} のオンデマンド単価で計算した概算です。トラフィック・データ転送・ログの費用は含みません。`,
+    onpremNote: '自社サーバーで動くため、クラウドの料金はかかりません。',
+    items: {
+      fargate_compute: 'コンテナ実行 (ECS Fargate)',
+      load_balancer: 'ロードバランサー (ALB)',
+      public_ipv4: 'パブリック IP アドレス',
+      rds_instance: 'PostgreSQL データベース (RDS)',
+      rds_storage: 'データベースのストレージ',
+      rds_secret: 'DB パスワードの保管 (Secrets Manager)',
+      lambda_requests: 'サーバーレス実行 (Lambda)',
+      s3_storage: '静的ファイルの保存 (S3)',
+      own_server: 'オンプレミスサーバー',
+    },
+  },
   /** 運用画面 (#308) — ユーザーのアプリではなくプラットフォーム自体の状態 */
   ops: {
     title: 'プラットフォーム運用',

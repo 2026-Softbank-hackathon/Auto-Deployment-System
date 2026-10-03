@@ -474,6 +474,25 @@ export async function getDeploymentAiUsage(deploymentId: string): Promise<Deploy
   return { totalTokenIn: number(body.totalTokenIn), totalTokenOut: number(body.totalTokenOut), totalCostUsd: number(body.totalCostUsd) };
 }
 
+export interface CostLineItem { key: string; monthlyUsd: number; usageBased: boolean }
+export interface MonthlyCostEstimate { region: string | null; monthlyUsd: number; items: CostLineItem[] }
+
+/** #327 — 이 배포의 월 예상 인프라 비용. 프로필 · IR 이 아직 없으면 null. */
+export async function getDeploymentCostEstimate(deploymentId: string): Promise<MonthlyCostEstimate | null> {
+  const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/cost-estimate`), { credentials: 'include' });
+  const body = asRecord(await readJson(response), '월 예상 비용');
+  const estimate = body.estimate && typeof body.estimate === 'object' ? body.estimate as Record<string, unknown> : null;
+  if (!estimate || typeof estimate.monthlyUsd !== 'number') return null;
+  const items = (Array.isArray(estimate.items) ? estimate.items : []).flatMap((item): CostLineItem[] => {
+    if (!item || typeof item !== 'object') return [];
+    const line = item as Record<string, unknown>;
+    return typeof line.key === 'string' && typeof line.monthlyUsd === 'number'
+      ? [{ key: line.key, monthlyUsd: line.monthlyUsd, usageBased: line.usageBased === true }]
+      : [];
+  });
+  return { region: typeof estimate.region === 'string' ? estimate.region : null, monthlyUsd: estimate.monthlyUsd, items };
+}
+
 /** API-21 — 헬스체크 현황. 검증 기록이 아직 없으면(404) null. */
 export async function getDeploymentHealth(deploymentId: string): Promise<DeploymentHealthResponse | null> {
   const response = await fetch(endpoint(`/api/v1/deployments/${encodeURIComponent(deploymentId)}/health`), { credentials: 'include' });

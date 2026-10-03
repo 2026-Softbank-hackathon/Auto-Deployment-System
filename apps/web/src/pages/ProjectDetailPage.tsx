@@ -12,6 +12,7 @@ import { useDeployProject } from '../features/deployment-start/useDeployProject'
 import { EnvVarsCard } from '../features/setup/EnvVarsCard';
 import { DeleteAppCard } from '../features/project-delete/DeleteAppCard';
 import { AddressCard } from '../features/app-address/AddressCard';
+import { CostEstimate } from '../features/cost/CostEstimate';
 import { readCache, writeCache } from '../lib/page-cache';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -66,14 +67,15 @@ function LiveSummary({ projectId, reloadKey }: { projectId: string; reloadKey: n
   if (live === undefined) return null;
   if (live === null) return <p className="project-live">{t.versions.notLive}</p>;
   const url = safeHttpUrl(live.publicUrl);
-  return <p className="project-live">
+  return <><p className="project-live">
     {live.environmentType && <EnvironmentIcon type={live.environmentType} />}
     <strong>{t.versions.liveOn(live.environmentType ? t.deploy.targets[live.environmentType] : t.versions.unknownEnvironment)}</strong>
     {live.targetProfile === SERVERLESS_PROFILE && <span className="serverless-badge">{t.deploy.serverlessBadge}</span>}
     {live.targetProfile === STATIC_SITE_PROFILE && <span className="static-site-badge" title={t.run.staticSite.aws}>{t.run.staticSite.badge}</span>}
     {url && <a href={url} target="_blank" rel="noreferrer">{hostOf(url)}<span className="visually-hidden"> {t.dashboard.newTab}</span></a>}
     <span className="project-live__no">{t.dashboard.deploymentNo(live.deploymentId)}</span>
-  </p>;
+  </p>
+  <CostEstimate deploymentId={live.deploymentId} profileKey={live.targetProfile} /></>;
 }
 
 /**

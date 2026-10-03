@@ -164,7 +164,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
         : targets === 'error' ? t.versions.switchLoadError
           : none ? t.versions.switchNeedsConnection(other) : undefined);
     return [
-      { key: 'switch', label: t.versions.switchEnv, onSelect: () => { ask({}); setSwitchSource(item); }, disabledReason },
+      { key: 'switch', label: t.versions.switchEnv, onSelect: () => { ask({}); setRollbackPicking(false); setSwitchSource(item); }, disabledReason },
       ...(none ? [{ key: 'connections', label: t.versions.goConnections, href: CONNECTIONS_PATH }] : []),
     ];
   }
@@ -251,7 +251,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
           <label htmlFor={`${pickId}-select`}>{t.versions.rollbackChoose}</label>
           <select id={`${pickId}-select`} value={picked.id} disabled={busy} onChange={(event) => setRollbackPickId(event.target.value)}>
             {previous.map((other) => <option key={other.id} value={other.id}>
-              {t.dashboard.deploymentNo(other.id)} · {environmentLabel(other)} · {relativeTime(other.succeededAt ?? other.createdAt, now, t)}
+              {t.dashboard.deploymentNo(other.id)} · {environmentLabel(other)}{other.targetProfile === SERVERLESS_PROFILE ? ` ${t.deploy.serverlessBadge}` : ''} · {relativeTime(other.succeededAt ?? other.createdAt, now, t)}
             </option>)}
           </select>
         </div>

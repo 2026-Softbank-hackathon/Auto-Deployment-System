@@ -629,7 +629,7 @@ export const ja: Messages = {
         copied: '前のデプロイの IR をそのままコピーしたものです。分析はやり直していません。',
       },
     },
-    scenePrev: (label: string) => `今は以前のバージョン(${label})がサービス中`,
+    scenePrev: (label: string) => `今は既存のバージョン(${label})がサービス中`,
     sceneActive: (stage) => `コロが${stage}の装置を通過している`,
     sceneWaiting: (stage) => `コロが${stage}の装置の前で確認を待っている`,
     sceneQueued: (stage) => `コロが${stage}の装置の前で順番を待っている`,

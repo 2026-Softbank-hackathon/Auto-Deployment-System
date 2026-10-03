@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, listProjectDeployments, type DeploymentLogStep, type ProjectDeploymentSummary, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, listProjectDeployments, SERVERLESS_PROFILE, type DeploymentLogStep, type ProjectDeploymentSummary, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -98,6 +98,8 @@ function useNow(active: boolean): number {
 }
 
 const noop = () => {};
+/** 성공 직후 서비스 중인 배포를 다시 읽을 때까지 기다리는 시간 (useProjectLive 가 2초마다 읽으므로 두 번은 읽는다) */
+const LIVE_SETTLE_MS = 4500;
 /** 자동 전환 장면의 각 단계가 시작하는 시각(ms): 놀람 → 비행기에 태움 → 구름으로 비행 → 도착 */
 const FAILOVER_STEPS = { announce: 2000, moving: 4000, recovered: 6200 } as const;
 
@@ -239,7 +241,20 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   // 이 앱이 지금 어디서 서비스 중인지 지켜본다. 자동 전환(#349)은 새 배포 없이 live 만 바꾸므로,
   // 이 화면을 보고 있는 동안 전환되면 여기서도 알리고, 이 배포가 더는 서비스 중이 아니면 LIVE 로 표시하지 않는다.
   const { live: projectLive, liveSwitch, dismissLiveSwitch } = useProjectLive(projectId ?? '', projectId !== null, noop, { deployments: false });
-  const notLive = currentStatus === 'succeeded' && projectLive != null && projectLive.deploymentId !== deploymentId;
+  // 보고 있는 동안 방금 성공했다면, 서비스 중인 배포를 다시 읽기 전까지는 "서비스 중 아님"으로 단정하지 않는다.
+  // (live 는 2초마다 읽으므로 성공한 순간에는 아직 이전 배포를 가리킨다. 다음에 읽은 값이 바뀌면 그때 판단한다.)
+  const [settling, setSettling] = useState(false);
+  const watchedActive = useRef(false);
+  useEffect(() => {
+    if (!currentStatus) return;
+    if (!FINISHED_STATUSES.has(currentStatus)) { watchedActive.current = true; return; }
+    if (currentStatus !== 'succeeded' || !watchedActive.current) return;
+    watchedActive.current = false;
+    setSettling(true);
+    const timer = window.setTimeout(() => setSettling(false), LIVE_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [currentStatus]);
+  const notLive = currentStatus === 'succeeded' && !settling && projectLive != null && projectLive.deploymentId !== deploymentId;
   // 이 배포(온프레미스)가 서비스하던 것이 AWS 로 자동 전환되면, 위에 따로 띄우지 않고 배포 장면 안에서 보여 준다:
   // 온프레미스 불이 꺼지고 코로가 놀람(alarm) → 잠시 뒤 LIVE 표지가 구름으로 옮겨 가고 코로가 기뻐함(recovered).
   // 움직임 줄이기 설정에서는 곧바로 마지막 모습으로 간다.
@@ -410,6 +425,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         <p className="run-head__meta">
           {view.outcome === 'active' && approvalError === null && <span>{waitingForEnv ? t.run.review.waiting : currentStepLabel(currentStatus, t)}</span>}
           <span className="run-head__id">{projectName ? `${displayProjectName(projectName)} · ` : ''}{t.dashboard.deploymentNo(deploymentId)}</span>
+          {text(status?.targetProfile) === SERVERLESS_PROFILE && <span className="run-head__static"><span className="serverless-badge">{t.deploy.serverlessBadge}</span></span>}
           {staticSite && <span className="run-head__static"><span className="static-site-badge">{t.run.staticSite.badge}</span> {target === 'aws' ? t.run.staticSite.aws : target === 'onprem' ? t.run.staticSite.onprem : ''}</span>}
         </p>
       </div>
@@ -444,7 +460,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
               풍선은 코로의 오른쪽 위에 둔다. 장면 오른쪽 끝(검증 장치)과 낙하산이 내려오는 동안에만 왼쪽 위로 펼친다.
               좁은 화면에서는 배포 장치(is-near-edge)에서도 왼쪽으로 펼친다. */}
           {talk && <div className={`koro-think ${koroX - box.left > box.width * 0.85 || parachuting || scenePhase !== null ? 'is-left' : 'is-right'} ${koroX - box.left > box.width * 0.7 ? 'is-near-edge' : ''} ${scenePhase === 'alarm' ? 'is-alert' : scenePhase === 'recovered' ? 'is-done' : ''}`}
-            style={{ '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
+            style={{ '--koro-frac': (koroX - box.left) / box.width, '--koro-x': `${((koroX - box.left) / box.width) * 100}%`, '--koro-y': `${((koroY - SCENE_SIZE.koro / 2 - 10 - box.top) / box.height) * 100}%` } as CSSProperties}>
             <span className="koro-think__dot" aria-hidden="true" /><span className="koro-think__dot" aria-hidden="true" />
             <p key={talk} className="koro-think__bubble">{talk}</p>
           </div>}

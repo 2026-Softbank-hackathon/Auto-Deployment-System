@@ -638,7 +638,7 @@ export const ko = {
         copied: '이전 배포의 IR을 그대로 복사한 것이에요. 분석을 다시 하지 않았어요.',
       },
     },
-    scenePrev: (label: string) => `지금은 이전 버전(${label})이 서비스 중이다`,
+    scenePrev: (label: string) => `지금은 기존 버전(${label})이 서비스 중이다`,
     sceneActive: (stage: string) => `코로가 ${stage} 장치를 지나고 있다`,
     sceneWaiting: (stage: string) => `코로가 ${stage} 장치 앞에서 확인을 기다리고 있다`,
     sceneQueued: (stage: string) => `코로가 ${stage} 장치 앞에서 차례를 기다리고 있다`,

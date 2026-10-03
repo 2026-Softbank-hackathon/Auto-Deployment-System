@@ -186,18 +186,21 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .stage-chip.is-skipped { background: transparent; border-style: dotted; border-color: var(--line); color: var(--ink-soft); opacity: .7; }
 .stage-chip.is-pending { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--ink-soft); }
 
-.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 44px auto 0; }
+.run-scene { position: relative; width: 100%; max-width: 1100px; margin: 44px auto 0; container-type: inline-size; }
 /* 코로의 생각 풍선. 코로 머리 위 한 점(--koro-x, --koro-y)에 붙어서 코로와 같이 움직인다. */
 .koro-think { position: absolute; left: var(--koro-x); top: var(--koro-y); width: 0; height: 0; pointer-events: none; transition: left var(--dur-scene) var(--ease-roll), top var(--dur-scene) var(--ease-roll); }
 .koro-think__dot { position: absolute; border-radius: 50%; background: var(--surface); border: 2px solid var(--koro); }
 .koro-think__dot:nth-child(1) { width: 8px; height: 8px; bottom: 2px; }
 .koro-think__dot:nth-child(2) { width: 13px; height: 13px; bottom: 12px; }
+/* 한국어는 낱말 중간에서 줄을 바꾸지 않는다 (일본어는 띄어쓰기가 없어 그대로 둔다) */
+:root:not(:lang(ja)) .koro-think__bubble { word-break: keep-all; }
 .koro-think.is-right .koro-think__dot:nth-child(1) { left: 2px; }
 .koro-think.is-right .koro-think__dot:nth-child(2) { left: 10px; }
 .koro-think.is-left .koro-think__dot:nth-child(1) { right: 2px; }
 .koro-think.is-left .koro-think__dot:nth-child(2) { right: 10px; }
-.koro-think__bubble { position: absolute; bottom: 28px; margin: 0; width: max-content; max-width: 230px; padding: 9px 16px; font-size: 14px; line-height: 1.45; text-align: center; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: 22px; box-shadow: 0 3px 0 var(--koro-tint); }
-.koro-think.is-right .koro-think__bubble { left: -22px; }
+.koro-think__bubble { position: absolute; bottom: 28px; margin: 0; width: max-content; max-width: 230px; text-wrap: balance; padding: 9px 16px; font-size: 14px; line-height: 1.45; text-align: center; color: var(--ink); background: var(--surface); border: 2px solid var(--koro); border-radius: 22px; box-shadow: 0 3px 0 var(--koro-tint); }
+/* 오른쪽으로 펼친 풍선이 장면 오른쪽 끝을 넘지 않게, 남은 폭이 모자라면 그만큼 왼쪽으로 당긴다 (풍선 최대 폭 230px + 테두리) */
+.koro-think.is-right .koro-think__bubble { left: min(-22px, calc((1 - var(--koro-frac, 0)) * 100cqw - 234px)); }
 .koro-think.is-left .koro-think__bubble { right: -22px; }
 /* 좁은 화면에서는 장면이 작아 풍선이 장면 위로 올라가므로, 풍선이 있을 때 위쪽 자리를 비워 둔다 */
 @media (max-width: 719px) {

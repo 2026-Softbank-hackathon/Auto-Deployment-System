@@ -34,7 +34,9 @@ export function FailureDiagnosis({ deploymentId }: { deploymentId: string }) {
 
   const retry = useCallback(() => { setWaiting(true); setRound((value) => value + 1); }, []);
 
-  if (!diagnosis) {
+  // 요약도 수정 후보도 비어 있는 진단은 없는 것으로 본다 (제목만 남지 않게)
+  const empty = diagnosis !== null && !diagnosis.summary[language].trim() && diagnosis.patchCandidates.length === 0;
+  if (!diagnosis || empty) {
     return <div className="diagnosis" aria-live="polite">
       <strong>{t.run.diagnosisTitle}</strong>
       <p>{waiting ? t.run.diagnosisLoading : t.run.diagnosisNone}</p>

@@ -40,6 +40,8 @@ export function renderLaunchAgentPlist(input: LaunchAgentPlistInput): string {
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>ONPREM_AGENT_HEARTBEAT_INTERVAL_MS</key>
+    <string>2000</string>
   </dict>
   <key>StandardOutPath</key>
   <string>${stdoutPath}</string>

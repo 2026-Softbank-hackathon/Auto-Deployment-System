@@ -51,7 +51,7 @@ export type WorkerDeps = {
   lambdaRolloutWaiter?: Pick<LambdaRolloutWaiter, "wait">;
   originActivator?: Pick<
     DeploymentOriginActivator,
-    | "activate" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
+    | "activate" | "activateAwsStandby" | "prepareOnpremVerification" | "rollback" | "removeProjectOrigins"
     // 앱 주소 변경 (#301)
     | "addServiceAlias" | "removeServiceAlias" | "removeServiceHostname"
   >;

@@ -31,6 +31,21 @@ type OriginContext = {
   agent_result: unknown;
 };
 
+type AwsStandbyContext = {
+  project_id: number | string;
+  project_subdomain: string | null;
+  active_deployment_id: number | string | null;
+  active_status: string;
+  active_environment_type: string;
+  active_failover_target_id: number | string | null;
+  active_digest: string | null;
+  standby_project_id: number | string;
+  standby_status: string;
+  standby_environment_type: string;
+  standby_public_url: string | null;
+  standby_digest: string | null;
+};
+
 export class OriginActivationError extends Error {
   constructor(readonly code: string) {
     super(code);
@@ -208,6 +223,57 @@ export class DeploymentOriginActivator {
         ? { hostname: previousRecord.content, proxied: previousRecord.proxied }
         : null,
       tunnelIngress: tunnelChange,
+      ...(reused ? { reused: true as const } : {}),
+    };
+  }
+
+  /**
+   * On-Prem 장애 시 새 배포를 만들지 않고 명시적으로 연결된 AWS Standby로 Origin을 바꾼다.
+   * 연결 관계와 digest를 외부 호출 직전에 다시 확인해 과거 배포를 잘못 승격하지 않는다.
+   */
+  async activateAwsStandby(input: {
+    projectId: number;
+    activeDeploymentId: number;
+    standbyDeploymentId: number;
+  }): Promise<OriginActivationReceipt> {
+    const row = await this.loadAwsStandbyContext(input);
+    this.assertAwsStandbyContext(row, input);
+
+    const { cloudflare, zoneId, domain } = this.cloudflareConfiguration();
+    const serviceHostname = projectServiceHostname(
+      row.project_subdomain,
+      input.projectId,
+      domain,
+    );
+    const originHostname = awsOriginHostname(row.standby_public_url ?? "");
+    const previousRecord = await safeCloudflare(() => cloudflare.getCname({
+      zoneId,
+      hostname: serviceHostname,
+    }));
+
+    // Cloudflare 조회 사이에 새 배포가 성공했으면 오래된 Standby가 덮어쓰지 못하게 막는다.
+    this.assertAwsStandbyContext(
+      await this.loadAwsStandbyContext(input),
+      input,
+    );
+    const reused = previousRecord?.content === originHostname && previousRecord.proxied === true;
+    if (!reused) {
+      const activated = await safeCloudflare(() => cloudflare.switchServiceOrigin({
+        zoneId,
+        serviceHostname,
+        originHostname,
+      }));
+      if (activated.content !== originHostname) {
+        throw new OriginActivationError("ORIGIN_CLOUDFLARE_MISMATCH");
+      }
+    }
+    return {
+      serviceHostname,
+      activatedOrigin: originHostname,
+      previousOrigin: previousRecord
+        ? { hostname: previousRecord.content, proxied: previousRecord.proxied }
+        : null,
+      tunnelIngress: null,
       ...(reused ? { reused: true as const } : {}),
     };
   }
@@ -402,6 +468,64 @@ export class DeploymentOriginActivator {
     );
     if (result.rows[0]?.status !== "verifying") {
       throw new OriginActivationError("ORIGIN_DEPLOYMENT_NOT_VERIFYING");
+    }
+  }
+
+  private async loadAwsStandbyContext(input: {
+    projectId: number;
+    activeDeploymentId: number;
+    standbyDeploymentId: number;
+  }): Promise<AwsStandbyContext> {
+    const result = await this.pool.query<AwsStandbyContext>(
+      `SELECT project.id AS project_id,
+              project.subdomain AS project_subdomain,
+              project.active_deployment_id,
+              active.status AS active_status,
+              active_environment.type AS active_environment_type,
+              active.failover_target_deployment_id AS active_failover_target_id,
+              active_artifact.image_digest AS active_digest,
+              standby.project_id AS standby_project_id,
+              standby.status AS standby_status,
+              standby_environment.type AS standby_environment_type,
+              standby.public_url AS standby_public_url,
+              standby_artifact.image_digest AS standby_digest
+       FROM projects AS project
+       JOIN deployments AS active ON active.id = $2 AND active.project_id = project.id
+       JOIN environments AS active_environment ON active_environment.id = active.target_environment_id
+       JOIN build_artifacts AS active_artifact ON active_artifact.deployment_id = active.id
+       JOIN deployments AS standby ON standby.id = $3
+       JOIN environments AS standby_environment ON standby_environment.id = standby.target_environment_id
+       JOIN build_artifacts AS standby_artifact ON standby_artifact.deployment_id = standby.id
+       WHERE project.id = $1`,
+      [input.projectId, input.activeDeploymentId, input.standbyDeploymentId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new OriginActivationError("ORIGIN_FAILOVER_TARGET_MISSING");
+    return row;
+  }
+
+  private assertAwsStandbyContext(
+    row: AwsStandbyContext,
+    input: {
+      projectId: number;
+      activeDeploymentId: number;
+      standbyDeploymentId: number;
+    },
+  ): void {
+    if (
+      String(row.project_id) !== String(input.projectId) ||
+      String(row.standby_project_id) !== String(input.projectId) ||
+      String(row.active_deployment_id) !== String(input.activeDeploymentId) ||
+      String(row.active_failover_target_id) !== String(input.standbyDeploymentId) ||
+      row.active_status !== "succeeded" ||
+      row.standby_status !== "succeeded" ||
+      row.active_environment_type !== "onprem" ||
+      row.standby_environment_type !== "aws" ||
+      !row.active_digest ||
+      row.active_digest !== row.standby_digest ||
+      !row.standby_public_url
+    ) {
+      throw new OriginActivationError("ORIGIN_FAILOVER_TARGET_MISMATCH");
     }
   }
 

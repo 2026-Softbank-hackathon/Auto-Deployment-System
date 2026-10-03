@@ -17,6 +17,8 @@ describe("LaunchAgent plist", () => {
     expect(plist).toContain(
       "<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>",
     );
+    expect(plist).toContain("<key>ONPREM_AGENT_HEARTBEAT_INTERVAL_MS</key>");
+    expect(plist).toContain("<string>2000</string>");
     expect(plist).toContain(
       "<string>/Users/demo/Camellia Agent/bin/camellia-onprem-agent</string>",
     );

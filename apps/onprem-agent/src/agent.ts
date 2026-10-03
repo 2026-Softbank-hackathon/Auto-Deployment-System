@@ -44,7 +44,7 @@ export class AgentService {
     options: AgentServiceOptions = {},
   ) {
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
-    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 2_000;
     this.retryInitialMs = options.retryInitialMs ?? 1_000;
     this.retryMaxMs = options.retryMaxMs ?? 30_000;
     this.leaseDurationMs = options.leaseDurationMs ?? 90_000;

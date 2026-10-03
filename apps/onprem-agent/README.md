@@ -16,7 +16,7 @@
 - `TunnelProvider` 인터페이스와 테스트 전용 `FakeTunnelProvider`
 - 등록·Heartbeat HTTP Client와 권한 제한 장기 Agent 인증정보 파일
 - Job claim·ECR credential·Tunnel 준비·결과 제출 HTTP Client
-- 15초 Heartbeat 기반 90초 Job lease 갱신과 취소 처리
+- 2초 Heartbeat 기반 90초 Job lease 갱신과 취소 처리
 
 외부 노출 방식은 플랫폼 관리 Cloudflare Named Tunnel로 확정됐습니다. Agent는 Compose의 동적 포트로 로컬 헬스체크를 통과한 뒤 `jobId`와 숫자 `localPort`를 서버 경계에 전달합니다. 서버는 `http://127.0.0.1:<localPort>`로 ingress를 설정한 뒤 `tunnelId`, `token`, 외부 `hostname`을 반환하고, Agent는 해당 정보로 `cloudflared`를 실행합니다. Agent 결과의 `localUrl`은 로컬 실행·헬스 결과로 유지하고, 외부 `endpoint`는 검증된 hostname에 `https://`를 적용해 생성합니다.
 

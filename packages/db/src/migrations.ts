@@ -30,5 +30,6 @@ export const MIGRATION_FILES = [
   "023_project_address_change.sql",
   "024_source_patch_i18n.sql",
   "025_platform_ops.sql",
+  "026_automatic_failover.sql",
 ] as const;
 export type MigrationFile = (typeof MIGRATION_FILES)[number];

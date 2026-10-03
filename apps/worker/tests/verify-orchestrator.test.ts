@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Pool } from "@camellia/db";
 import { FinalUrlVerifier } from "../src/final-url-verifier.js";
 import {
+  activateVerifiedDeployment,
   claimVerifyStep,
   createVerifyRequestFingerprint,
   finalizeDeploymentState,
@@ -322,8 +323,26 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
         if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
           return { rows: [] };
         }
+        if (sql.includes("FROM deployments AS deployment")) {
+          return { rows: [{
+            status: currentStatus,
+            project_id: 7,
+            environment_type: "aws",
+            image_digest: `sha256:${"a".repeat(64)}`,
+          }] };
+        }
+        if (sql.includes("SELECT active_deployment_id")) {
+          return { rows: [{ active_deployment_id: null }] };
+        }
+        if (sql.includes("WHERE project_id = $1") && sql.includes("status = 'succeeded'")) {
+          return { rows: [] };
+        }
         if (sql.includes("SELECT status FROM deployments")) {
           return { rows: [{ status: currentStatus }] };
+        }
+        if (sql.includes("SET status = 'succeeded'")) {
+          currentStatus = "succeeded";
+          return { rows: [] };
         }
         if (sql.includes("UPDATE deployments")) {
           currentStatus = params[0] as string;
@@ -358,6 +377,47 @@ describe("finalizeDeploymentState — verify 결과를 deployment 레벨로 반�
       getStatus: () => currentStatus,
     };
   }
+
+  it("AWS→On-Prem 성공 시 동일 digest의 직전 AWS 배포를 fallback으로 기록한다", async () => {
+    const updates: Array<{ sql: string; params: unknown[] }> = [];
+    const client = {
+      query: vi.fn(async (sql: string, params: unknown[] = []) => {
+        if (sql.includes("FROM deployments AS deployment") && sql.includes("FOR UPDATE")) {
+          return { rows: [{
+            status: "verifying",
+            project_id: 7,
+            environment_type: "onprem",
+            image_digest: `sha256:${"a".repeat(64)}`,
+          }] };
+        }
+        if (sql.includes("SELECT active_deployment_id")) {
+          return { rows: [{ active_deployment_id: 41 }] };
+        }
+        if (sql.includes("FROM deployments AS deployment")) {
+          return { rows: [{
+            id: 41,
+            project_id: 7,
+            status: "succeeded",
+            environment_type: "aws",
+            image_digest: `sha256:${"a".repeat(64)}`,
+          }] };
+        }
+        if (sql.includes("UPDATE deployments") || sql.includes("UPDATE projects")) {
+          updates.push({ sql, params });
+        }
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
+
+    await activateVerifiedDeployment(pool, 42);
+
+    expect(updates.find((query) => query.sql.includes("UPDATE deployments"))?.params)
+      .toEqual([42, 41]);
+    expect(updates.find((query) => query.sql.includes("UPDATE projects"))?.params)
+      .toEqual([7, 42]);
+  });
 
   it("succeeded 전이 시 직전 On-Prem만 15분 standby로 두고 더 오래된 런타임은 즉시 정리한다", async () => {
     const startedAt = Date.now();
@@ -526,8 +586,26 @@ describe("Verify rollout — 고정 URL 검증과 Origin 복구", () => {
     });
     const client = {
       query: vi.fn(async (sql: string, params: unknown[] = []) => {
+        if (sql.includes("FROM deployments AS deployment")) {
+          return { rows: [{
+            status: deploymentStatus,
+            project_id: 7,
+            environment_type: "aws",
+            image_digest: `sha256:${"a".repeat(64)}`,
+          }] };
+        }
+        if (sql.includes("SELECT active_deployment_id")) {
+          return { rows: [{ active_deployment_id: null }] };
+        }
+        if (sql.includes("WHERE project_id = $1") && sql.includes("status = 'succeeded'")) {
+          return { rows: [] };
+        }
         if (sql.includes("SELECT status FROM deployments")) {
           return { rows: [{ status: deploymentStatus }] };
+        }
+        if (sql.includes("SET status = 'succeeded'")) {
+          deploymentStatus = "succeeded";
+          return { rows: [] };
         }
         if (sql.includes("UPDATE deployments")) {
           deploymentStatus = String(params[0]);

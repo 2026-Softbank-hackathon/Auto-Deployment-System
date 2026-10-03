@@ -1,6 +1,6 @@
 # Downloads a pinned Camellia on-prem agent release for Windows x64, verifies its SHA-256 and installs it.
 # Published as install-agent.ps1 next to install-agent.sh. Usage:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File install-agent.ps1 v0.1.9
+#   powershell -NoProfile -ExecutionPolicy Bypass -File install-agent.ps1 v0.1.10
 # Kept ASCII-only: Windows PowerShell 5.1 reads BOM-less scripts in the system code page.
 param([string]$Version)
 $ErrorActionPreference = 'Stop'

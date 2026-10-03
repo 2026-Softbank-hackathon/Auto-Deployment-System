@@ -69,8 +69,8 @@ cloudflared --version
 
 ```bash
 curl -fsSL \
-  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.9/install-agent.sh \
-  | sh -s -- v0.1.9
+  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.10/install-agent.sh \
+  | sh -s -- v0.1.10
 ```
 
 로컬 build 결과를 직접 설치할 때는 `dist/main.js`와 `dist/launchd-cli.js`를 만든 뒤 bundle 내부 설치기를 실행합니다.
@@ -99,8 +99,8 @@ cloudflared --version
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest -UseBasicParsing -OutFile "$env:TEMP\install-agent.ps1" `
-  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.9/install-agent.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\install-agent.ps1" v0.1.9
+  https://github.com/2026-Softbank-hackathon/Auto-Deployment-System/releases/download/onprem-agent-v0.1.10/install-agent.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\install-agent.ps1" v0.1.10
 ```
 
 등록과 시작은 설치된 `camellia-onprem-agent.cmd` 하나로 합니다. 등록 토큰은 그 PowerShell 창의 환경변수로만 넘기고 등록 뒤 지웁니다.

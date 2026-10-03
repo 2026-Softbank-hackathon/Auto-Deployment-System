@@ -96,6 +96,7 @@ describe("CloudflaredTunnelProvider", () => {
       environment: {
         PATH: "/usr/local/bin:/usr/bin:/bin",
         HOME: "/Users/agent",
+        SystemRoot: "C:\\Windows",
         ONPREM_AGENT_REGISTRATION_TOKEN: "registration-secret",
         AWS_SECRET_ACCESS_KEY: "aws-secret",
       },
@@ -142,6 +143,7 @@ describe("CloudflaredTunnelProvider", () => {
     expect(processes.requests[0]?.env).toMatchObject({
       PATH: "/usr/local/bin:/usr/bin:/bin",
       HOME: "/Users/agent",
+      SystemRoot: "C:\\Windows",
     });
     expect(processes.requests[0]?.env?.ONPREM_AGENT_REGISTRATION_TOKEN).toBeUndefined();
     expect(processes.requests[0]?.env?.AWS_SECRET_ACCESS_KEY).toBeUndefined();

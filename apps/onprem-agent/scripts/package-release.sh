@@ -27,6 +27,7 @@ if grep -Eq '@camellia/' "$AGENT_ROOT"/dist/*.js; then
 fi
 
 mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR=$(CDPATH= cd -- "$OUTPUT_DIR" && pwd)
 STAGING_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/camellia-agent-package.XXXXXX")
 cleanup() {
   rm -rf "$STAGING_ROOT"
@@ -60,7 +61,27 @@ for ENTRY in "x64:$X64_ASSET" "arm64:$ARM64_ASSET"; do
   )
 done
 
+# Windows는 x64 하나 (Agent 자체는 아키텍처와 무관한 Node 코드, 앱 이미지는 linux/amd64)
+WINDOWS_ASSET="camellia-onprem-agent-$VERSION-windows-x64.zip"
+BUNDLE_ROOT="$STAGING_ROOT/windows-x64/camellia-onprem-agent"
+mkdir -p "$BUNDLE_ROOT/dist" "$BUNDLE_ROOT/install/windows"
+cp "$AGENT_ROOT"/dist/*.js "$BUNDLE_ROOT/dist/"
+cp   "$AGENT_ROOT/install/windows/install.ps1"   "$AGENT_ROOT/install/windows/service.ps1"   "$AGENT_ROOT/install/windows/uninstall.ps1"   "$AGENT_ROOT/install/windows/run-agent.ps1"   "$AGENT_ROOT/install/windows/camellia-onprem-agent.cmd"   "$BUNDLE_ROOT/install/windows/"
+printf '%s
+' "$VERSION" > "$BUNDLE_ROOT/VERSION"
+printf '%s
+' "x64" > "$BUNDLE_ROOT/ARCHITECTURE"
+(
+  cd "$STAGING_ROOT/windows-x64"
+  zip -qr "$OUTPUT_DIR/$WINDOWS_ASSET" camellia-onprem-agent
+)
+(
+  cd "$OUTPUT_DIR"
+  shasum -a 256 "$WINDOWS_ASSET" > "$WINDOWS_ASSET.sha256"
+)
+
 cp "$AGENT_ROOT/install/macos/download-install.sh" "$OUTPUT_DIR/install-agent.sh"
 chmod 755 "$OUTPUT_DIR/install-agent.sh"
+cp "$AGENT_ROOT/install/windows/download-install.ps1" "$OUTPUT_DIR/install-agent.ps1"
 
 echo "Agent Release 자산을 생성했습니다: $OUTPUT_DIR"

@@ -395,7 +395,12 @@ export const ko = {
       hideSteps: '설치 명령 닫기',
       autoRefresh: 'Agent 상태는 이 화면을 열어 둔 동안 10초마다 다시 확인해요.',
       requirementsLabel: '서버 요구 사항',
-      requirements: ['macOS (Intel · Apple Silicon)', 'Node.js 20 이상', 'Docker · Docker Compose v2', 'cloudflared'],
+      osLabel: 'Agent를 설치할 서버의 운영체제',
+      os: { macos: 'macOS', windows: 'Windows' },
+      requirements: {
+        macos: ['macOS (Intel · Apple Silicon)', 'Node.js 20 이상', 'Docker · Docker Compose v2', 'cloudflared'],
+        windows: ['Windows 10 · 11 (x64)', 'Node.js 20 이상', 'Docker Desktop (Compose v2 포함)', 'cloudflared (winget install --id Cloudflare.cloudflared)'],
+      },
       stepInstall: 'Agent 설치',
       stepRegister: 'Agent 등록',
       registerCopy: '1회용 토큰을 발급한 뒤, 나오는 명령을 서버에서 실행해 주세요.',

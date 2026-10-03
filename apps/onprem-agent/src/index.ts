@@ -12,6 +12,7 @@ export * from "./ecr.js";
 export * from "./errors.js";
 export * from "./executor.js";
 export * from "./fakes.js";
+export * from "./file-permissions.js";
 export * from "./health.js";
 export * from "./launchd.js";
 export * from "./logger.js";

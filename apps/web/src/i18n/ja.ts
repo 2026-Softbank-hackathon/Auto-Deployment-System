@@ -381,7 +381,12 @@ export const ja: Messages = {
       hideSteps: 'コマンドを閉じる',
       autoRefresh: 'Agentの状態は、この画面を開いている間10秒ごとに確認します。',
       requirementsLabel: 'サーバーの要件',
-      requirements: ['macOS (Intel · Apple Silicon)', 'Node.js 20以上', 'Docker · Docker Compose v2', 'cloudflared'],
+      osLabel: 'AgentをインストールするサーバーのOS',
+      os: { macos: 'macOS', windows: 'Windows' },
+      requirements: {
+        macos: ['macOS (Intel · Apple Silicon)', 'Node.js 20以上', 'Docker · Docker Compose v2', 'cloudflared'],
+        windows: ['Windows 10 · 11 (x64)', 'Node.js 20以上', 'Docker Desktop (Compose v2を含む)', 'cloudflared (winget install --id Cloudflare.cloudflared)'],
+      },
       stepInstall: 'Agentのインストール',
       stepRegister: 'Agentの登録',
       registerCopy: 'ワンタイムトークンを発行し、表示されたコマンドをサーバーで実行してください。',

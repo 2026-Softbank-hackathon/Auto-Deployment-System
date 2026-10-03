@@ -8,6 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { hasLoosePermissions } from "./file-permissions.js";
 import { randomUUID } from "node:crypto";
 
 export type AgentCredential = {
@@ -81,11 +82,11 @@ export class FileAgentCredentialStore implements AgentCredentialStore {
     if (
       !directoryInfo.isDirectory() ||
       directoryInfo.isSymbolicLink() ||
-      (directoryInfo.mode & 0o077) !== 0
+      hasLoosePermissions(directoryInfo.mode)
     ) {
       throw new Error("Agent 상태 디렉터리 권한은 700이어야 합니다.");
     }
-    if ((fileInfo.mode & 0o077) !== 0) {
+    if (hasLoosePermissions(fileInfo.mode)) {
       throw new Error("Agent 인증정보 파일 권한은 600이어야 합니다.");
     }
 

@@ -33,7 +33,8 @@ const noop = () => {};
 export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRedeployed, onOpenProject }: { deploymentId: string; onBack: () => void; onNewDeployment: () => void; /** 이 배포가 속한 앱의 배포 내역으로 간다 */ onOpenProject?: (projectId: string) => void; /** 재배포로 만든 새 배포의 진행 화면으로 간다 */ onRedeployed: (deploymentId: string) => void }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
-  const [projectName, setProjectName] = useState<string | null>(null);
+  // undefined: 아직 읽는 중 · null: 읽지 못함. 읽기 전에는 이름이 들어가는 버튼을 그리지 않아 문구가 바뀌어 보이지 않게 한다
+  const [projectName, setProjectName] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<unknown>(null);
   const [copied, setCopied] = useState(false);
 
@@ -51,7 +52,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
   useEffect(() => {
     if (!projectId) return;
     let active = true;
-    getProject(projectId).then((project) => { if (active) setProjectName(project.name); }, () => { /* 이름은 없어도 결과 화면은 동작한다 */ });
+    getProject(projectId).then((project) => { if (active) setProjectName(project.name); }, () => { if (active) setProjectName(null); /* 이름은 없어도 결과 화면은 동작한다 */ });
     return () => { active = false; };
   }, [projectId]);
   // 자동 전환(#349)을 이 화면에서도 알리고, 이 배포가 더는 서비스 중이 아니면 LIVE 로 표시하지 않는다.
@@ -122,7 +123,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       {target && <div><dt>{t.result.factTarget}</dt><dd>{target}{status.targetProfile === SERVERLESS_PROFILE && <> <span className="serverless-badge">{t.deploy.serverlessBadge}</span></>}{isAwsStaticSiteProfile(text(status.targetProfile)) && <> <span className="static-site-badge">{t.run.staticSite.badge}</span></>}</dd></div>}
       {isAwsStaticSiteProfile(text(status.targetProfile)) && <div><dt>{t.result.factRuntime}</dt><dd>{t.run.staticSite.aws}</dd></div>}
       {createdAt && succeededAt && <div><dt>{t.result.factDuration}</dt><dd>{elapsed(createdAt, Date.parse(succeededAt))}</dd></div>}
-      {succeededAt && <div><dt>{t.result.factFinished}</dt><dd>{new Date(succeededAt).toLocaleString(t.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>}
+      {succeededAt && <div><dt>{t.result.factFinished}</dt><dd>{new Date(succeededAt).toLocaleString(t.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}</dd></div>}
     </dl>
 
     <StageTimeline deploymentId={deploymentId} />
@@ -130,7 +131,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
     <div className="result-card__actions">
       <DeployKeycap onClick={onNewDeployment}>{t.result.newDeploy}</DeployKeycap>
       <RedeployButton deploymentId={deploymentId} onStarted={onRedeployed} />
-      {projectId && onOpenProject && <Keycap variant="secondary" onClick={() => onOpenProject(projectId)}>{t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</Keycap>}
+      {projectId && onOpenProject && projectName !== undefined && <Keycap variant="secondary" onClick={() => onOpenProject(projectId)}>{t.run.backToApp(projectName ? displayProjectName(projectName) : null)}</Keycap>}
       <Keycap variant="ghost" onClick={onBack}>{t.result.back}</Keycap>
     </div>
   </section></>;

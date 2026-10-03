@@ -295,10 +295,14 @@ export async function finalizeDeploymentState(
 ): Promise<void> {
   let cleanupSchedulingError: unknown;
   try {
-    await transitionTo(deps.pool, deploymentId, nextStatus, {
-      reason,
-      boss: nextStatus === "failed" ? deps.boss : undefined,
-    });
+    if (nextStatus === "succeeded") {
+      await activateVerifiedDeployment(deps.pool, deploymentId);
+    } else {
+      await transitionTo(deps.pool, deploymentId, nextStatus, {
+        reason,
+        boss: deps.boss,
+      });
+    }
   } catch (err) {
     deps.log?.warn(
       { deployment_id: deploymentId, next: nextStatus, err },
@@ -336,6 +340,126 @@ export async function finalizeDeploymentState(
     );
   }
   if (cleanupSchedulingError) throw cleanupSchedulingError;
+}
+
+type SuccessfulDeploymentContext = {
+  status: string;
+  project_id: number | string;
+  environment_type: string | null;
+  image_digest: string | null;
+};
+
+type PreviousDeploymentContext = {
+  id: number | string;
+  project_id: number | string;
+  status: string;
+  environment_type: string | null;
+  image_digest: string | null;
+};
+
+/**
+ * 공개 URL 검증까지 끝난 배포를 실제 서비스 Origin으로 기록한다.
+ * AWS→On-Prem이고 digest가 같을 때만 직전 AWS 배포를 명시적 Failover 대상으로 보존한다.
+ */
+export async function activateVerifiedDeployment(
+  pool: Pool,
+  deploymentId: number,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const currentResult = await client.query<SuccessfulDeploymentContext>(
+      `SELECT deployment.status, deployment.project_id,
+              environment.type AS environment_type,
+              artifact.image_digest
+       FROM deployments AS deployment
+       LEFT JOIN environments AS environment ON environment.id = deployment.target_environment_id
+       LEFT JOIN build_artifacts AS artifact ON artifact.deployment_id = deployment.id
+       WHERE deployment.id = $1
+       FOR UPDATE OF deployment`,
+      [deploymentId],
+    );
+    const current = currentResult.rows[0];
+    if (!current) {
+      throw new Error(`activateVerifiedDeployment: deployment ${deploymentId} not found`);
+    }
+    if (current.status !== "verifying" && current.status !== "rollback") {
+      throw new Error(
+        `activateVerifiedDeployment: invalid transition ${current.status} → succeeded for deployment ${deploymentId}`,
+      );
+    }
+
+    const projectResult = await client.query<{ active_deployment_id: number | string | null }>(
+      `SELECT active_deployment_id
+       FROM projects
+       WHERE id = $1
+       FOR UPDATE`,
+      [current.project_id],
+    );
+    if (!projectResult.rows[0]) {
+      throw new Error(`activateVerifiedDeployment: project ${String(current.project_id)} not found`);
+    }
+
+    let previousId = projectResult.rows[0].active_deployment_id;
+    if (previousId === null) {
+      const previousResult = await client.query<{ id: number | string }>(
+        `SELECT id
+         FROM deployments
+         WHERE project_id = $1 AND id <> $2 AND status = 'succeeded'
+         ORDER BY succeeded_at DESC NULLS LAST, id DESC
+         LIMIT 1`,
+        [current.project_id, deploymentId],
+      );
+      previousId = previousResult.rows[0]?.id ?? null;
+    }
+
+    let failoverTargetId: number | null = null;
+    if (previousId !== null && current.environment_type === "onprem") {
+      const previousResult = await client.query<PreviousDeploymentContext>(
+        `SELECT deployment.id, deployment.project_id, deployment.status,
+                environment.type AS environment_type,
+                artifact.image_digest
+         FROM deployments AS deployment
+         LEFT JOIN environments AS environment ON environment.id = deployment.target_environment_id
+         LEFT JOIN build_artifacts AS artifact ON artifact.deployment_id = deployment.id
+         WHERE deployment.id = $1`,
+        [previousId],
+      );
+      const previous = previousResult.rows[0];
+      if (
+        previous &&
+        String(previous.project_id) === String(current.project_id) &&
+        previous.status === "succeeded" &&
+        previous.environment_type === "aws" &&
+        current.image_digest !== null &&
+        current.image_digest === previous.image_digest
+      ) {
+        failoverTargetId = Number(previous.id);
+      }
+    }
+
+    await client.query(
+      `UPDATE deployments
+       SET status = 'succeeded',
+           updated_at = NOW(),
+           succeeded_at = COALESCE(succeeded_at, NOW()),
+           failover_target_deployment_id = $2
+       WHERE id = $1`,
+      [deploymentId, failoverTargetId],
+    );
+    await client.query(
+      `UPDATE projects
+       SET active_deployment_id = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [current.project_id, deploymentId],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function scheduleOnpremRuntimeCleanup(

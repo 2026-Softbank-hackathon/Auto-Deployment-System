@@ -134,6 +134,28 @@ describe.skipIf(!databaseUrl)("프로젝트 요약 · 배포 이력: 실제 Post
     expect(a.latest?.deploymentId).toBe(String(building));
   });
 
+  it("자동 Failover 뒤에는 더 오래된 AWS 배포도 명시적인 active deployment가 된다", async () => {
+    await pool.query(
+      `UPDATE projects SET active_deployment_id = $2 WHERE id = $1`,
+      [appA, firstSucceeded],
+    );
+    try {
+      const project = await svc.get(appA);
+      expect(project.live).toMatchObject({
+        deploymentId: String(firstSucceeded),
+        environmentType: "aws",
+      });
+      const deployments = await svc.listDeployments(appA, { limit: 20 });
+      expect(deployments.items.filter((deployment) => deployment.isLive).map((deployment) => deployment.id))
+        .toEqual([String(firstSucceeded)]);
+    } finally {
+      await pool.query(
+        `UPDATE projects SET active_deployment_id = $2 WHERE id = $1`,
+        [appA, onpremSucceeded],
+      );
+    }
+  });
+
   it("GET /projects/:id/deployments — 환경 정보와 isLive (live 배포 하나만 true)", async () => {
     const list = await svc.listDeployments(appA, { limit: 20 });
 

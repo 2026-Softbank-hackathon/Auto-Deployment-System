@@ -186,15 +186,20 @@ export function projectToDto(row: ProjectRow | ProjectSummaryRow, platformDomain
 }
 
 /**
- * 지금 프로젝트 주소로 서비스 중인 배포 = 가장 최근에 성공한 배포.
- * verify 가 성공할 때마다 공유 주소의 origin 을 그 배포로 바꾸므로 마지막 성공이 서비스 중이다.
+ * 지금 프로젝트 주소로 서비스 중인 배포 = 명시적으로 기록한 active deployment.
+ * 마이그레이션 전 row만 기존 계약인 가장 최근 성공 배포로 보완한다.
  * `p` 는 바깥 쿼리의 프로젝트 id 식.
  */
 function liveDeploymentIdSql(p: string): string {
-  return `SELECT ld.id FROM deployments ld
-          WHERE ld.project_id = ${p} AND ld.status = 'succeeded'
-          ORDER BY ld.succeeded_at DESC NULLS LAST, ld.id DESC
-          LIMIT 1`;
+  return `SELECT COALESCE(
+            (SELECT active_project.active_deployment_id
+             FROM projects active_project
+             WHERE active_project.id = ${p}),
+            (SELECT ld.id FROM deployments ld
+             WHERE ld.project_id = ${p} AND ld.status = 'succeeded'
+             ORDER BY ld.succeeded_at DESC NULLS LAST, ld.id DESC
+             LIMIT 1)
+          )`;
 }
 
 /** 프로젝트 + live · latest 요약 — 프로젝트마다 쿼리를 따로 날리지 않도록 LATERAL 로 한 번에 읽는다 */

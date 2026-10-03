@@ -36,6 +36,11 @@ import { S3TerraformStateStore } from "./terraform-state-store.js";
 import { EcsRolloutWaiter } from "./ecs-rollout.js";
 import { LambdaRolloutWaiter } from "./lambda-rollout.js";
 import { StaticSitePublisher, resolveEgressIp } from "./static-site-publisher.js";
+import {
+  FailoverMonitor,
+  loadFailoverConfig,
+  PostgresFailoverStore,
+} from "./failover-monitor.js";
 
 const log = pino({ name: "worker" });
 
@@ -59,12 +64,13 @@ async function main(): Promise<void> {
   const registrySession = new DockerRegistrySession();
   const cloudflareAccountId = process.env["CLOUDFLARE_ACCOUNT_ID"]?.trim();
   const cloudflareApiToken = process.env["CLOUDFLARE_API_TOKEN"]?.trim();
+  const platformDomain = process.env["DEMO_PLATFORM_DOMAIN"]?.trim();
   const originActivator = new DeploymentOriginActivator(pool, {
     cloudflare: cloudflareAccountId && cloudflareApiToken
       ? new CloudflareClient({ accountId: cloudflareAccountId, apiToken: cloudflareApiToken })
       : undefined,
     zoneId: process.env["CLOUDFLARE_ZONE_ID"],
-    platformDomain: process.env["DEMO_PLATFORM_DOMAIN"],
+    platformDomain,
   });
   const dnsActivationChecker = new PublicDnsActivationChecker();
   const finalUrlVerifier = new FinalUrlVerifier();
@@ -101,7 +107,7 @@ async function main(): Promise<void> {
     ecsRolloutWaiter: new EcsRolloutWaiter(),
     lambdaRolloutWaiter: new LambdaRolloutWaiter(),
     // 정적 사이트 (#274)
-    platformDomain: process.env["DEMO_PLATFORM_DOMAIN"]?.trim() || undefined,
+    platformDomain: platformDomain || undefined,
     staticSitePublisher: new StaticSitePublisher(),
     egressIpResolver: () => resolveEgressIp(),
   };
@@ -127,6 +133,20 @@ async function main(): Promise<void> {
     activeJobs: activeJobCount,
   });
   await heartbeat.start();
+  const failoverConfig = loadFailoverConfig();
+  if (failoverConfig.enabled && !platformDomain) {
+    throw new Error("FAILOVER_ENABLED requires DEMO_PLATFORM_DOMAIN");
+  }
+  const failoverMonitor = platformDomain
+    ? new FailoverMonitor({
+        store: new PostgresFailoverStore(pool, platformDomain),
+        originActivator,
+        finalUrlVerifier,
+        config: failoverConfig,
+        log,
+      })
+    : undefined;
+  await failoverMonitor?.start();
   const metricsSampler = process.platform === "linux"
     ? createHostMetricsSampler({
         pool,
@@ -148,6 +168,7 @@ async function main(): Promise<void> {
       markDraining: () => heartbeat.markDraining(),
       stop: async () => {
         metricsSampler?.stop();
+        failoverMonitor?.stop();
         await heartbeat.stop();
       },
     },

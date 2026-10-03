@@ -60,7 +60,7 @@ export function loadAgentConfig(
     heartbeatIntervalMs: positiveInteger(
       environment,
       "ONPREM_AGENT_HEARTBEAT_INTERVAL_MS",
-      15_000,
+      2_000,
     ),
   };
 }

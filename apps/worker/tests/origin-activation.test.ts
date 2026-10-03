@@ -81,6 +81,75 @@ function cloudflare() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("DeploymentOriginActivator", () => {
+  it("동일 digest로 연결된 AWS Standby만 자동 Failover Origin으로 활성화한다", async () => {
+    const failoverContext = {
+      project_id: "4",
+      project_subdomain: null,
+      active_deployment_id: "42",
+      active_status: "succeeded",
+      active_environment_type: "onprem",
+      active_failover_target_id: "41",
+      active_digest: digest,
+      standby_project_id: "4",
+      standby_status: "succeeded",
+      standby_environment_type: "aws",
+      standby_public_url: "http://demo.ap-northeast-2.elb.amazonaws.com",
+      standby_digest: digest,
+    };
+    const query = vi.fn(async () => ({ rows: [failoverContext] }));
+    const cf = cloudflare();
+    const receipt = await new DeploymentOriginActivator(queryPool(query), {
+      cloudflare: cf,
+      zoneId: "zone-1",
+      platformDomain: "example.com",
+    }).activateAwsStandby({
+      projectId: 4,
+      activeDeploymentId: 42,
+      standbyDeploymentId: 41,
+    });
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(cf.switchServiceOrigin).toHaveBeenCalledWith({
+      zoneId: "zone-1",
+      serviceHostname: "service-4.example.com",
+      originHostname: "demo.ap-northeast-2.elb.amazonaws.com",
+    });
+    expect(receipt.previousOrigin).toEqual({
+      hostname: "old-origin.example.com",
+      proxied: true,
+    });
+  });
+
+  it("AWS Standby digest가 현재 On-Prem과 다르면 자동 전환하지 않는다", async () => {
+    const query = vi.fn(async () => ({ rows: [{
+      project_id: "4",
+      project_subdomain: null,
+      active_deployment_id: "42",
+      active_status: "succeeded",
+      active_environment_type: "onprem",
+      active_failover_target_id: "41",
+      active_digest: digest,
+      standby_project_id: "4",
+      standby_status: "succeeded",
+      standby_environment_type: "aws",
+      standby_public_url: "http://demo.ap-northeast-2.elb.amazonaws.com",
+      standby_digest: `sha256:${"b".repeat(64)}`,
+    }] }));
+    const cf = cloudflare();
+
+    await expect(new DeploymentOriginActivator(queryPool(query), {
+      cloudflare: cf,
+      zoneId: "zone-1",
+      platformDomain: "example.com",
+    }).activateAwsStandby({
+      projectId: 4,
+      activeDeploymentId: 42,
+      standbyDeploymentId: 41,
+    })).rejects.toThrow("ORIGIN_FAILOVER_TARGET_MISMATCH");
+
+    expect(cf.switchServiceOrigin).not.toHaveBeenCalled();
+  });
+
   it("Agent Job 실행 전에 검증용 Named Tunnel과 CNAME을 준비한다", async () => {
     const cf = cloudflare();
     const activator = new DeploymentOriginActivator({ query: vi.fn() } as unknown as Pool, {

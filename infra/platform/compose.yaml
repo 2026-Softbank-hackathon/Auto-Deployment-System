@@ -128,6 +128,14 @@ services:
       CLOUDFLARE_API_TOKEN:
       CLOUDFLARE_ZONE_ID:
       CLOUDFLARE_ACCOUNT_ID:
+      # On-Prem 장애 자동 전환 (#349). 기본은 꺼져 있고 데모 환경에서만 명시적으로 켠다.
+      FAILOVER_ENABLED:
+      FAILOVER_CHECK_INTERVAL_MS:
+      FAILOVER_AGENT_HEARTBEAT_INTERVAL_MS:
+      FAILOVER_AGENT_TIMEOUT_MS:
+      FAILOVER_PUBLIC_FAILURE_THRESHOLD:
+      FAILOVER_PROBE_INTERVAL_MS:
+      FAILOVER_COOLDOWN_MS:
     volumes:
       - storage:/data/storage
       # 프로젝트 · 환경별 Terraform 작업 폴더 — 배포 사이에 init 결과를 남겨 재배포 때 init 을 건너뛴다 (#260)

@@ -59,6 +59,7 @@ function harness(options: {
   envs?: EnvRow[];
   onpremDeploymentIds?: string[];
   cleanupStatuses?: Record<string, string>;
+  offlineAgentDeploymentIds?: string[];
   deploymentIds?: string[];
   stateExists?: boolean;
   destroyFailure?: Error;
@@ -84,6 +85,7 @@ function harness(options: {
         rows: (options.onpremDeploymentIds ?? []).map((id) => ({
           deployment_id: id,
           status: options.cleanupStatuses?.[id] ?? "succeeded",
+          agent_online: !(options.offlineAgentDeploymentIds ?? []).includes(id),
         })),
       };
     }
@@ -404,6 +406,39 @@ describe("handleTeardown", () => {
     await handleTeardown({ data: { project_id: 24 } }, h.deps);
 
     expect(h.removeProjectOrigins).not.toHaveBeenCalled();
+    expect(h.sqls().some((s) => s.startsWith("DELETE FROM projects"))).toBe(false);
+    const failed = h.queries.find((q) => q.sql.includes("SET deletion_status = 'failed'"))!;
+    expect(failed.params[1]).toBe("ONPREM_CLEANUP_TIMEOUT");
+  });
+
+  it("Agent 가 꺼진 연결의 정리는 기다리지 않고 직접 정리 경고를 남긴 뒤 삭제를 이어 간다 (#357)", async () => {
+    const h = harness({
+      envs: [],
+      onpremDeploymentIds: ["42", "43"],
+      cleanupStatuses: { "42": "pending", "43": "succeeded" },
+      offlineAgentDeploymentIds: ["42"],
+    });
+    const sleep = vi.fn(async () => undefined);
+    h.deps.onpremCleanupWait = { timeoutMs: 0, pollIntervalMs: 1, sleep };
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
+    expect(sleep).not.toHaveBeenCalled();
+    expect(h.sqls().some((s) => s.startsWith("DELETE FROM projects"))).toBe(true);
+    expect(h.auditLog()?.metadata.warnings).toEqual(["ONPREM_MANUAL_CLEANUP"]);
+  });
+
+  it("Agent 가 켜져 있는 연결의 정리는 그대로 기다린다", async () => {
+    const h = harness({
+      envs: [],
+      onpremDeploymentIds: ["42", "43"],
+      cleanupStatuses: { "42": "pending", "43": "pending" },
+      offlineAgentDeploymentIds: ["43"],
+    });
+    h.deps.onpremCleanupWait = { timeoutMs: 0, pollIntervalMs: 1, sleep: vi.fn(async () => undefined) };
+
+    await handleTeardown({ data: { project_id: 24 } }, h.deps);
+
     expect(h.sqls().some((s) => s.startsWith("DELETE FROM projects"))).toBe(false);
     const failed = h.queries.find((q) => q.sql.includes("SET deletion_status = 'failed'"))!;
     expect(failed.params[1]).toBe("ONPREM_CLEANUP_TIMEOUT");

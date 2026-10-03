@@ -2,7 +2,7 @@
  * apps/worker/src/handlers/teardown.ts
  *
  * 앱 삭제 (#247) — DELETE /projects/:id 가 넣은 teardown 잡.
- * 1. Agent cleanup Job 완료를 확인해 온프레미스 런타임 정리
+ * 1. Agent cleanup Job 완료를 확인해 온프레미스 런타임 정리 (Agent 가 꺼진 연결은 기다리지 않고 경고만 남김, #357)
  * 2. 공개 주소({subdomain}, #300) · 온프레미스 검증 주소 DNS 와 Tunnel ingress 정리 (best effort)
  * 3. 이 앱을 배포한 AWS 연결마다 provision 과 같은 backend · 자격 증명으로 terraform destroy → state 삭제
  * 4. 배포 기록(deployments 와 딸린 row) · 프로젝트 전용 연결 · 시크릿 · 환경변수 삭제 (공용 연결은 그대로)
@@ -34,6 +34,8 @@ const FINISHED_DEPLOYMENT_STATUSES = ["succeeded", "failed", "cancelled", "rejec
 const DEFAULT_AWS_MODULE_REF = "infra/terraform/profiles/aws-ecs-basic";
 const DEFAULT_ONPREM_CLEANUP_TIMEOUT_MS = 120_000;
 const DEFAULT_ONPREM_CLEANUP_POLL_INTERVAL_MS = 1_000;
+/** API 의 Agent 온라인 판단(environment-service AGENT_ONLINE_WITHIN_SECONDS)과 같은 기준 */
+const AGENT_ONLINE_WITHIN_SECONDS = 90;
 
 /**
  * IR 을 읽을 수 없을 때 쓰는 변수. destroy 는 state 에 있는 리소스를 지우므로
@@ -109,7 +111,12 @@ export async function handleTeardown(
     ).rows.map((row) => Number(row.id));
 
     // 프로젝트/배포 row를 지우면 cleanup Job도 cascade 되므로 Agent 완료 확인이 선행되어야 한다.
-    await waitForOnpremCleanup(deps, onpremDeploymentIds);
+    // Agent 가 꺼져 있으면(등록 안 됨 포함) 받을 곳이 없어 영원히 끝나지 않으므로 직접 정리하라는 경고를 남기고 넘어간다
+    const unattended = await waitForOnpremCleanup(deps, onpremDeploymentIds);
+    if (unattended.length > 0 && !warnings.includes("ONPREM_MANUAL_CLEANUP")) {
+      warnings.push("ONPREM_MANUAL_CLEANUP");
+      deps.log?.warn({ project_id: projectId, deployment_ids: unattended }, "teardown: on-prem agent offline — cleanup skipped");
+    }
 
     // 1. 공개 주소부터 내린다 — 지울 ALB 를 가리키는 레코드가 남지 않게
     const cloudflareFailures = await removeOrigins(deps, projectId, project.subdomain, onpremDeploymentIds);
@@ -158,11 +165,12 @@ export async function handleTeardown(
   }
 }
 
+/** 정리가 끝날 때까지 기다린다. Agent 가 꺼져 있어 기다리지 않은 배포 ID 를 돌려준다 */
 async function waitForOnpremCleanup(
   deps: WorkerDeps,
   deploymentIds: number[],
-): Promise<void> {
-  if (deploymentIds.length === 0) return;
+): Promise<number[]> {
+  if (deploymentIds.length === 0) return [];
   const timeoutMs = deps.onpremCleanupWait?.timeoutMs ?? DEFAULT_ONPREM_CLEANUP_TIMEOUT_MS;
   const pollIntervalMs = deps.onpremCleanupWait?.pollIntervalMs
     ?? DEFAULT_ONPREM_CLEANUP_POLL_INTERVAL_MS;
@@ -171,17 +179,23 @@ async function waitForOnpremCleanup(
   const deadline = Date.now() + timeoutMs;
 
   while (true) {
-    const result = await deps.pool.query<{ deployment_id: number | string; status: string }>(
-      `SELECT deployment_id, status
-       FROM onprem_agent_cleanup_jobs
-       WHERE deployment_id = ANY($1::bigint[])`,
+    const result = await deps.pool.query<{ deployment_id: number | string; status: string; agent_online?: boolean }>(
+      `SELECT cleanup.deployment_id, cleanup.status,
+              COALESCE(agent.last_seen_at > NOW() - INTERVAL '${AGENT_ONLINE_WITHIN_SECONDS} seconds', FALSE) AS agent_online
+       FROM onprem_agent_cleanup_jobs AS cleanup
+       LEFT JOIN agents AS agent ON agent.environment_id = cleanup.environment_id
+       WHERE cleanup.deployment_id = ANY($1::bigint[])`,
       [deploymentIds],
     );
     const statuses = new Map(
       result.rows.map((row) => [Number(row.deployment_id), row.status]),
     );
-    if (deploymentIds.every((id) => statuses.get(id) === "succeeded")) return;
-    if (deploymentIds.some((id) => statuses.get(id) === "failed")) {
+    const unattended = result.rows
+      .filter((row) => row.status !== "succeeded" && row.agent_online === false)
+      .map((row) => Number(row.deployment_id));
+    const waiting = deploymentIds.filter((id) => !unattended.includes(id));
+    if (waiting.every((id) => statuses.get(id) === "succeeded")) return unattended;
+    if (waiting.some((id) => statuses.get(id) === "failed")) {
       throw new TeardownError("ONPREM_CLEANUP_FAILED");
     }
     if (Date.now() >= deadline) {

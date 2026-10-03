@@ -492,6 +492,9 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
 .toast { pointer-events: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; background: var(--surface); border: var(--border); border-left-width: 6px; border-radius: var(--radius-card); box-shadow: var(--shadow-rest); }
 .toast.is-success { border-left-color: var(--moss-text); }
+/* 화면 안에 놓는 알림 (앱 상세의 실행 환경 전환 안내). 떠 있는 알림과 같은 모양을 쓴다 */
+.page-toast { display: grid; }
+.page-toast .toast { margin-bottom: 18px; }
 .toast.is-failed { border-left-color: var(--brick-text); }
 .toast__body { display: grid; gap: 2px; min-width: 0; }
 .toast__body strong { color: var(--ink); }

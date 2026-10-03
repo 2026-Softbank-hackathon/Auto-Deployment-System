@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { listProjects, type ProjectSummary } from '../../api/deployment-api';
 import { deploymentStatusView } from '../deployment-status/status-view';
 import { readCache, writeCache } from '../../lib/page-cache';
@@ -11,6 +11,8 @@ import { isStalled } from './format';
 const PAGE_SIZE = 100;
 const MAX_PAGES = 5;
 const ACTIVE_REFRESH_MS = 10_000;
+/** 대시보드가 보고 있는 동안 다시 읽는 주기. 자동 전환(#349)은 새 배포 없이 live 만 바뀌므로, 진행 중인 배포가 없어도 읽어야 보인다 */
+export const LIVE_REFRESH_MS = 5_000;
 const CACHE_KEY = 'project-list';
 
 interface CachedList { projects: ProjectSummary[]; loadedAt: number }
@@ -45,19 +47,30 @@ export function latestActive(project: ProjectSummary, now: number): boolean {
   return project.latest !== null && deploymentStatusView(project.latest.status).outcome === 'active' && !isStalled(true, project.latest.createdAt, now);
 }
 
-export function useProjectList() {
+/**
+ * @param liveRefreshMs 주면 화면이 보이는 동안 이 주기로 계속 다시 읽고, 다시 보이게 되면 바로 한 번 읽는다 (대시보드).
+ *   없으면 진행 중인 배포 · 삭제 중인 앱이 있을 때만 다시 읽는다 (진행 중 띠).
+ */
+export function useProjectList(liveRefreshMs?: number) {
   // 직전에 받은 목록이 있으면 먼저 보여 주고, 바로 다시 읽어 바꿔 끼운다.
   const [state, setState] = useState<ListState>(() => {
     const cached = readCache<CachedList>(CACHE_KEY);
     return cached ? { phase: 'ready', ...cached } : { phase: 'loading' };
   });
 
+  /** 진행 중인 요청이 있는지 (겹쳐 보내지 않는다) */
+  const busy = useRef(false);
   const refresh = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
     try {
       const projects = await loadProjects();
       setState({ phase: 'ready', projects, loadedAt: Date.now() });
     } catch (error) {
-      setState({ phase: 'error', error });
+      // 이미 보여 주던 목록이 있으면 일시적인 조회 실패로 지우지 않는다. 다음 주기에 다시 읽는다.
+      setState((current) => (current.phase === 'ready' ? current : { phase: 'error', error }));
+    } finally {
+      busy.current = false;
     }
   }, []);
 
@@ -66,10 +79,13 @@ export function useProjectList() {
   // 진행 중인 배포나 삭제 중인 앱이 있을 때만 목록을 다시 읽는다 (진행률을 추정하지 않는다). 삭제가 끝난 앱은 목록에서 빠진다.
   const hasActive = state.phase === 'ready' && state.projects.some((project) => latestActive(project, state.loadedAt) || project.deletion?.status === 'deleting');
   useEffect(() => {
-    if (!hasActive) return;
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, ACTIVE_REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [hasActive, refresh]);
+    if (liveRefreshMs === undefined && !hasActive) return;
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, liveRefreshMs ?? ACTIVE_REFRESH_MS);
+    if (liveRefreshMs === undefined) return () => window.clearInterval(timer);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [hasActive, refresh, liveRefreshMs]);
 
   const retry = useCallback(() => { setState({ phase: 'loading' }); void refresh(); }, [refresh]);
 

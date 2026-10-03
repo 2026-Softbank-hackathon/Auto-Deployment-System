@@ -8,7 +8,7 @@ import { Marble } from '../components/ui/Marble';
 import { StatusTape } from '../components/ui/StatusTape';
 import { displayProjectName, elapsed, hostOf, isStalled, relativeTime, safeHttpUrl } from '../features/dashboard/format';
 import { MiniRail } from '../features/dashboard/MiniRail';
-import { latestActive, useProjectList } from '../features/dashboard/useProjectList';
+import { latestActive, LIVE_REFRESH_MS, useProjectList } from '../features/dashboard/useProjectList';
 import { deploymentStatusView } from '../features/deployment-status/status-view';
 import { errorMessage, useI18n } from '../i18n/I18nProvider';
 
@@ -172,7 +172,8 @@ function Counts({ projects: all, now }: { projects: ProjectSummary[]; now: numbe
 export function DashboardPage({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useI18n();
   const copy = t.dashboard;
-  const { state, retry } = useProjectList();
+  // 보고 있는 동안 계속 다시 읽는다 — 서비스 위치는 서버의 project.live 를 그대로 따른다 (자동 전환 #349)
+  const { state, retry } = useProjectList(LIVE_REFRESH_MS);
   const searchId = useId();
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);

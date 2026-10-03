@@ -53,13 +53,15 @@ async function loadDeployTargets(projectId: string): Promise<EnvironmentSummary[
  * 행마다 "⋯" 메뉴가 있고, 끝난 배포(성공 · 실패 · 중단)는 거기서 재배포한다.
  * 성공한 이전 버전은 롤백(같은 환경에 그 배포를 다시 배포)할 수 있고, projectId를 주면 다른 종류의 환경(AWS ↔ 온프레미스)으로도 배포할 수 있다.
  */
-export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, onChanged, projectId }: {
+export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, onChanged, projectId, locked }: {
   items: DeploymentListItem[]; now: number; onNavigate: Navigate;
   searchPlaceholder: string;
   /** 배포 상태를 바꾼 뒤(취소) 목록을 다시 읽게 한다 */
   onChanged?: () => void;
   /** 한 프로젝트의 목록일 때. 이 프로젝트의 연결을 읽어 "다른 환경으로 배포"를 보여 준다 */
   projectId?: string;
+  /** 이 목록의 재배포 동작을 모두 막는 이유 (예: 앱을 삭제하는 중). 있으면 버튼 · 메뉴가 이 이유와 함께 막힌다 */
+  locked?: string;
 }) {
   const { t } = useI18n();
   const searchId = useId();
@@ -84,6 +86,9 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
   // 2시간 넘게 멈춘 배포는 진행 중으로 치지 않지만, 환경을 잡고 있는 상태면 서버가 거절하므로 그대로 막는다.
   const blocked = (item: DeploymentListItem) => items.some((other) => other.id !== item.id && other.projectName === item.projectName
     && !finished(other) && (LOCKING_STATUSES.has(other.status) || !isStalled(true, other.createdAt, now)));
+
+  /** 재배포 · 롤백 · 환경 전환을 지금 할 수 없는 이유. 할 수 있으면 undefined */
+  const blockReason = (item: DeploymentListItem): string | undefined => locked ?? (blocked(item) ? t.redeploy.blocked : undefined);
 
   const [starting, setStarting] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ id: string; title: string; error: unknown; known?: Partial<Record<string, string>> } | null>(null);
@@ -151,10 +156,10 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
   function switchItems(item: DeploymentListItem): RowMenuItem[] {
     const other = item.environmentType === 'aws' ? t.deploy.targets.onprem : item.environmentType === 'onprem' ? t.deploy.targets.aws : t.versions.otherConnection;
     const none = Array.isArray(targets) && switchTargets(item).length === 0;
-    const disabledReason = blocked(item) ? t.redeploy.blocked
-      : targets === null ? t.versions.switchLoading
+    const disabledReason = blockReason(item)
+      ?? (targets === null ? t.versions.switchLoading
         : targets === 'error' ? t.versions.switchLoadError
-          : none ? t.versions.switchNeedsConnection(other) : undefined;
+          : none ? t.versions.switchNeedsConnection(other) : undefined);
     return [
       { key: 'switch', label: t.versions.switchEnv, onSelect: () => { ask({}); setSwitchSource(item); }, disabledReason },
       ...(none ? [{ key: 'connections', label: t.versions.goConnections, href: CONNECTIONS_PATH }] : []),
@@ -172,7 +177,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     return [{
       key: 'mode', label,
       onSelect: () => void redeploy(item, t.redeploy.failed, undefined, serverless ? 'container' : 'serverless'),
-      disabledReason: blocked(item) ? t.redeploy.blocked : undefined,
+      disabledReason: blockReason(item),
     }];
   }
 
@@ -184,7 +189,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
     const outcome = deploymentStatusView(item.status).outcome;
     // 기본 버튼이 "열기"인 건 지금 서비스 중인 배포뿐이다 (DeploymentRow)
     const opensLiveUrl = outcome === 'success' && item.isLive && safeHttpUrl(item.publicUrl) !== null;
-    const blockedReason = blocked(item) ? t.redeploy.blocked : undefined;
+    const blockedReason = blockReason(item);
     return [
       { key: 'redeploy', label: starting === item.id ? t.redeploy.starting : t.redeploy.button, onSelect: () => void redeploy(item, t.redeploy.failed), disabledReason: blockedReason },
       // 분석까지 끝난 배포만 다시 배포할 수 있다. 실패한 배포도 분석 뒤에 실패했으면 된다 (분석 결과가 없으면 서버가 거절).
@@ -204,7 +209,7 @@ export function DeploymentBrowser({ items, now, onNavigate, searchPlaceholder, o
   function liveActions(item: DeploymentListItem) {
     const url = safeHttpUrl(item.publicUrl);
     const busy = starting !== null;
-    const blockedReason = blocked(item) ? t.redeploy.blocked : null;
+    const blockedReason = blockReason(item) ?? null;
     const switchItem = projectId ? switchItems(item)[0] : undefined;
     const needsConnection = Array.isArray(targets) && switchTargets(item).length === 0;
     const mode = modeItems(item)[0];

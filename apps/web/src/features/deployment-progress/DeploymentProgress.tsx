@@ -455,7 +455,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         </figure>
 
         {/* 자동 전환 안내(글자). 장면은 위의 배포 장면이 보여 주므로 여기서는 글자만 */}
-        <LiveSwitchNotice liveSwitch={liveSwitch} onDismiss={dismissLiveSwitch} scene={false} />
+        {/* 장면으로 자동 전환을 보여 주는 동안에는 알림을 미루고, 집이 AWS 에 내려앉은 뒤에 띄운다 */}
+        <LiveSwitchNotice liveSwitch={scenePhase !== null && scenePhase !== 'recovered' ? null : liveSwitch} onDismiss={dismissLiveSwitch} scene={false} />
 
         <HealthProgress deploymentId={deploymentId} status={currentStatus} />
 

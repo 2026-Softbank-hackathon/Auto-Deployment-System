@@ -28,6 +28,7 @@ import { LogService } from "./services/log-service.js";
 import { DeploymentHealthService } from "./services/deployment-health-service.js";
 import { DiagnosisService } from "./services/diagnosis-service.js";
 import { AiUsageService } from "./services/ai-usage-service.js";
+import { CostEstimateService } from "./services/cost-estimate-service.js";
 import { SecretService } from "./services/secret-service.js";
 import { EnvironmentService } from "./services/environment-service.js";
 import { EnvVarService } from "./services/env-var-service.js";
@@ -55,6 +56,7 @@ import deploymentLogsRoutes from "./routes/deployment-logs.js";
 import deploymentHealthRoutes from "./routes/deployment-health.js";
 import deploymentDiagnosisRoutes from "./routes/deployment-diagnosis.js";
 import deploymentAiUsageRoutes from "./routes/deployment-ai-usage.js";
+import deploymentCostEstimateRoutes from "./routes/deployment-cost-estimate.js";
 import secretsRoutes from "./routes/secrets.js";
 import environmentsRoutes from "./routes/environments.js";
 import authRoutes from "./routes/auth.js";
@@ -140,6 +142,7 @@ export async function buildServer(opts: BuildServerOptions) {
   const deploymentHealthService = new DeploymentHealthService(opts.pool);
   const diagnosisService = new DiagnosisService(opts.pool);
   const aiUsageService = new AiUsageService(opts.pool);
+  const costEstimateService = new CostEstimateService(opts.pool);
   const secretMasterKey = opts.secretMasterKey ?? (await import("node:crypto")).randomBytes(32);
   const secretService = new SecretService(opts.pool, secretMasterKey);
   const environmentService = new EnvironmentService(opts.pool);
@@ -285,6 +288,11 @@ export async function buildServer(opts: BuildServerOptions) {
     v1.register(deploymentAiUsageRoutes, {
       prefix: "/deployments",
       aiUsageService,
+    });
+
+    v1.register(deploymentCostEstimateRoutes, {
+      prefix: "/deployments",
+      costEstimateService,
     });
 
     v1.register(secretsRoutes, {

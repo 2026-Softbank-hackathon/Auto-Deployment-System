@@ -11,6 +11,7 @@
  *   GET   /deployments/:id/health                        → 200 DeploymentHealth
  *   GET   /deployments/:id/diagnosis                     → 200 Diagnosis
  *   GET   /deployments/:id/ai-usage                      → 200 AiUsage
+ *   GET   /deployments/:id/cost-estimate                 → 200 DeploymentCostEstimate
  *   GET   /deployments/:id/events                        → SSE (events.ts)
  *
  * `:id` 는 IdParamsSchema (common.ts).
@@ -372,3 +373,49 @@ export const AiUsageSchema = z
   })
   .strict();
 export type AiUsage = z.infer<typeof AiUsageSchema>;
+
+// ── GET /deployments/:id/cost-estimate (#327) ─────────────────────────────────
+
+export const COST_LINE_ITEM_KEYS = [
+  "fargate_compute",
+  "load_balancer",
+  "public_ipv4",
+  "rds_instance",
+  "rds_storage",
+  "rds_secret",
+  "lambda_requests",
+  "s3_storage",
+  "own_server",
+] as const;
+
+export const CostLineItemSchema = z
+  .object({
+    key: z.enum(COST_LINE_ITEM_KEYS),
+    monthlyUsd: z.number(),
+    /** 쓰는 만큼 나가는 항목 — monthlyUsd 는 데모 규모의 대략값 */
+    usageBased: z.boolean(),
+  })
+  .strict();
+export type CostLineItem = z.infer<typeof CostLineItemSchema>;
+
+/** 월 예상 인프라 비용. 트래픽 · 데이터 전송 · 로그처럼 쓰는 만큼 나가는 비용은 빠진 추정치 */
+export const MonthlyCostEstimateSchema = z
+  .object({
+    currency: z.literal("USD"),
+    /** 단가를 잡은 리전. 온프레미스는 null */
+    region: z.string().nullable(),
+    monthlyUsd: z.number(),
+    items: z.array(CostLineItemSchema),
+  })
+  .strict();
+export type MonthlyCostEstimate = z.infer<typeof MonthlyCostEstimateSchema>;
+
+export const DeploymentCostEstimateSchema = z
+  .object({
+    deploymentId: IdStringSchema,
+    targetProfile: z.string().nullable(),
+    /** 프로필이나 IR 이 아직 정해지지 않았으면 null (분석 전) */
+    estimate: MonthlyCostEstimateSchema.nullable(),
+  })
+  .strict();
+export type DeploymentCostEstimate = z.infer<typeof DeploymentCostEstimateSchema>;

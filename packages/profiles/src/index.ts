@@ -51,3 +51,5 @@ export function defaultProfileFor(vendor: DefaultProfileVendor): string {
 export function getProfile(id: string): Profile | null {
   return PROFILES[id] ?? null;
 }
+export { estimateMonthlyCost, MONTHLY_HOURS } from "./cost-estimate.js";
+export type { CostEstimateInput, CostLineItem, CostLineItemKey, MonthlyCostEstimate } from "./cost-estimate.js";

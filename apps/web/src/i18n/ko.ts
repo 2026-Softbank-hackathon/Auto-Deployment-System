@@ -158,7 +158,10 @@ export const ko = {
     loading: '프로젝트를 불러오고 있어요…',
     loadError: '프로젝트를 불러오지 못했어요.',
     neverDeployed: '아직 배포하지 않았어요',
-    liveSwitch: { title: '서비스 실행 환경이 AWS로 전환되었습니다.', copy: '기존 공개 주소는 그대로 유지됩니다.' },
+    liveSwitch: {
+      title: '서비스 실행 환경이 AWS로 전환되었습니다.', copy: '기존 공개 주소는 그대로 유지됩니다.',
+      scene: (from: string, to: string) => `온프레미스 서버 옆의 집(${from}) 불이 꺼지자 코로가 놀라고, LIVE 표지를 구름 위 AWS의 집(${to})으로 옮겼다. 지금은 AWS에서 서비스 중이다`,
+    },
     deletionDetail: '설정 탭에서 보기',
     deletionLocked: '삭제를 요청한 앱이라 다시 배포할 수 없어요.',
     olderHidden: (shown: number) => `최근 ${shown}건만 보여 줘요. 더 오래된 배포는 이 목록에 나오지 않아요.`,
@@ -299,6 +302,7 @@ export const ko = {
   /** 배포 내역의 버전 · 환경 (#220) */
   versions: {
     previous: '이전 버전',
+    notServing: '서비스 중 아님',
     unknownEnvironment: '환경 정보 없음',
     liveOn: (target: string) => `지금 ${target}에서 서비스 중`,
     notLive: '아직 서비스 중인 버전이 없어요.',
@@ -636,6 +640,15 @@ export const ko = {
     sceneWaiting: (stage: string) => `코로가 ${stage} 장치 앞에서 확인을 기다리고 있다`,
     sceneQueued: (stage: string) => `코로가 ${stage} 장치 앞에서 차례를 기다리고 있다`,
     sceneSucceeded: '집이 배포할 곳에 도착했고 LIVE 표지가 붙었다',
+    sceneNotLive: '집이 배포할 곳에 도착해 있다. 지금은 다른 배포가 서비스 중이다',
+    sceneFailover: {
+      alarm: '온프레미스 서버와 집의 불이 꺼졌고 코로가 놀라고 있다',
+      announce: '비행기가 와서 집과 코로를 태우고 있다',
+      moving: '비행기가 집과 코로를 싣고 구름 위 AWS로 날아가고 있다',
+      recovered: '집이 구름 위 AWS에 내려앉아 LIVE 표지가 붙었고, 코로가 기뻐하고 있다',
+    },
+    // 자동 전환(#349) 때 코로가 하는 말
+    failoverTalk: { alarm: '온프레미스에 문제가 생겼어요!', announce: 'AWS로 자동 전환하겠습니다', moving: 'AWS로 자동 전환하겠습니다', recovered: 'AWS 장애 복구 완료!' },
     sceneFailed: '코로가 길 위에 멈춰서 당황하고 있다',
     sceneStopped: '코로가 길 위에 멈춰 있다',
     workNote: '작업 노트',
@@ -769,6 +782,7 @@ export const ko = {
   },
   result: {
     titleDone: '배포가 완료됐어요',
+    notLiveNow: (deployment: string) => `지금은 ${withJosa(deployment, '이/가')} 서비스 중이에요.`,
     titleCheck: '배포 결과 확인',
     error: '결과를 불러오지 못했어요.',
     urlPending: '이 배포에는 아직 공개 주소가 없어요. 주소가 준비되면 여기에 표시돼요.',

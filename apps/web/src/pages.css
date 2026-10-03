@@ -495,6 +495,42 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 /* 화면 안에 놓는 알림 (앱 상세의 실행 환경 전환 안내). 떠 있는 알림과 같은 모양을 쓴다 */
 .page-toast { display: grid; }
 .page-toast .toast { margin-bottom: 18px; }
+/* 온프레미스 → AWS 자동 전환 장면 (LiveSwitchScene). 알림 바로 위에 붙여서 한 덩어리로 보이게 한다 */
+.live-switch-scene { display: block; width: 100%; max-height: 260px; padding: 6px 0 0; background: var(--surface); border: var(--border); border-bottom: 0; border-radius: var(--radius-card) var(--radius-card) 0 0; }
+.page-toast.has-scene .toast { border-top-left-radius: 0; border-top-right-radius: 0; }
+.ls-number { fill: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+.ls-live rect, .ls-live path { fill: var(--moss); }
+.ls-live text { fill: var(--surface); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+/* 마지막 모습 (움직임 줄이기 설정에서는 이것만 보인다): LIVE 는 구름 위 집에, 온프레미스 쪽은 불이 꺼진 채, 코로는 구름 위에서 웃는다 */
+.ls-live { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
+.ls-onprem { opacity: .55; }
+.ls-calm, .ls-runner { opacity: 0; }
+.ls-runner { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
+.ls-bang { fill: var(--brick); font-family: var(--font-display); font-size: 30px; font-weight: 700; }
+/* 재생 (약 5초, 한 번): 0 평소 → 1.2s 온프레미스 불이 꺼지고 코로가 놀람 → 2.6s 코로와 LIVE 가 구름으로 → 4.0s 내려앉음 */
+@media (prefers-reduced-motion: no-preference) {
+  .ls-onprem { animation: ls-dim .8s ease-out 1.2s both; }
+  .ls-onprem .jr-window, .ls-onprem .jr-led { animation: ls-lights-off .8s ease-out 1.2s both; }
+  .ls-calm { animation: ls-calm 1.3s linear both; }
+  .ls-runner { animation: ls-fly 1.4s var(--ease-roll) 2.6s both, ls-runner-life 4.3s linear both; }
+  .ls-runner__hop { animation: ls-hop .42s ease-out 1.2s 3 both; }
+  .ls-bang { transform-box: fill-box; transform-origin: 50% 100%; animation: ls-bang 4.3s linear both; }
+  .ls-live { animation: ls-fly 1.4s var(--ease-roll) 2.6s both; }
+  .ls-koro { animation: ls-appear .3s ease-out 4s both; }
+}
+@keyframes ls-fly {
+  from { transform: translate(var(--ls-from-x), var(--ls-from-y)); }
+  55% { transform: translate(calc((var(--ls-from-x) + var(--ls-to-x)) / 2), calc(var(--ls-to-y) - 14px)); }
+  to { transform: translate(var(--ls-to-x), var(--ls-to-y)); }
+}
+@keyframes ls-dim { from { opacity: 1; } to { opacity: .55; } }
+@keyframes ls-lights-off { from { fill: var(--moss); } to { fill: var(--line); } }
+@keyframes ls-appear { from { opacity: 0; } to { opacity: 1; } }
+/* 평소의 코로는 불이 꺼지는 순간(1.2s)까지 보이고, 놀란 코로가 그 자리를 이어받아 구름에 닿을 때(4.0s)까지 보인다 */
+@keyframes ls-calm { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ls-runner-life { 0%, 27% { opacity: 0; } 29%, 93% { opacity: 1; } 96%, 100% { opacity: 0; } }
+@keyframes ls-hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-16px); } }
+@keyframes ls-bang { 0%, 28% { opacity: 0; transform: scale(.4); } 31% { opacity: 1; transform: scale(1.25); } 34%, 58% { opacity: 1; transform: scale(1); } 62%, 100% { opacity: 0; transform: scale(1); } }
 .toast.is-failed { border-left-color: var(--brick-text); }
 .toast__body { display: grid; gap: 2px; min-width: 0; }
 .toast__body strong { color: var(--ink); }
@@ -888,6 +924,20 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 .jr-roof { fill: var(--brass); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
 .jr-sign--small { font-size: 12px; }
 .jr-house.is-hidden { opacity: 0; }
+/* 자동 전환: 온프레미스 쪽은 불이 꺼진 채 흐려지고, 코로 머리 위에 빨간 느낌표가 뜬다 */
+.jr-house { transition: opacity .6s ease-out; }
+.jr-house.is-dark { opacity: .55; }
+/* 자동 전환 장면은 비행기가 옮기는 모습이 보이도록 평소보다 천천히 움직인다 */
+.deploy-scene.is-failover .jr-house, .deploy-scene.is-failover .jr-plane { transition: transform 1.6s var(--ease-roll), opacity var(--dur-roll); }
+.deploy-scene.is-failover .scene-koro, .deploy-scene.is-failover .jr-live { transition: transform 1.6s var(--ease-roll); }
+.run-scene:has(.deploy-scene.is-failover) .koro-think { transition: left 1.6s var(--ease-roll), top 1.6s var(--ease-roll); }
+.koro-think.is-alert .koro-think__bubble { color: var(--brick-text); border-color: var(--brick); box-shadow: 0 3px 0 color-mix(in srgb, var(--brick) 30%, transparent); font-weight: 700; }
+/* 한 줄짜리 알림이라 꺾이지 않게 한다 */
+.koro-think.is-alert .koro-think__bubble, .koro-think.is-done .koro-think__bubble { white-space: nowrap; max-width: none; }
+.koro-think.is-alert .koro-think__dot { border-color: var(--brick); }
+.koro-think.is-done .koro-think__bubble { color: var(--moss-text); border-color: var(--moss); box-shadow: 0 3px 0 color-mix(in srgb, var(--moss) 30%, transparent); font-weight: 700; }
+.koro-think.is-done .koro-think__dot { border-color: var(--moss); }
+.scene-bang { fill: var(--brick); font-family: var(--font-display); font-size: 40px; font-weight: 700; }
 .jr-parachute__canopy { fill: var(--koro-tint); stroke: var(--koro); stroke-width: 3; stroke-linejoin: round; }
 .jr-warehouse__door { fill: var(--ink); }
 /* 이미지 이름표: 같은 이름표 = 같은 이미지 */
@@ -928,6 +978,7 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
   .koro-prop--ticks .koro-prop__tick:nth-child(2) { animation-delay: .5s; }
   .koro-prop--ticks .koro-prop__tick:nth-child(3) { animation-delay: 1s; }
   .jr-easel.is-working .jr-draft { stroke-dasharray: 120; animation: draft-draw 2.2s ease-in-out infinite; }
+  .scene-bang { transform-box: fill-box; transform-origin: 50% 100%; animation: bang-pop .5s var(--ease-roll) 3 both; }
   /* 복사해 온 IR 판은 왼쪽에서 미끄러져 들어오고, 출처 도장은 찍히듯 나타난다 */
   .jr-ir-copy__body { animation: ir-slide .7s var(--ease-roll) both; }
   .jr-stamp rect, .jr-stamp text { transform-box: fill-box; transform-origin: 50% 50%; animation: stamp-pop .45s var(--ease-roll) .5s both; }
@@ -1061,3 +1112,5 @@ button.tabs__tab[aria-selected='true'] { color: var(--ink); border-bottom-color:
 
 @keyframes ir-slide { from { opacity: 0; transform: translateX(-46px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes stamp-pop { from { opacity: 0; transform: scale(1.8); } to { opacity: 1; transform: scale(1); } }
+
+@keyframes bang-pop { 0% { transform: scale(.3) translateY(6px); opacity: 0; } 55% { transform: scale(1.3) translateY(-6px); opacity: 1; } 100% { transform: scale(1) translateY(0); opacity: 1; } }

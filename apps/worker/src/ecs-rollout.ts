@@ -10,6 +10,8 @@
  *
  * 완료: 이번 task definition의 배포가 rolloutState COMPLETED, 또는 그 배포의 running 수가 desired 에
  *       닿고 그 태스크들이 모두 타깃 그룹에서 healthy.
+ * 같은 이미지로 롤백 · 재배포해 apply 가 task definition 을 바꾸지 않았으면(첫 확인부터 COMPLETED)
+ * 새 배포를 강제해 새 태스크를 띄운다 — 사용자는 재배포를 눌렀는데 이전 컨테이너가 그대로면 헷갈린다.
  * 실패: 배포 rolloutState FAILED(회로 차단기 롤백) · 새 태스크 중지(stoppedReason) · 제한 시간.
  * Provision 이 쓰는 자격 증명(대상 연결의 AWS 키)을 그대로 쓴다.
  */
@@ -19,6 +21,7 @@ import {
   DescribeTasksCommand,
   ECSClient,
   ListTasksCommand,
+  UpdateServiceCommand,
   type Deployment,
   type Service,
   type Task,
@@ -113,6 +116,7 @@ export class EcsRolloutWaiter {
     let lastWriteAt = startedAt;
     let trackedId: string | undefined;
     let lastUnhealthy: string | undefined;
+    let firstPoll = true;
 
     const write = async (slot: string, line: LogMessage) => {
       const text = formatLogText(line);
@@ -180,6 +184,22 @@ export class EcsRolloutWaiter {
           ),
         );
       }
+
+      if (deployment.rolloutState === "COMPLETED" && firstPoll) {
+        // apply 가 task definition 을 바꾸지 않았다 (같은 이미지). 새 배포를 강제해 새 태스크로 바꾼다
+        firstPoll = false;
+        const updated = (await ecs.send(
+          new UpdateServiceCommand({ cluster, service: input.serviceName, forceNewDeployment: true }),
+        )) as { service?: Service };
+        const forced = updated.service?.deployments?.find((candidate) => candidate.status === "PRIMARY");
+        if (forced?.id && forced.id !== trackedId) {
+          trackedId = forced.id;
+          await input.log(logMessage("ecs.forcedNewDeployment", {}));
+          await this.sleep(this.pollIntervalMs);
+          continue;
+        }
+      }
+      firstPoll = false;
 
       if (deployment.rolloutState === "COMPLETED") {
         await input.log(logMessage("ecs.doneDeployment", { seconds: elapsed() }));

@@ -2,6 +2,7 @@ import {
   DescribeServicesCommand,
   DescribeTasksCommand,
   ListTasksCommand,
+  UpdateServiceCommand,
 } from "@aws-sdk/client-ecs";
 import { DeregisterTargetsCommand, DescribeTargetHealthCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { describe, expect, it, vi } from "vitest";
@@ -132,9 +133,16 @@ function fakeAws(snapshots: Snapshot[]) {
         tasks: (current().tasks ?? []).filter((task) => arns.includes(task.taskArn)).map(toAwsTask),
       };
     }
+    if (command instanceof UpdateServiceCommand) {
+      forced.push(command.input);
+      // 다음 조회부터 강제한 배포가 보이게 다음 상태로 넘긴다
+      index += 1;
+      return { service: { deployments: current().deployments } };
+    }
     throw new Error(`unexpected ECS command ${String(command)}`);
   });
   const deregistered: (string | undefined)[] = [];
+  const forced: unknown[] = [];
   const elbSend = vi.fn(async (command: unknown) => {
     if (command instanceof DescribeTargetHealthCommand) {
       expect(command.input.TargetGroupArn).toBe(TG);
@@ -152,7 +160,7 @@ function fakeAws(snapshots: Snapshot[]) {
     }
     throw new Error(`unexpected ELB command ${String(command)}`);
   });
-  return { ecsSend, elbSend, polls: () => index + 1, deregistered };
+  return { ecsSend, elbSend, polls: () => index + 1, deregistered, forced };
 }
 
 function makeWaiter(
@@ -235,15 +243,41 @@ describe("EcsRolloutWaiter (#253)", () => {
     expect(new Set(lines).size).toBe(lines.length);
   });
 
-  it("배포가 이미 COMPLETED 면 바로 끝낸다 (변경 없는 apply · 재시도)", async () => {
-    const { waiter, input, sleep, aws } = makeWaiter([
-      { deployments: [newDeployment({ runningCount: 1, rolloutState: "COMPLETED" })] },
+  it("apply 가 task definition 을 바꾸지 않았으면(같은 이미지로 롤백) 새 배포를 강제해 새 태스크로 바꾼다", async () => {
+    const forcedAt = new Date("2026-10-03T00:00:00Z");
+    const forcedTask = newTask({ taskArn: "arn:aws:ecs:ap-northeast-2:123456789012:task/cam-x/forced1", createdAt: new Date("2026-10-03T00:00:05Z") });
+    const { waiter, input, lines, aws } = makeWaiter([
+      { deployments: [newDeployment({ runningCount: 1, rolloutState: "COMPLETED" })], tasks: [newTask()] },
+      {
+        deployments: [newDeployment({ id: "ecs-svc/forced", createdAt: forcedAt }), newDeployment({ status: "ACTIVE", runningCount: 1, rolloutState: "COMPLETED" })],
+        tasks: [newTask(), { ...forcedTask, ip: "10.0.2.30" } as never],
+        targets: [{ ip: "10.0.1.20", state: "healthy" }, { ip: "10.0.2.30", state: "initial" }],
+      },
+      {
+        deployments: [newDeployment({ id: "ecs-svc/forced", createdAt: forcedAt, runningCount: 1 }), newDeployment({ status: "ACTIVE", runningCount: 1, rolloutState: "COMPLETED" })],
+        tasks: [newTask(), { ...forcedTask, ip: "10.0.2.30" } as never],
+        targets: [{ ip: "10.0.1.20", state: "healthy" }, { ip: "10.0.2.30", state: "healthy" }],
+      },
     ]);
 
     await waiter.wait(input);
 
-    expect(aws.polls()).toBe(1);
-    expect(sleep).not.toHaveBeenCalled();
+    expect(aws.forced).toEqual([{ cluster: "cam-x", service: "cam-x", forceNewDeployment: true }]);
+    expect(lines.some((line) => line.includes("새 태스크로 다시 띄웁니다"))).toBe(true);
+    // 예전 태스크(같은 task definition)는 새 배포의 태스크로 세지 않고, 타깃 그룹에서 뺀다
+    expect(aws.deregistered).toEqual(["10.0.1.20"]);
+    expect(lines.at(-1)).toContain("롤아웃 완료");
+  });
+
+  it("강제한 뒤의 배포가 COMPLETED 면 끝낸다 (다시 강제하지 않는다)", async () => {
+    const { waiter, input, aws } = makeWaiter([
+      { deployments: [newDeployment({ runningCount: 1, rolloutState: "COMPLETED" })] },
+      { deployments: [newDeployment({ id: "ecs-svc/forced", runningCount: 1, rolloutState: "COMPLETED" })] },
+    ]);
+
+    await waiter.wait(input);
+
+    expect(aws.forced).toHaveLength(1);
   });
 
   it("새 태스크가 중지되면 ECS stoppedReason 과 컨테이너 종료 사유로 바로 실패한다", async () => {

@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Keycap } from '../../components/ui/Keycap';
+import { AwsKeyRejectedError, DeploymentApiError } from '../../api/deployment-api';
 import { errorMessage, useI18n } from '../../i18n/I18nProvider';
 
 /** aws-ecs-basic 프로필의 기본 리전이 첫 번째다 (packages/profiles). */
@@ -43,6 +44,12 @@ export function AwsKeyForm({ onSubmit, initialRegion, onCancel, autoFocus }: {
     }
   }
 
+  function awsKeyErrorText(value: unknown): string {
+    if (value instanceof AwsKeyRejectedError) return t.deploy.aws.rejected[value.reason];
+    if (value instanceof DeploymentApiError && value.code === 'AWS_VERIFY_UNAVAILABLE') return t.deploy.aws.verifyUnavailable;
+    return errorMessage(value, t, t.deploy.aws.saveError);
+  }
+
   return <form className="aws-key-form" onSubmit={(event) => void submit(event)} autoComplete="off">
     <div className="aws-key-form__field">
       <label htmlFor={ids.key}>{t.deploy.aws.accessKeyId}</label>
@@ -59,7 +66,7 @@ export function AwsKeyForm({ onSubmit, initialRegion, onCancel, autoFocus }: {
       </select>
     </div>
     <p className="aws-key-form__note">{t.deploy.aws.note}</p>
-    {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.aws.saveError}</strong><br />{errorMessage(error, t, t.deploy.aws.saveError)}</div>}
+    {error !== null && <div className="notice error" role="alert"><strong>{t.deploy.aws.saveError}</strong><br />{awsKeyErrorText(error)}</div>}
     <div className="aws-key-form__actions">
       <Keycap type="submit" variant="secondary" disabled={saving || !accessKeyId.trim() || !secretAccessKey.trim()}>{saving ? t.deploy.aws.saving : t.deploy.aws.save}</Keycap>
       {onCancel && <Keycap variant="ghost" onClick={onCancel} disabled={saving}>{t.deploy.aws.cancel}</Keycap>}

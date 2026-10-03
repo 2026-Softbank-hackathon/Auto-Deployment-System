@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-sts": "^3.0.0",
     "@camellia/aws-registry": "workspace:*",
     "@camellia/cloudflare": "workspace:*",
     "@camellia/contracts": "workspace:*",

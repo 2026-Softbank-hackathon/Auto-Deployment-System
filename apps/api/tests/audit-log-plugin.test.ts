@@ -65,6 +65,11 @@ describe("redactSecrets", () => {
     expect(nested["other"]).toBe("ok");
   });
 
+  it("AWS 키 확인 요청의 Access Key ID · Secret Access Key 마스킹 (#209)", () => {
+    const result = redactSecrets({ accessKeyId: "AKIAXXXX", secretAccessKey: "wJalr", region: "ap-northeast-2" }) as Record<string, unknown>;
+    expect(result).toEqual({ accessKeyId: "***", secretAccessKey: "***", region: "ap-northeast-2" });
+  });
+
   it("시크릿 아닌 필드는 그대로 유지", () => {
     const input = { projectId: 1, name: "test", description: "ok" };
     const result = redactSecrets(input) as Record<string, unknown>;

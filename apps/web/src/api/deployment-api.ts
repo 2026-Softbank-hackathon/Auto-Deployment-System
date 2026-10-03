@@ -19,6 +19,15 @@ export class ResponseFormatError extends Error {
   }
 }
 
+/** AWS가 등록하려는 키를 거절했을 때 (#209). reason 으로 화면 문구를 고른다. */
+export type AwsKeyRejectReason = 'INVALID_ACCESS_KEY' | 'SIGNATURE_MISMATCH' | 'EXPIRED' | 'REJECTED';
+export class AwsKeyRejectedError extends Error {
+  constructor(public readonly reason: AwsKeyRejectReason) {
+    super(`AWS가 키를 거절했습니다. (${reason})`);
+    this.name = 'AwsKeyRejectedError';
+  }
+}
+
 export interface DeploymentStatusResponse {
   currentStep: unknown;
   approvalPending: unknown;
@@ -398,11 +407,26 @@ export async function deleteSharedSecret(name: string): Promise<void> {
 }
 
 /**
+ * 등록하기 전에 서버가 STS로 키를 확인한다 (#209). 틀린 키면 저장하지 않고 AwsKeyRejectedError 를 던진다.
+ * 서버는 키를 저장하지 않고, 응답에도 키가 없다.
+ */
+async function verifyAwsKey(input: { accessKeyId: string; secretAccessKey: string; region: string }): Promise<void> {
+  const response = await fetch(endpoint('/api/v1/credentials/verify'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), credentials: 'include',
+  });
+  const body = asRecord(await readJson(response), 'AWS 키 확인');
+  if (body.valid === true) return;
+  const reasons: AwsKeyRejectReason[] = ['INVALID_ACCESS_KEY', 'SIGNATURE_MISMATCH', 'EXPIRED', 'REJECTED'];
+  throw new AwsKeyRejectedError(reasons.find((reason) => reason === body.reason) ?? 'REJECTED');
+}
+
+/**
  * 공용 AWS 연결 등록 — 키 두 개를 공용 시크릿으로 저장한 뒤 그 이름을 참조하는 연결을 만든다.
  * 키 값은 시크릿 저장 요청에만 실리고, 연결에는 시크릿 이름과 리전만 들어간다. 시크릿 이름은 연결마다 새로 지어 다른 연결의 키와 섞이지 않게 한다.
  * 연결을 만들지 못하면 방금 저장한 키를 지운다.
  */
 export async function createSharedAwsConnection(input: { accessKeyId: string; secretAccessKey: string; region: string }, takenNames: string[]): Promise<void> {
+  await verifyAwsKey(input);
   const suffix = randomSuffix();
   const keyIdName = `aws-access-key-id.${suffix}`;
   const secretKeyName = `aws-secret-access-key.${suffix}`;

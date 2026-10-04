@@ -50,8 +50,11 @@ export interface TalkContext {
   story: DeployStory | null;
   ir: IrOrigin | null;
   runtime: Runtime;
-  /** 이번 배포의 프로필 — 지금까지 서비스하던 배포와 같은 프로필이면 인프라가 이미 있다 */
+  /** 이번 배포의 프로필과 환경(연결) — 지금까지 서비스하던 배포와 둘 다 같으면 인프라가 이미 있고 서비스 주소도 그대로다 */
   profile: string | null;
+  environmentId: string | null;
+  /** 최종 확인에 실패해 서버가 서비스 주소를 이전으로 되돌리는 중 (상태 rollback) */
+  rollingBack: boolean;
   /** 서버가 마지막으로 남긴 로그(키가 붙은 줄)와 그 뒤로 흐른 시간(초). 없으면 정해 둔 문장만 쓴다 */
   log: { tag: LogTag; seconds: number } | null;
   health: TalkHealth | null;
@@ -70,24 +73,46 @@ export function koroLine(context: TalkContext, t: Messages): string | null {
   const fill = (line: string) => line.replaceAll('{v}', story?.reused ? talk.versionSame : talk.versionNew);
   const pick = (lines: string[], seconds: number) => (lines.length ? fill(lines[Math.floor(Math.max(0, seconds) / LINE_SECONDS) % lines.length]) : null);
 
+  // 서비스 주소로 한 최종 확인이 실패하면 서버는 주소를 이전 origin 으로 되돌린 뒤 실패로 끝낸다 (다시 확인하지 않는다)
+  if (context.rollingBack) return talk.rollingBack;
+
   if (stage === 4 && health) {
     // 환경 전환은 새 곳을 확인하는 동안 지금 환경이 계속 서비스한다는 것을 사이사이 알린다
     const keeps = story?.kind === 'switch' && health.phase !== 'origin_switching' && health.phase !== 'public_url' ? [talk.switchKeeps] : [];
-    return pick([healthLine(health, talk), ...keeps], stepSeconds);
+    return pick([healthLine(health, talk, keepsAddress(context)), ...keeps], stepSeconds);
   }
 
   const base = irLines(stage, context.ir, story, talk).concat(storyLines(context, talk), stageLines(context, talk));
-  const live = log ? liveLine(log.tag, stage, talk) : null;
-  return live !== null ? pick([live, ...base], log!.seconds) : pick(base, stepSeconds);
+  const live = log ? liveLine(log.tag, context, talk) : null;
+  if (live === null) return pick(base, stepSeconds);
+  // 방금 온 소식은 한 번만 말한다. 그 뒤로는 새 로그가 올 때까지 상황 설명을 돌린다
+  // (같은 소식을 되풀이하면 이미 지나간 일을 지금 일처럼 말하게 된다 — 예: 에이전트가 일을 가져간 뒤의 "가져가기를 기다려요")
+  return log!.seconds < LINE_SECONDS || base.length === 0 ? fill(live) : pick(base, log!.seconds - LINE_SECONDS);
+}
+
+/** 지금까지 서비스하던 배포와 같은 환경(연결) · 같은 프로필인가 — 그러면 인프라가 이미 있다 */
+function sameInfra({ story, profile, environmentId }: TalkContext): boolean {
+  const prev = story?.prev;
+  return prev != null && prev.environmentId !== null && prev.environmentId === environmentId && prev.profile !== null && prev.profile === profile;
+}
+
+/**
+ * 서비스 주소가 이미 이 환경을 가리키는가 — 같은 환경에 다시 배포하면 서버는 주소를 바꾸지 않는다 (verify.originReused, #299).
+ * 처음 배포 · 다른 환경으로의 배포 · 알 수 없는 경우는 false (주소를 돌린다고 말한다).
+ */
+function keepsAddress({ story, environmentId }: TalkContext): boolean {
+  const prev = story?.prev;
+  return prev != null && prev.environmentId !== null && prev.environmentId === environmentId;
 }
 
 /** 헬스체크 현황을 말로. 숫자는 서버가 준 값이다 */
-function healthLine(health: TalkHealth, talk: Messages['run']['talk']): string {
-  if (health.phase === 'origin_switching') return talk.health.switching;
+function healthLine(health: TalkHealth, talk: Messages['run']['talk'], keeps: boolean): string {
+  if (health.phase === 'origin_switching') return keeps ? talk.health.switchingKept : talk.health.switching;
   if (health.phase === 'public_url') return talk.health.publicUrl;
   if (health.lastFailed) return talk.health.retry;
-  if (health.passed >= health.required) return talk.health.full(health.required);
-  return health.passed === 0 ? talk.health.first : talk.health.count(health.passed, health.required);
+  if (health.passed >= health.required) return keeps ? talk.health.fullKept(health.required) : talk.health.full(health.required);
+  if (health.passed === 0) return talk.health.first;
+  return keeps ? talk.health.countKept(health.passed, health.required) : talk.health.count(health.passed, health.required);
 }
 
 /** 로그 키가 어느 단계의 일인지 — 지난 단계의 로그를 지금 단계의 일처럼 말하지 않는다 */
@@ -102,8 +127,10 @@ function logStage(key: string): number[] {
 }
 
 /** 서버가 방금 남긴 로그를 쉬운 말로. 말할 만한 키가 아니거나 다른 단계의 로그면 null */
-function liveLine(tag: LogTag, stage: number, talk: Messages['run']['talk']): string | null {
+function liveLine(tag: LogTag, { stage, story }: TalkContext, talk: Messages['run']['talk']): string | null {
   if (!logStage(tag.key).includes(stage)) return null;
+  // 환경 전환 중에는 서비스 주소가 아직 이전 환경을 가리킨다. 이전 컨테이너를 뺀 것은 AWS 쪽 이야기다
+  if (tag.key === 'ecs.oldTargetsRemoved' && story?.kind === 'switch') return talk.oldTargetsRemovedSwitch;
   const say = (talk.live as Record<string, ((params: LogTag['params']) => string) | undefined>)[tag.key];
   return say ? say(tag.params) : null;
 }
@@ -119,10 +146,11 @@ function irLines(stage: number, ir: IrOrigin | null, story: DeployStory | null, 
 }
 
 /** 재배포 · 롤백 · 환경 전환일 때 먼저 하는 말 */
-function storyLines({ stage, story, target, runtime }: TalkContext, talk: Messages['run']['talk']): string[] {
+function storyLines(context: TalkContext, talk: Messages['run']['talk']): string[] {
+  const { stage, story, target, runtime } = context;
   if (!story) return [];
-  // AWS의 같은 환경 컨테이너 배포는 서비스 하나를 제자리에서 새 버전으로 바꾼다 (배포 단계의 ECS 롤아웃에서 일어난다, #253).
-  const inPlace = story.prev !== null && story.kind !== 'switch' && target !== 'onprem' && runtime === 'container';
+  // AWS의 같은 환경 · 같은 프로필 컨테이너 배포는 서비스 하나를 제자리에서 새 버전으로 바꾼다 (배포 단계의 ECS 롤아웃에서 일어난다, #253).
+  const inPlace = sameInfra(context) && target !== 'onprem' && runtime === 'container';
   // "같은 이미지, 장소만 바꾼다"는 지금 서비스 중인 버전과 이름표가 같을 때만 말한다 (환경을 바꾸면서 예전 이미지로 되돌리는 경우도 있다).
   const sameImage = story.prev !== null && story.prev.label === story.label;
   if (stage === 1 && story.kind === 'update') return [talk.update];
@@ -134,7 +162,8 @@ function storyLines({ stage, story, target, runtime }: TalkContext, talk: Messag
   return [];
 }
 
-function stageLines({ stage, facts, target, story, runtime, profile }: TalkContext, talk: Messages['run']['talk']): string[] {
+function stageLines(context: TalkContext, talk: Messages['run']['talk']): string[] {
+  const { stage, facts, target, story, runtime } = context;
   const reused = story?.reused === true;
   if (stage === 0) return [...talk.analyze];
   if (stage === 1) {
@@ -144,8 +173,8 @@ function stageLines({ stage, facts, target, story, runtime, profile }: TalkConte
   if (stage === 2) {
     const settings = reused ? talk.provisionReused : talk.provision;
     if (target === 'onprem') return [...talk.provisionOnprem, ...settings];
-    // 지금까지 같은 곳 · 같은 프로필로 서비스하고 있었으면 인프라가 이미 있다. 그 밖에는(처음 · 환경 전환 · 형태 변경) 있는지 알 수 없어 "준비한다"고만 말한다
-    const existing = story?.prev != null && story.kind !== 'switch' && story.prev.profile !== null && story.prev.profile === profile;
+    // 지금까지 같은 환경(연결) · 같은 프로필로 서비스하고 있었으면 인프라가 이미 있다. 그 밖에는(처음 · 다른 환경 · 형태 변경) 있는지 알 수 없어 "준비한다"고만 말한다
+    const existing = sameInfra(context);
     const place = runtime === 'serverless' ? (existing ? talk.provisionServerlessExisting : talk.provisionServerless)
       : runtime === 'static' ? talk.provisionStatic
         : existing ? talk.provisionAwsExisting : story?.kind === 'switch' ? talk.provisionAwsSwitch : talk.provisionAws;
@@ -155,7 +184,7 @@ function stageLines({ stage, facts, target, story, runtime, profile }: TalkConte
     if (target === 'onprem') return [...(reused ? talk.deployOnpremReused : talk.deployOnprem)];
     return [...(runtime === 'serverless' ? talk.deployServerless : runtime === 'static' ? talk.deployStatic : talk.deploy)];
   }
-  return stage === 4 ? [...talk.verify] : [];
+  return stage === 4 ? [...(keepsAddress(context) ? talk.verifyKept : talk.verify)] : [];
 }
 
 export interface KoroIdle { mood: KoroMood; dozing: boolean }

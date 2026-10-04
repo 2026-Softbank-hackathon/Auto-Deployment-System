@@ -353,6 +353,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const talk = scenePhase !== null ? t.run.failoverTalk[scenePhase]
     : rolling && view.stage !== null ? koroLine({
       stage: view.stage, stepSeconds, facts, target, story, ir: irOrigin, profile,
+      environmentId: text(status?.targetEnvironmentId), rollingBack: currentStatus === 'rollback',
       runtime: profile === SERVERLESS_PROFILE ? 'serverless' : isAwsStaticSiteProfile(profile) ? 'static' : 'container',
       log: latestLog ? { tag: latestLog.tag, seconds: latestLog.at > 0 ? Math.max(0, Math.floor((now - latestLog.at) / 1000)) : stepSeconds } : null,
       health: health ? { passed: health.consecutivePassed, required: health.requiredPasses, phase: health.phase ?? null, lastFailed: health.checks.length > 0 && !health.checks[health.checks.length - 1]!.passed } : null,

@@ -20,7 +20,7 @@ SoftBank Hackathon 2026 · team camellia · One Action, Infinite Clouds.
 </div>
 
 ## 1. Overview
-사용자가 자신의 앱을 본인의 클라우드, 온프레미스 등의 다양한 환경에 배포하고, 그 사이를 자유롭게 이사시키는 배포 시스템
+사용자가 자신의 앱을 본인의 클라우드, 온프레미스 등의 다양한 환경에 배포하고, 그 사이를 자유롭게 전환하는 배포 시스템
 ## 2. Architecture
 <img width="2303" height="1584" alt="camellia-overview-reference" src="https://github.com/user-attachments/assets/ad93d23c-1fa2-407d-b849-fa3d22a7ed53" />
 

@@ -428,18 +428,25 @@ a.deployment-row__sub:hover { text-decoration: underline; }
 .result-card__note { max-width: 46ch; }
 .result-card > .notice { align-self: stretch; text-align: left; }
 .result-url { align-self: stretch; display: grid; gap: 14px; justify-items: center; padding: 20px; background: var(--paper-sunken); border-radius: var(--radius-card); }
-.result-url__link { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--koro-text); overflow-wrap: anywhere; }
+/* 주소는 좁은 화면에서 글자를 줄여 가능한 한 한 줄에 둔다 (그래도 넘치면 줄을 바꾼다) */
+.result-url__link { max-width: 100%; font-family: var(--font-mono); font-size: clamp(13px, 3.8vw, 22px); font-weight: 500; color: var(--koro-text); overflow-wrap: anywhere; }
 .result-url__link:hover { color: var(--koro-text-hover); }
 .result-url__actions, .result-card__actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
-.result-facts { align-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0; }
-.result-facts div { display: grid; gap: 4px; padding: 12px 14px; border: var(--border); border-radius: var(--radius-input); }
+/* 타일 최소 폭은 가장 긴 한 줄 값(일본어 "サーバーレス(Lambda)" 배지)이 들어가는 크기. 그보다 좁으면 열 수를 줄인다 */
+.result-facts { align-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px; margin: 0; }
+/* 타일 안의 글자는 타일 폭 안에서 줄을 바꾼다 (min-width: 0 이 없으면 긴 글자가 타일을 밀어내 옆 타일 · 카드 밖으로 나간다) */
+.result-facts div { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border: var(--border); border-radius: var(--radius-input); }
+/* 문장으로 된 값(실행 방식 설명)은 한 줄을 통째로 쓴다 */
+.result-facts div.result-facts__wide { grid-column: 1 / -1; }
 .result-facts dt { font-size: 13px; color: var(--ink-soft); }
-.result-facts dd { margin: 0; font-family: var(--font-mono); font-size: 15px; color: var(--ink); white-space: nowrap; }
+.result-facts dd { margin: 0; min-width: 0; font-family: var(--font-mono); font-size: 15px; color: var(--ink); overflow-wrap: anywhere; }
+/* 시각 · 걸린 시간처럼 짧은 값만 한 줄로 둔다 */
+.result-facts dd.result-facts__fixed { white-space: nowrap; }
+.result-facts dd .serverless-badge, .result-facts dd .static-site-badge { max-width: 100%; margin-top: 2px; white-space: normal; }
 .result-card__actions { margin-top: 8px; }
 @media (max-width: 760px) {
   .result-card { padding: 28px 16px 24px; }
   .result-card h1 { font-size: 28px; }
-  .result-url__link { font-size: 18px; }
 }
 
 /* 대시보드 — 앱 카드 (#219) */

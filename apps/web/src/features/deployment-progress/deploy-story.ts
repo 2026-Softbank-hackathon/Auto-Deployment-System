@@ -18,7 +18,7 @@ export type StoryKind = 'first' | 'update' | 'redeploy' | 'rollback' | 'switch';
 export interface DeployStory {
   kind: StoryKind;
   /** 지금까지 서비스하던 버전. 없으면 null */
-  prev: { label: string; target: SceneTarget } | null;
+  prev: { label: string; target: SceneTarget; /** 그 배포의 프로필 (aws-ecs-basic 등) */ profile: string | null } | null;
   /** 전에 만든 이미지를 그대로 쓴다 (빌드 생략이 로그로 확인됨) */
   reused: boolean;
   /** 이 배포가 나르는 이미지의 이름표 (그 이미지를 만든 배포 번호) */
@@ -73,5 +73,5 @@ export function deployStory(deploymentId: string, target: SceneTarget, prev: Pro
   const kind: StoryKind = prevTarget !== null && target !== null && prevTarget !== target ? 'switch'
     : reusedFrom === null ? 'update'
       : reusedFrom === prev.id ? 'redeploy' : 'rollback';
-  return { kind, prev: { label: `#${prev.id}`, target: prevTarget }, reused, label };
+  return { kind, prev: { label: `#${prev.id}`, target: prevTarget, profile: prev.targetProfile ?? null }, reused, label };
 }

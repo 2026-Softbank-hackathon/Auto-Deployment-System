@@ -9,7 +9,7 @@ const finishedStatuses = ['succeeded', 'failed'];
  * 검증 단계의 헬스체크 현황 (API-21). 연속 통과 횟수는 서버가 준 값만 보여 준다.
  * 검증 중에는 주기적으로 다시 조회하고, 끝난 배포는 한 번만 조회한다. 기록이 없으면(404) 아무것도 그리지 않는다.
  */
-export function HealthProgress({ deploymentId, status }: { deploymentId: string; status: string | null }) {
+export function HealthProgress({ deploymentId, status, onChange }: { deploymentId: string; status: string | null; /** 받은 현황을 알린다 (코로의 말풍선이 같은 숫자를 말하도록) */ onChange?: (health: DeploymentHealthResponse | null) => void }) {
   const { t } = useI18n();
   const [health, setHealth] = useState<DeploymentHealthResponse | null>(null);
   const verifying = status === 'verifying';
@@ -24,6 +24,8 @@ export function HealthProgress({ deploymentId, status }: { deploymentId: string;
     const timer = window.setInterval(load, POLL_MS);
     return () => { active = false; window.clearInterval(timer); };
   }, [deploymentId, verifying, finished]);
+
+  useEffect(() => { onChange?.(health); }, [health, onChange]);
 
   if (!health) return null;
   const last = health.checks[health.checks.length - 1];

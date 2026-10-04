@@ -33,7 +33,7 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
         <BrandMark />
         <span className="sidebar__name">{t.brand.name}</span>
       </a>
-      {/* 서비스 이름이 길어져서(코로의 이사 · コロの引越し) 버전 표시는 이름 옆이 아니라 아래 줄에 둔다 */}
+      {/* 서비스 이름이 길어져서(코로의 이사 · コロの引っ越し) 버전 표시는 이름 옆이 아니라 아래 줄에 둔다 */}
       <span className="sidebar__tagline">One Action, Infinite Clouds <span className="sidebar__version">v0.4.0</span></span>
     </div>
     <nav aria-label={t.nav.label}>

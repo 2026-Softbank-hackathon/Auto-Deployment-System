@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { approveDeploymentGate, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, listProjectDeployments, SERVERLESS_PROFILE, type DeploymentLogStep, type ProjectDeploymentSummary, type DeploymentStatusResponse } from '../../api/deployment-api';
+import { approveDeploymentGate, type DeploymentHealthResponse, DeploymentApiError, type ApprovalGate, deploymentLogSteps, getDeploymentAnalysisReport, getDeploymentIr, getDeploymentLogs, getDeploymentStatus, getProject, listProjectDeployments, SERVERLESS_PROFILE, type DeploymentLogStep, type ProjectDeploymentSummary, type DeploymentStatusResponse } from '../../api/deployment-api';
 import { subscribeToDeploymentEvents } from '../../api/deployment-events';
 import { GadgetIcon } from '../../components/ui/GadgetIcon';
 import { Keycap } from '../../components/ui/Keycap';
@@ -129,6 +129,8 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const [status, setStatus] = useState<DeploymentStatusResponse | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [recentLines, setRecentLines] = useState<string[]>([]);
+  // 검증 단계의 헬스체크 현황 (HealthProgress 가 받아서 알려 준다) — 말풍선이 같은 숫자를 말한다
+  const [health, setHealth] = useState<DeploymentHealthResponse | null>(null);
   // 빌드 로그가 "이미지 재사용"을 알려 주면 그 원본 배포 번호 (재배포 · 롤백 · 환경 전환 장면에 쓴다)
   const [reusedFrom, setReusedFrom] = useState<string | null>(null);
   const [projectDeployments, setProjectDeployments] = useState<ProjectDeploymentSummary[] | null>(null);
@@ -338,9 +340,24 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
   const staticSite = isAwsStaticSiteProfile(text(status?.targetProfile)) || facts?.staticSite === true;
   const story = projectDeployments ? deployStory(deploymentId, target, previousLive(deploymentId, projectDeployments), reusedFrom) : null;
   const scenePhase = target === 'onprem' ? failoverPhase : null;
+  const profile = text(status?.targetProfile);
+  // 서버가 마지막으로 남긴 "키가 붙은" 로그 한 줄 — 코로가 지금 실제로 일어난 일을 말하는 데 쓴다 (키 없는 줄은 건너뛴다)
+  const latestLog = (() => {
+    for (let index = recentLines.length - 1; index >= 0; index -= 1) {
+      const tag = readLogTag(recentLines[index]!);
+      if (tag) return { tag, at: lineTime(recentLines[index]!) };
+    }
+    return null;
+  })();
   // 자동 전환 중에는 코로가 지금 무슨 일이 일어났는지 말한다 (놀람 → AWS 로 전환 → 복구 완료)
   const talk = scenePhase !== null ? t.run.failoverTalk[scenePhase]
-    : rolling && view.stage !== null ? koroLine(view.stage, stepSeconds, facts, target, t, story, irOrigin) : null;
+    : rolling && view.stage !== null ? koroLine({
+      stage: view.stage, stepSeconds, facts, target, story, ir: irOrigin, profile,
+      environmentId: text(status?.targetEnvironmentId), rollingBack: currentStatus === 'rollback',
+      runtime: profile === SERVERLESS_PROFILE ? 'serverless' : isAwsStaticSiteProfile(profile) ? 'static' : 'container',
+      log: latestLog ? { tag: latestLog.tag, seconds: latestLog.at > 0 ? Math.max(0, Math.floor((now - latestLog.at) / 1000)) : stepSeconds } : null,
+      health: health ? { passed: health.consecutivePassed, required: health.requiredPasses, phase: health.phase ?? null, lastFailed: health.checks.length > 0 && !health.checks[health.checks.length - 1]!.passed } : null,
+    }, t) : null;
   // 장면이 보여 주는 범위. 이미지를 재사용하는 배포는 설계도와 집 짓는 곳을 잘라 내서 가로가 좁다(같은 축척으로 가운데에 둔다).
   const box = sceneBox(target, story, irOrigin, scenePhase !== null);
   const irSpot = irBoardSpot(target, story, irOrigin);
@@ -474,7 +491,7 @@ export function DeploymentProgress({ deploymentId, tab, onNavigate, onSucceeded,
         {/* 장면으로 자동 전환을 보여 주는 동안에는 알림을 미루고, 집이 AWS 에 내려앉은 뒤에 띄운다 */}
         <LiveSwitchNotice liveSwitch={scenePhase !== null && scenePhase !== 'recovered' ? null : liveSwitch} onDismiss={dismissLiveSwitch} scene={false} />
 
-        <HealthProgress deploymentId={deploymentId} status={currentStatus} />
+        <HealthProgress deploymentId={deploymentId} status={currentStatus} onChange={setHealth} />
 
         {view.outcome === 'active' && <CancelDeployment deploymentId={deploymentId} onCancelled={() => void refresh()} />}
 

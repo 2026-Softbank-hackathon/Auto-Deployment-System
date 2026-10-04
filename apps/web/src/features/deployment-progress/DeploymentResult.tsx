@@ -126,7 +126,7 @@ export function DeploymentResult({ deploymentId, onBack, onNewDeployment, onRede
       {succeededAt && <div><dt>{t.result.factFinished}</dt><dd className="result-facts__fixed">{new Date(succeededAt).toLocaleString(t.locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}</dd></div>}
     </dl>
 
-    <StageTimeline deploymentId={deploymentId} />
+    {createdAt && succeededAt && <StageTimeline deploymentId={deploymentId} createdAt={createdAt} finishedAt={succeededAt} />}
 
     <div className="result-card__actions">
       <DeployKeycap onClick={onNewDeployment}>{t.result.newDeploy}</DeployKeycap>
